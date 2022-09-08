@@ -1,5 +1,7 @@
 .DS_Store
 
+python-devel.tgz
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

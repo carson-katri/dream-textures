@@ -34,6 +34,12 @@ import tarfile
 import webbrowser
 import numpy as np
 
+import asyncio
+from .async_loop import *
+
+def absolute_path(component):
+    return os.path.join(os.path.dirname(os.path.realpath(__file__)), component)
+
 dependencies_installed = False
 
 def import_module(module_name, global_name=None, reload=True):
@@ -117,9 +123,10 @@ def install_and_import_requirements():
     environ_copy = dict(os.environ)
     environ_copy["PYTHONNOUSERSITE"] = "1"
 
+    python_devel_tgz_path = absolute_path('python-devel.tgz')
     response = requests.get(f"https://www.python.org/ftp/python/{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}/Python-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}.tgz")
-    open('python-devel.tgz', 'wb').write(response.content)
-    python_devel_tgz = tarfile.open('python-devel.tgz')
+    open(python_devel_tgz_path, 'wb').write(response.content)
+    python_devel_tgz = tarfile.open(python_devel_tgz_path)
     python_include_dir = sysconfig.get_paths()['include']
     def members(tf):
         prefix = f"Python-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}/Include/"
@@ -130,7 +137,10 @@ def install_and_import_requirements():
                 yield member
     python_devel_tgz.extractall(path=python_include_dir, members=members(python_devel_tgz))
 
-    subprocess.run([sys.executable, "-m", "pip", "install", "-r", os.path.abspath("stable_diffusion/requirements.txt")], check=True, env=environ_copy, cwd=os.path.abspath("stable_diffusion/"))
+    if sys.platform == 'win32':
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path("requirements-win32.txt")], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
+    else:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path("stable_diffusion/requirements.txt")], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
 
 class StableDiffusionInstallDependencies(bpy.types.Operator):
     bl_idname = "stable_diffusion.install_dependencies"
@@ -155,9 +165,12 @@ class StableDiffusionInstallDependencies(bpy.types.Operator):
         global dependencies_installed
         dependencies_installed = True
 
+        if sys.platform == 'win32':
+            subprocess.run([sys.executable, absolute_path("stable_diffusion/scripts/preload_models.py")], check=True, cwd=absolute_path("stable_diffusion/"))
+
         for cls in classes:
             bpy.utils.register_class(cls)
-        bpy.types.NODE_HT_header.remove(shader_menu_draw)
+        bpy.types.NODE_HT_header.append(shader_menu_draw)
 
         return {"FINISHED"}
 
@@ -172,7 +185,7 @@ class OpenHuggingFace(bpy.types.Operator):
         
         return {"FINISHED"}
 
-weights_path = os.path.abspath("stable_diffusion/models/ldm/stable-diffusion-v1/model.ckpt")
+weights_path = absolute_path("stable_diffusion/models/ldm/stable-diffusion-v1/model.ckpt")
 
 class OpenWeightsDirectory(bpy.types.Operator):
     bl_idname = "stable_diffusion.open_weights_directory"
@@ -236,7 +249,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 is_install_valid = None
 
 class ValidateInstallation(bpy.types.Operator):
-    bl_idname = "stable_diffusion.test_generation"
+    bl_idname = "stable_diffusion.validate_installation"
     bl_label = "Validate Installation"
     bl_description = ("Tests importing the generator to locate any errors with the installation.")
     bl_options = {"REGISTER", "INTERNAL"}
@@ -247,7 +260,8 @@ class ValidateInstallation(bpy.types.Operator):
             from .stable_diffusion.ldm.simplet2i import T2I
             
             is_install_valid = True
-        except:
+        except Exception as e:
+            self.report({"ERROR"}, str(e))
             is_install_valid = False
 
         return {"FINISHED"}
@@ -271,7 +285,23 @@ sampler_options = [
     ("k_heun", "KHEUN", "", 8),
 ]
 
-from omegaconf import OmegaConf
+def pil_to_image(pil_image, name):
+    '''
+    PIL image pixels is 2D array of byte tuple (when mode is 'RGB', 'RGBA') or byte (when mode is 'L')
+    bpy image pixels is flat array of normalized values in RGBA order
+    '''
+    # setup PIL image conversion
+    width = pil_image.width
+    height = pil_image.height
+    byte_to_normalized = 1.0 / 255.0
+    # create new image
+    bpy_image = bpy.data.images.new(name, width=width, height=height)
+
+    # convert Image 'L' to 'RGBA', normalize then flatten 
+    bpy_image.pixels[:] = (np.asarray(pil_image.convert('RGBA'),dtype=np.float32) * byte_to_normalized).ravel()
+    bpy_image.pack()
+
+    return bpy_image
 
 class DreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture"
@@ -280,17 +310,32 @@ class DreamTexture(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     prompt: StringProperty(name="Prompt")
+
+    # Tags
+    show_tags: BoolProperty(name="", default=False)
+    tags_texture: BoolProperty(name="Texture", default=True)
+    tags_photorealism: BoolProperty(name="Photorealism")
+    tags_toon: BoolProperty(name="Toon")
+
+    # Size
+    width: IntProperty(name="Width", default=512)
+    height: IntProperty(name="Height", default=512)
+
+    # Advanced
+    show_advanced: BoolProperty(name="", default=False)
+    seed: IntProperty(name="Seed", default=-1)
+    full_precision: BoolProperty(name="Full Precision", default=True)
     iterations: IntProperty(name="Iterations", default=1, min=1)
     steps: IntProperty(name="Steps", default=25, min=1)
     cfgscale: FloatProperty(name="CFG Scale", default=7.5)
     sampler: EnumProperty(name="Sampler", items=sampler_options, default=3)
-    width: IntProperty(name="Width", default=512)
-    height: IntProperty(name="Height", default=512)
-    seed: IntProperty(name="Seed", default=-1)
-    
+
     # Init Image
+    use_init_img: BoolProperty(name="", default=False)
     strength: FloatProperty(name="Strength", default=0.75, min=0, max=1)
     fit: BoolProperty(name="Fit to width/height", default=True)
+    
+    show_help: BoolProperty(name="", default=False)
 
     @classmethod
     def poll(self, context):
@@ -312,44 +357,85 @@ class DreamTexture(bpy.types.Operator):
         size_box.label(text="Size")
         size_box.prop(self, "width")
         size_box.prop(self, "height")
+
+        tags_box = layout.box()
+        tags_box_heading = tags_box.row()
+        tags_box_heading.prop(self, "show_tags", icon="DOWNARROW_HLT" if self.show_tags else "RIGHTARROW_THIN", emboss=False, icon_only=True)
+        tags_box_heading.label(text="Tags")
+        if self.show_tags:
+            for tag in ()
         
         init_img_box = layout.box()
-        init_img_box.label(text="Init Image")
-        init_img_box.template_ID(context.scene, "init_img", open="image.open")
-        init_img_box.prop(self, "strength")
-        init_img_box.prop(self, "fit")
+        init_img_heading = init_img_box.row()
+        init_img_heading.prop(self, "use_init_img")
+        init_img_heading.label(text="Init Image")
+        if self.use_init_img:
+            init_img_box.template_ID(context.scene, "init_img", open="image.open")
+            init_img_box.prop(self, "strength")
+            init_img_box.prop(self, "fit")
 
         advanced_box = layout.box()
-        advanced_box.label(text="Advanced")
-        advanced_box.prop(self, "seed")
-        advanced_box.prop(self, "iterations")
-        advanced_box.prop(self, "steps")
-        advanced_box.prop(self, "cfgscale")
-        advanced_box.prop(self, "sampler")
+        advanced_box_heading = advanced_box.row()
+        advanced_box_heading.prop(self, "show_advanced", icon="DOWNARROW_HLT" if self.show_advanced else "RIGHTARROW_THIN", emboss=False, icon_only=True)
+        advanced_box_heading.label(text="Advanced Configuration")
+        if self.show_advanced:
+            advanced_box.prop(self, "full_precision")
+            advanced_box.prop(self, "seed")
+            advanced_box.prop(self, "iterations")
+            advanced_box.prop(self, "steps")
+            advanced_box.prop(self, "cfgscale")
+            advanced_box.prop(self, "sampler")
+        
+        help_box = layout.box()
+        help_box_heading = help_box.row()
+        help_box_heading.prop(self, "show_help", icon="DOWNARROW_HLT" if self.show_help else "RIGHTARROW_THIN", emboss=False, icon_only=True)
+        help_box_heading.label(text="Help")
+        if self.show_help:
+            vram_help_box = help_box.box()
+            vram_help_box.label(text="Using an 'Init Image'", icon="QUESTION")
+            vram_help_box.label(text="Use an init image to change an existing texture.")
+            vram_help_box.label(text="1. Enable 'Init Image'.")
+            vram_help_box.label(text="2. Choose a texture to use as the base.")
+            vram_help_box.label(text="3. Enter a prompt for how the target should look.")
+
+            vram_help_box = help_box.box()
+            vram_help_box.label(text="Not enough VRAM", icon="ERROR")
+            vram_help_box.label(text="1. Disable 'Advanced' > 'Full Precision'")
+            vram_help_box.label(text="2. Reduce the target size.")
+
+            speed_help_box = help_box.box()
+            speed_help_box.label(text="Evaluation takes unreasonably long", icon="ERROR")
+            speed_help_box.label(text="CUDA and Apple Silicon GPUs are supported.")
+            speed_help_box.label(text="It's possible your CPU is being used instead. Try:")
+            speed_help_box.label(text="1. Reduce 'Advanced' > 'Steps'")
+            speed_help_box.label(text="2. Reduce the target size.")
+            speed_help_box.label(text="3. Disable 'Advanced' > 'Full Precision'")
 
     def cancel(self, context):
         pass
 
-    def execute(self, context):
+    async def dream_texture(self, context):
+        # Support Apple Silicon GPUs as much as possible.
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
         from .stable_diffusion.ldm.simplet2i import T2I
+        from omegaconf import OmegaConf
         
-        config  = os.path.abspath('stable_diffusion/configs/models.yaml')
+        config  = absolute_path('stable_diffusion/configs/models.yaml')
         model   = 'stable-diffusion-1.4'
 
         models  = OmegaConf.load(config)
         width   = models[model].width
         height  = models[model].height
-        config  = 'stable_diffusion/' + models[model].config
-        weights = 'stable_diffusion/' + models[model].weights
+        config  = absolute_path('stable_diffusion/' + models[model].config)
+        weights = absolute_path('stable_diffusion/' + models[model].weights)
 
         t2i = T2I(
             width=width,
             height=height,
             sampler_name=self.sampler,
             weights=weights,
-            full_precision=True,
+            full_precision=self.full_precision,
             config=config,
             grid=False,
             
@@ -360,47 +446,79 @@ class DreamTexture(bpy.types.Operator):
 
         t2i.load_model()
 
+        node_tree = context.material.node_tree
+        screen = context.screen
+        last_data_block = None
+        scene = context.scene
         def image_writer(image, seed, upscaled=False):
-            def pil_to_image(pil_image, name='NewImage'):
-                '''
-                PIL image pixels is 2D array of byte tuple (when mode is 'RGB', 'RGBA') or byte (when mode is 'L')
-                bpy image pixels is flat array of normalized values in RGBA order
-                '''
-                # setup PIL image conversion
-                width = pil_image.width
-                height = pil_image.height
-                byte_to_normalized = 1.0 / 255.0
-                # create new image
-                bpy_image = bpy.data.images.new(name, width=width, height=height)
+            nonlocal last_data_block
+            # Only use the non-upscaled texture, as upscaling is disabled due to crashes on Windows.
+            if not upscaled:
+                if last_data_block is not None:
+                    bpy.data.images.remove(last_data_block)
+                    last_data_block = None
+                nodes = node_tree.nodes
+                texture_node = nodes.new("ShaderNodeTexImage")
+                texture_node.image = pil_to_image(image, name=f"{seed}")
+                nodes.active = texture_node
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        area.spaces.active.image = texture_node.image
+        def view_step(samples, step):
+            nonlocal last_data_block
+            for area in screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    step_image = pil_to_image(t2i._sample_to_image(samples), name=f'Step {step + 1}/{self.steps}')
+                    area.spaces.active.image = step_image
+                    if last_data_block is not None:
+                        bpy.data.images.remove(last_data_block)
+                    last_data_block = step_image
 
-                # convert Image 'L' to 'RGBA', normalize then flatten 
-                bpy_image.pixels[:] = (np.asarray(pil_image.convert('RGBA'),dtype=np.float32) * byte_to_normalized).ravel()
-                bpy_image.pack()
+        def perform():
+            t2i.prompt2image(
+                # prompt string (no default)
+                prompt=self.prompt,
+                # iterations (1); image count=iterations
+                iterations=self.iterations,
+                # refinement steps per iteration
+                steps=self.steps,
+                # seed for random number generator
+                seed=None if self.seed == -1 else self.seed,
+                # width of image, in multiples of 64 (512)
+                width=self.width,
+                # height of image, in multiples of 64 (512)
+                height=self.height,
+                # how strongly the prompt influences the image (7.5) (must be >1)
+                cfg_scale=self.cfgscale,
+                # path to an initial image - its dimensions override width and height
+                init_img=scene.init_img.filepath,
 
-                return bpy_image
+                fit=self.fit,
+                # strength for noising/unnoising init_img. 0.0 preserves image exactly, 1.0 replaces it completely
+                strength=self.strength,
+                # strength for GFPGAN. 0.0 preserves image exactly, 1.0 replaces it completely
+                gfpgan_strength=0.0, # Use zero to disable upscaling, which fixes a crash on Windows.
+                # image randomness (eta=0.0 means the same seed always produces the same image)
+                ddim_eta=0.0,
+                # a function or method that will be called each step
+                step_callback=view_step,
+                # a function or method that will be called each time an image is generated
+                image_callback=image_writer,
+                # a weighted list [(seed_1, weight_1), (seed_2, weight_2), ...] of variations which should be applied before doing any generation
+                with_variations=None,
+                # optional 0-1 value to slerp from -S noise to random noise (allows variations on an image)
+                variation_amount=0.0,
+                
+                sampler_name=self.sampler
+            )
 
-            nodes = context.material.node_tree.nodes
-            texture_node = nodes.new("ShaderNodeTexImage")
-            texture_node.image = pil_to_image(image, name=f"{seed}")
-            nodes.active = texture_node
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, perform)
 
-        t2i.prompt2image(
-           prompt=self.prompt,                         # prompt string (no default)
-           iterations=self.iterations,                     # iterations (1); image count=iterations
-           steps=self.steps,                          # refinement steps per iteration
-           seed=None,                           # seed for random number generator
-           width=self.width,                          # width of image, in multiples of 64 (512)
-           height=self.height,                         # height of image, in multiples of 64 (512)
-           cfg_scale=self.cfgscale,                      # how strongly the prompt influences the image (7.5) (must be >1)
-           init_img=None,                       # path to an initial image - its dimensions override width and height
-           strength=self.strength,                       # strength for noising/unnoising init_img. 0.0 preserves image exactly, 1.0 replaces it completely
-           gfpgan_strength=0.5,                # strength for GFPGAN. 0.0 preserves image exactly, 1.0 replaces it completely
-           ddim_eta=0.0,                       # image randomness (eta=0.0 means the same seed always produces the same image)
-           step_callback=None,                  # a function or method that will be called each step
-           image_callback=image_writer,                 # a function or method that will be called each time an image is generated
-           with_variations=None,                # a weighted list [(seed_1, weight_1), (seed_2, weight_2), ...] of variations which should be applied before doing any generation
-           variation_amount=0.0,               # optional 0-1 value to slerp from -S noise to random noise (allows variations on an image)
-        )
+    def execute(self, context):
+        async_task = asyncio.ensure_future(self.dream_texture(context))
+        # async_task.add_done_callback(done_callback)
+        async_loop.ensure_async_loop()
 
         return {'FINISHED'}
 
@@ -423,10 +541,13 @@ classes = (
 )
 
 def register():
-    sys.path.insert(0, os.path.abspath("stable_diffusion"))
-    sys.path.insert(0, os.path.abspath("stable_diffusion/src/clip"))
-    sys.path.insert(0, os.path.abspath("stable_diffusion/src/k-diffusion"))
-    sys.path.insert(0, os.path.abspath("stable_diffusion/src/taming-transformers"))
+    async_loop.setup_asyncio_executor()
+    bpy.utils.register_class(AsyncLoopModalOperator)
+
+    sys.path.append(absolute_path("stable_diffusion/"))
+    sys.path.append(absolute_path("stable_diffusion/src/clip"))
+    sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
+    sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
 
     global dependencies_installed
     dependencies_installed = False
@@ -450,6 +571,8 @@ def register():
     bpy.types.NODE_HT_header.append(shader_menu_draw)
 
 def unregister():
+    bpy.utils.unregister_class(AsyncLoopModalOperator)
+
     for cls in preference_classes:
         bpy.utils.unregister_class(cls)
 

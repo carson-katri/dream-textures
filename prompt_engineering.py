@@ -87,32 +87,8 @@ def photography_prompt(tokens):
 photography_structure = PromptStructure(
     'photography',
     'Photography',
-    (subject_token, framing_token, position_token, film_type_token, camera_settings_token, shooting_context_token, lighting_token),
+    (framing_token, position_token, film_type_token, camera_settings_token, shooting_context_token, subject_token, lighting_token),
     photography_prompt
-)
-
-subject_type_token = PromptToken('subject_type', 'Subject Type', (
-    ('environment', 'Environment'),
-    ('character', 'Character'),
-    ('weapon', 'Weapon'),
-    ('vehicle', 'Vehicle'),
-))
-
-genre_token = PromptToken('genre', 'Genre', (
-    ('scifi', 'Sci-Fi'),
-    ('fantasy', 'Fantasy'),
-    ('cyberpunk', 'Cyberpunk'),
-    ('cinematic', 'Cinematic'),
-))
-
-def concept_art_prompt(tokens):
-    return f"{tokens.subject}, {tokens.subject_type} concept art, {tokens.genre} digital painting, trending on ArtStation"
-
-concept_art_structure = PromptStructure(
-    'concept_art',
-    'Concept Art',
-    (subject_token, subject_type_token, genre_token),
-    concept_art_prompt
 )
 
 def custom_prompt(tokens):
@@ -124,23 +100,12 @@ custom_structure = PromptStructure(
     custom_prompt
 )
 
-def file_batch_prompt(tokens):
-    return f""
-file_batch_structure = PromptStructure(
-    'file_batch',
-    "File Batch",
-    [],
-    file_batch_prompt
-)
-
 prompt_structures = [
     texture_structure,
     photography_structure,
-    concept_art_structure,
     custom_structure,
-    file_batch_structure
 ]
 
 def map_structure(x):
     return (x.id, x.label, '')
-prompt_structures_items = list(map(map_structure, prompt_structures))
+prompt_structures_items = map(map_structure, prompt_structures)

@@ -23,6 +23,7 @@ bl_info = {
     "category": "Node"
 }
 
+from enum import Enum
 import bpy
 import os
 import sys
@@ -36,6 +37,8 @@ import numpy as np
 
 import asyncio
 from .async_loop import *
+
+from .prompt_engineering import *
 
 def absolute_path(component):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), component)
@@ -309,13 +312,9 @@ class DreamTexture(bpy.types.Operator):
     bl_description = "Generate a texture with AI"
     bl_options = {'REGISTER', 'UNDO'}
 
+    # Prompt
     prompt: StringProperty(name="Prompt")
-
-    # Tags
-    show_tags: BoolProperty(name="", default=False)
-    tags_texture: BoolProperty(name="Texture", default=True)
-    tags_photorealism: BoolProperty(name="Photorealism")
-    tags_toon: BoolProperty(name="Toon")
+    prompt_structure: EnumProperty(name="Preset", items=prompt_structures_items)
 
     # Size
     width: IntProperty(name="Width", default=512)
@@ -351,19 +350,24 @@ class DreamTexture(bpy.types.Operator):
 
     def draw(self, context):
         layout = self.layout
-        layout.prop(self, "prompt")
+        
+        prompt_box = layout.box()
+        prompt_box_heading = prompt_box.row()
+        prompt_box_heading.label(text="Prompt")
+        prompt_box_heading.prop(self, "prompt_structure")
+        structure = next(x for x in prompt_structures if x.id == self.prompt_structure)
+        for segment in structure.structure:
+            segment_row = prompt_box.row()
+            enum_prop = 'prompt_structure_token_' + segment.id + '_enum'
+            is_custom = getattr(context.scene, enum_prop) == 'custom'
+            if is_custom:
+                segment_row.prop(context.scene, 'prompt_structure_token_' + segment.id)
+            segment_row.prop(context.scene, enum_prop, icon_only=is_custom)
         
         size_box = layout.box()
         size_box.label(text="Size")
         size_box.prop(self, "width")
         size_box.prop(self, "height")
-
-        tags_box = layout.box()
-        tags_box_heading = tags_box.row()
-        tags_box_heading.prop(self, "show_tags", icon="DOWNARROW_HLT" if self.show_tags else "RIGHTARROW_THIN", emboss=False, icon_only=True)
-        tags_box_heading.label(text="Tags")
-        if self.show_tags:
-            for tag in ()
         
         init_img_box = layout.box()
         init_img_heading = init_img_box.row()
@@ -415,6 +419,21 @@ class DreamTexture(bpy.types.Operator):
         pass
 
     async def dream_texture(self, context):
+        structure = next(x for x in prompt_structures if x.id == self.prompt_structure)
+        class dotdict(dict):
+            """dot.notation access to dictionary attributes"""
+            __getattr__ = dict.get
+            __setattr__ = dict.__setitem__
+            __delattr__ = dict.__delitem__
+        tokens = {}
+        for segment in structure.structure:
+            enum_value = getattr(context.scene, 'prompt_structure_token_' + segment.id + '_enum')
+            if enum_value == 'custom':
+                tokens[segment.id] = getattr(context.scene, 'prompt_structure_token_' + segment.id)
+            else:
+                tokens[segment.id] = next(x for x in segment.values if x[0] == enum_value)[1]
+        generated_prompt = structure.generate(dotdict(tokens))
+
         # Support Apple Silicon GPUs as much as possible.
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
@@ -477,7 +496,7 @@ class DreamTexture(bpy.types.Operator):
         def perform():
             t2i.prompt2image(
                 # prompt string (no default)
-                prompt=self.prompt,
+                prompt=generated_prompt,
                 # iterations (1); image count=iterations
                 iterations=self.iterations,
                 # refinement steps per iteration
@@ -491,7 +510,7 @@ class DreamTexture(bpy.types.Operator):
                 # how strongly the prompt influences the image (7.5) (must be >1)
                 cfg_scale=self.cfgscale,
                 # path to an initial image - its dimensions override width and height
-                init_img=scene.init_img.filepath,
+                init_img=scene.init_img.filepath if scene.init_img is not None else None,
 
                 fit=self.fit,
                 # strength for noising/unnoising init_img. 0.0 preserves image exactly, 1.0 replaces it completely
@@ -553,6 +572,18 @@ def register():
     dependencies_installed = False
 
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
+
+    def map_structure_token_items(value):
+        return (value[0], value[1], '')
+    for structure in prompt_structures:
+        for token in structure.structure:
+            if not isinstance(token, str) and not hasattr(bpy.types.Scene, token.id):
+                setattr(bpy.types.Scene, 'prompt_structure_token_' + token.id, StringProperty(name=token.label))
+                setattr(bpy.types.Scene, 'prompt_structure_token_' + token.id + '_enum', EnumProperty(
+                    name=token.label,
+                    items=[('custom', 'Custom', '')] + list(map(map_structure_token_items, token.values)),
+                    default='custom' if len(token.values) == 0 else token.values[0][0],
+                ))
 
     for cls in preference_classes:
         bpy.utils.register_class(cls)

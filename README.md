@@ -1,86 +1,70 @@
-![Dream Textures, subtitle: Stable Diffusion built-in to Blender](docs/assets/banner.png)
+# Dream Textures
 
-[![Latest Release](https://flat.badgen.net/github/release/carson-katri/dream-textures)](https://github.com/carson-katri/dream-textures/releases/latest)
-[![Join the Discord](https://flat.badgen.net/badge/icon/discord?icon=discord&label)](https://discord.gg/EmDJ8CaWZ7)
-[![Total Downloads](https://img.shields.io/github/downloads/carson-katri/dream-textures/total?style=flat-square)](https://github.com/carson-katri/dream-textures/releases/latest)
-[![Buy on Blender Market](https://flat.badgen.net/badge/buy/blender%20market/orange)](https://www.blendermarket.com/products/dream-textures)
+> Stable Diffusion built-in to the Blender shader editor.
 
 * Create textures, concept art, background assets, and more with a simple text prompt
-* Use the 'Seamless' option to create textures that tile perfectly with no visible seam
-* Texture entire scenes with 'Project Dream Texture' and depth to image
-* Re-style animations with the Cycles render pass
+* Quickly create variations on an existing texture
+* Experiment with AI image generation
 * Run the models on your machine to iterate without slowdowns from a service
 
-# Installation
-Download the [latest release](https://github.com/carson-katri/dream-textures/releases/latest) and follow the instructions there to get up and running.
+| Enter a prompt | Generate a unique texture in a few seconds |
+| -------------- | ------------------------------------------ |
+| ![](readme_assets/brick_wall_texture_prompt.png) | ![](readme_assets/brick_wall_texture.png) |
+| ![](readme_assets/uneven_stone_path_prompt.png) | ![](readme_assets/uneven_stone_path.png) |
 
-> On macOS, it is possible you will run into a quarantine issue with the dependencies. To work around this, run the following command in the app `Terminal`: `xattr -r -d com.apple.quarantine ~/Library/Application\ Support/Blender/3.3/scripts/addons/dream_textures/.python_dependencies`. This will allow the PyTorch `.dylib`s and `.so`s to load without having to manually allow each one in System Preferences.
+| Take an existing texture | Modify it with a text prompt |
+| ------------------------ | ---------------------------- |
+| ![](readme_assets/marble.jpg) | ![](readme_assets/marble_brick_wall_texture.png) |
 
-If you want a visual guide to installation, see this video tutorial from Ashlee Martino-Tarr: https://youtu.be/kEcr8cNmqZk
-> Ensure you always install the [latest version](https://github.com/carson-katri/dream-textures/releases/latest) of the add-on if any guides become out of date.
+## Installation
+1. Download the addon ZIP file from the Releases tab on GitHub.
+2. Install the addon in Blender's preferences window.
+3. Follow the steps in the 'Dream Textures' preferences to install the necessary dependencies.
 
-# Usage
+## Usage
+Dream Textures provides most of the configuration options available when using Stable Diffusion directly.
 
-Here's a few quick guides:
+1. Open the Shader editor
+2. Select the 'Dream Textures' menu in the far right, and choose the 'Dream Texture' operation.
+3. Enter a prompt. There are some presets you can use to automatically fine tune your result:
+    1. *Texture* - simply adds the word *texture* to the end of your prompt to help the model create a texture.
+    2. *Photography* - provides many options for specifying a photorealistic result.
+    3. *Custom* - passes the prompt directly to SD with no additional keywords.
+4. Click 'OK'. Wait a moment for the model to load. After the model loads, the generation runs asynchronously, so you Blender shouldn't completely freeze up.
+5. If you have an Image Viewer open, the current progress of the model will appear there with the current step # as the image name (for example, *Step 1/25*).
+6. After the image finishes generating, a new Image Texture node will be added to the open shader editor. The image is packed, so you may want to export it to a separate file.
 
-## [Setting Up](docs/SETUP.md)
-Setup instructions for various platforms and configurations.
+> The name of the generated image is the random seed used to create it. If you want to use the same seed, copy the name of the image into the 'Seed' parameter under the 'Advanced' section.
 
-## [Image Generation](docs/IMAGE_GENERATION.md)
-Create textures, concept art, and more with text prompts. Learn how to use the various configuration options to get exactly what you're looking for.
+## Init Image
+Use an init image to create a variation of an existing texture.
 
-![A graphic showing each step of the image generation process](docs/assets/image_generation.png)
+![](readme_assets/init_image.png)
 
-## [Texture Projection](docs/TEXTURE_PROJECTION.md)
-Texture entire models and scenes with depth to image.
+1. Enable 'Init Image'
+2. Select an image from your filesystem
+> Currently, this doesn't work with packed textures. So select an image from your file system, or export the packed texture to a file and select that.
+3. You can change the strength and specify if it should fit to the set size, or keep the original image size.
+4. Enter a prompt that tells SD how to modify the image.
+5. Click 'OK' and wait for it to finish.
 
-![A graphic showing each step of the texture projection process](docs/assets/texture_projection.png)
+## Advanced Configuration
+These options match those of SD.
 
-## [Inpaint/Outpaint](docs/INPAINT_OUTPAINT.md)
-Inpaint to fix up images and convert existing textures into seamless ones automatically.
+![](readme_assets/advanced_configuration.png)
 
-Outpaint to increase the size of an image by extending it in any direction.
+* *Full Precision* - more VRAM intensive, but creates better results. Disable this if you have a lower-end graphics card.
+* *Seed* - a random seed if set to `-1`, otherwise it uses the value you input. You can copy the random seed from the generated image's name to use the same seed again.
+* *Iterations* - how many images to generate. This doesn't quite work yet, so keep it at `1`.
+* *Steps* - higher is generally better, but I wouldn't recommend going past 50 until you've refined your prompt.
+* *CFG Scale* - essentially how much the model takes your prompt into consideration. `7.5` is a good default for a collaborative experience, but if you want to force the model to follow instructions crank it up to `15-20`.
+* *Sampler* - KLMS is a good speed/quality default, DDIM is generally faster, and you'll get different results with each so play around with it.
 
-![A graphic showing each step of the outpainting process](docs/assets/inpaint_outpaint.png)
-
-## [Render Pass](docs/RENDER_PASS.md)
-Perform style transfer and create novel animations with Stable Diffusion as a post processing step.
-
-![A graphic showing each frame of a render pass, split with the original and generated result](docs/assets/render_pass.png)
-
-## [AI Upscaling](docs/AI_UPSCALING.md)
-Upscale your low-res generations 4x.
-
-![A graphic showing each step of the upscaling process](docs/assets/upscale.png)
-
-## [History](docs/HISTORY.md)
-Recall, export, and import history entries for later use.
-
-# Compatibility
-Dream Textures has been tested with CUDA and Apple Silicon GPUs. Over 4GB of VRAM is recommended.
+## Compatibility
+Dream Textures has been tested with CUDA and Apple Silicon GPUs.
 
 If you have an issue with a supported GPU, please create an issue.
 
-### Cloud Processing
-If your hardware is unsupported, you can use DreamStudio to process in the cloud. Follow the instructions in the release notes to setup with DreamStudio.
-
-# Contributing
-After cloning the repository, there a few more steps you need to complete to setup your development environment:
-1. Install submodules:
-```sh
-git submodule update --init --recursive
-```
-2. I recommend the [Blender Development](https://marketplace.visualstudio.com/items?itemName=JacquesLucke.blender-development) extension for VS Code for debugging. If you just want to install manually though, you can put the `dream_textures` repo folder in Blender's addon directory.
-3. After running the local add-on in Blender, setup the model weights like normal.
-4. Install dependencies locally
-    * Open Blender's preferences window
-    * Enable *Interface* > *Display* > *Developer Extras*
-    * Then install dependencies for development under *Add-ons* > *Dream Textures* > *Development Tools*
-    * This will download all pip dependencies for the selected platform into `.python_dependencies`
-
-### Tips
-
-1. On Apple Silicon, with the `requirements-dream-studio.txt` you may run into an error with gRPC using an incompatible binary. If so, please use the following command to install the correct gRPC version:
-```sh
-pip install --no-binary :all: grpcio --ignore-installed --target .python_dependencies --upgrade
-```
+## Future Directions
+* Other image map types (normal, roughness, displacement, etc.) using a new LDM checkpoint and vocabulary.
+* AI upscaling and face fixing with ESRGAN and GFPGAN

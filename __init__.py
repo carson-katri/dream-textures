@@ -17,13 +17,12 @@ bl_info = {
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
     "warning": "Requires installation of dependencies",
     "blender": (2, 80, 0),
-    "version": (0, 0, 2),
+    "version": (0, 0, 3),
     "location": "",
     "warning": "",
     "category": "Node"
 }
 
-from enum import Enum
 import bpy
 import os
 import sys
@@ -34,6 +33,7 @@ import requests
 import tarfile
 import webbrowser
 import numpy as np
+from shutil import which
 
 import asyncio
 from .async_loop import *
@@ -188,6 +188,17 @@ class OpenHuggingFace(bpy.types.Operator):
         
         return {"FINISHED"}
 
+class OpenGitDownloads(bpy.types.Operator):
+    bl_idname = "stable_diffusion.open_git_downloads"
+    bl_label = "Go to git-scm.com"
+    bl_description = ("Opens git-scm.com to the download page for Git.")
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        webbrowser.open("https://git-scm.com/downloads")
+        
+        return {"FINISHED"}
+
 weights_path = absolute_path("stable_diffusion/models/ldm/stable-diffusion-v1/model.ckpt")
 
 class OpenWeightsDirectory(bpy.types.Operator):
@@ -216,6 +227,12 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             layout.label(text="Addon setup complete.")
         else:
             layout.label(text="Complete the following steps to finish setting up the addon:")
+
+        if which('git') is None:
+            git_box = layout.box()
+            git_box.label(text="Install Git", icon="IMPORT")
+            git_box.label(text="Git is used to fetch some dependencies.")
+            git_box.operator(OpenGitDownloads.bl_idname, icon="URL")
 
         dependencies_box = layout.box()
         dependencies_box.label(text="Install Dependencies", icon="IMPORT")
@@ -278,7 +295,8 @@ class ValidateInstallation(bpy.types.Operator):
 
         return {"FINISHED"}
 
-preference_classes = (StableDiffusionInstallDependencies,
+preference_classes = (OpenGitDownloads,
+                      StableDiffusionInstallDependencies,
                       OpenHuggingFace,
                       OpenWeightsDirectory,
                       ValidateInstallation,

@@ -237,6 +237,11 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             warning_box = model_weights_box.box()
             warning_box.label(text="Make sure the file is renamed to 'model.ckpt', not 'sd-v1-4.ckpt'", icon="ERROR")
             model_weights_box.operator(OpenWeightsDirectory.bl_idname, icon="FOLDER_REDIRECT")
+        
+        if weights_installed and dependencies_installed:
+            restart_box = layout.box()
+            restart_box.label(text="Restart Blender", icon="FILE_REFRESH")
+            restart_box.label(text="After installing Blender may need a restart.")
 
         if dependencies_installed and weights_installed:
             is_valid_box = layout.box()
@@ -244,6 +249,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             if is_install_valid is not None:
                 if is_install_valid:
                     is_valid_box.label(text="Install validation succeeded.", icon="CHECKMARK")
+                    is_valid_box.label(text="If nothing happens on your first generation, try restarting.")
                 else:
                     is_valid_box.label(text="Install validation failed.", icon="ERROR")
             else:
@@ -510,7 +516,7 @@ class DreamTexture(bpy.types.Operator):
                 # how strongly the prompt influences the image (7.5) (must be >1)
                 cfg_scale=self.cfgscale,
                 # path to an initial image - its dimensions override width and height
-                init_img=scene.init_img.filepath if scene.init_img is not None else None,
+                init_img=scene.init_img.filepath if scene.init_img is not None and self.use_init_img else None,
 
                 fit=self.fit,
                 # strength for noising/unnoising init_img. 0.0 preserves image exactly, 1.0 replaces it completely

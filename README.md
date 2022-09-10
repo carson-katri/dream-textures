@@ -17,7 +17,7 @@
 | ![](readme_assets/marble.jpg) | ![](readme_assets/marble_brick_wall_texture.png) |
 
 ## Installation
-1. Download the addon ZIP file from the Releases tab on GitHub.
+1. Download the addon ZIP file from the [Releases tab](https://github.com/carson-katri/dream-textures/releases) on GitHub.
 2. Install the addon in Blender's preferences window.
 3. Follow the steps in the 'Dream Textures' preferences to install the necessary dependencies.
 

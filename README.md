@@ -21,6 +21,8 @@
 2. Install the addon in Blender's preferences window.
 3. Follow the steps in the 'Dream Textures' preferences to install the necessary dependencies.
 
+> On Windows, you will need to run Blender as an administrator for the installation to complete successfully.
+
 ## Usage
 Dream Textures provides most of the configuration options available when using Stable Diffusion directly.
 

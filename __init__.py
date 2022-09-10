@@ -11,13 +11,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
+from .version import VERSION
+
 bl_info = {
     "name": "Dream Textures",
     "author": "Carson Katri",
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
     "warning": "Requires installation of dependencies",
     "blender": (2, 80, 0),
-    "version": (0, 0, 3),
+    "version": VERSION,
     "location": "",
     "warning": "",
     "category": "Node"
@@ -39,6 +41,8 @@ import asyncio
 from .async_loop import *
 
 from .prompt_engineering import *
+
+from .operators.open_latest_version import check_for_updates, new_version_available, OpenLatestVersion
 
 def absolute_path(component):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), component)
@@ -577,18 +581,23 @@ class ShaderMenu(bpy.types.Menu):
         layout = self.layout
 
         layout.operator(DreamTexture.bl_idname)
+        if new_version_available():
+            layout.operator(OpenLatestVersion.bl_idname)
 
 def shader_menu_draw(self, context):
     self.layout.menu(ShaderMenu.bl_idname)
 
 classes = (
     DreamTexture,
+    OpenLatestVersion,
     ShaderMenu,
 )
 
 def register():
     async_loop.setup_asyncio_executor()
     bpy.utils.register_class(AsyncLoopModalOperator)
+
+    check_for_updates()
 
     sys.path.append(absolute_path("stable_diffusion/"))
     sys.path.append(absolute_path("stable_diffusion/src/clip"))

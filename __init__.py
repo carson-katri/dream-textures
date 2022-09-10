@@ -222,6 +222,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
         if dependencies_installed:
             dependencies_box.label(text="Dependencies installed successfully.")
         else:
+            if sys.platform == 'win32':
+                dependencies_box.label(text="You must run Blender as an administrator for the installation to work.")
             dependencies_box.operator(StableDiffusionInstallDependencies.bl_idname, icon="CONSOLE")
             
         model_weights_box = layout.box()
@@ -250,6 +252,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                 if is_install_valid:
                     is_valid_box.label(text="Install validation succeeded.", icon="CHECKMARK")
                     is_valid_box.label(text="If nothing happens on your first generation, try restarting.")
+                    is_valid_box.label(text="Do not validate your installation again after restarting.")
                 else:
                     is_valid_box.label(text="Install validation failed.", icon="ERROR")
             else:

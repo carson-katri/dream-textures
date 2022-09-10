@@ -1,6 +1,6 @@
 import os
 
-def absolute_path(component: str):
+def absolute_path(component):
     """
     Returns the absolute path to a file in the addon directory.
 
@@ -8,5 +8,4 @@ def absolute_path(component: str):
     """
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), component)
 
-REAL_ESRGAN_WEIGHTS_PATH = absolute_path("weights/realesrgan/realesr-general-x4v3.pth")
-CLIPSEG_WEIGHTS_PATH = absolute_path("weights/clipseg/rd64-uni.pth")
+WEIGHTS_PATH = absolute_path("stable_diffusion/models/ldm/stable-diffusion-v1/model.ckpt")

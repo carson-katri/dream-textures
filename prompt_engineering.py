@@ -108,4 +108,4 @@ prompt_structures = [
 
 def map_structure(x):
     return (x.id, x.label, '')
-prompt_structures_items = map(map_structure, prompt_structures)
+prompt_structures_items = list(map(map_structure, prompt_structures))

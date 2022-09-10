@@ -31,6 +31,6 @@ class OpenLatestVersion(bpy.types.Operator):
         return True
 
     def execute(self, context):
-        webbrowser.open(f'https://github.com/carson-katri/dream-textures/releases/tag/{latest_version}')
+        webbrowser.open(f'https://github.com/carson-katri/dream-textures/releases/tag/{version_tag(latest_version)}')
 
         return {"FINISHED"}

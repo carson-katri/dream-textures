@@ -49,8 +49,6 @@ class DreamTexture(bpy.types.Operator):
     use_init_img: BoolProperty(name="", default=False)
     strength: FloatProperty(name="Strength", default=0.75, min=0, max=1)
     fit: BoolProperty(name="Fit to width/height", default=True)
-    
-    show_help: BoolProperty(name="", default=False)
 
     @classmethod
     def poll(self, context):
@@ -106,25 +104,6 @@ class DreamTexture(bpy.types.Operator):
             advanced_box.prop(self, "steps")
             advanced_box.prop(self, "cfgscale")
             advanced_box.prop(self, "sampler")
-        
-        help_box = layout.box()
-        help_box_heading = help_box.row()
-        help_box_heading.prop(self, "show_help", icon="DOWNARROW_HLT" if self.show_help else "RIGHTARROW_THIN", emboss=False, icon_only=True)
-        help_box_heading.label(text="Help")
-        if self.show_help:
-            vram_help_box = help_box.box()
-            vram_help_box.label(text="Why does it keep crashing?", icon="ERROR")
-            vram_help_box.label(text="If your GPU ran out of VRAM:")
-            vram_help_box.label(text="Reduce the image size.", icon="CHECKMARK")
-            vram_help_box.label(text="Check for errors:")
-            vram_help_box.label(text="Enable 'Window' > 'Toggle System Console'", icon="CHECKMARK")
-
-            initimg_help_box = help_box.box()
-            initimg_help_box.label(text="Using an 'Init Image'", icon="QUESTION")
-            initimg_help_box.label(text="Use an init image to change an existing texture.")
-            initimg_help_box.label(text="1. Enable 'Init Image'.")
-            initimg_help_box.label(text="2. Choose a texture to use as the base.")
-            initimg_help_box.label(text="3. Enter a prompt for how the target should look.")
 
     def cancel(self, context):
         pass

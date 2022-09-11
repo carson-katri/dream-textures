@@ -28,6 +28,8 @@ from bpy.props import StringProperty, EnumProperty, PointerProperty
 import sys
 import importlib
 
+from .help_section import register_section_props
+
 from .async_loop import *
 from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
@@ -60,6 +62,8 @@ def register():
                     items=[('custom', 'Custom', '')] + list(map(map_structure_token_items, token.values)),
                     default='custom' if len(token.values) == 0 else token.values[0][0],
                 ))
+    
+    register_section_props()
 
     for cls in PREFERENCE_CLASSES:
         bpy.utils.register_class(cls)

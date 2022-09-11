@@ -127,10 +127,6 @@ class InstallDependencies(bpy.types.Operator):
                       "elevated permissions in order to install the package")
     bl_options = {"REGISTER", "INTERNAL"}
 
-    @classmethod
-    def poll(self, context):
-        return not dependencies_installed
-
     def execute(self, context):
         try:
             install_pip()

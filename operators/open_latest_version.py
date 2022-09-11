@@ -22,8 +22,8 @@ def new_version_available():
 
 class OpenLatestVersion(bpy.types.Operator):
     bl_idname = "stable_diffusion.open_latest_version"
-    bl_label = f"Update to v{version_tag(latest_version)}"
-    bl_description = ("Opens a window to download the latest release from GitHub.")
+    bl_label = f"Update Available..."
+    bl_description = ("Opens a window to download the latest release from GitHub")
     bl_options = {"REGISTER", "INTERNAL"}
 
     @classmethod

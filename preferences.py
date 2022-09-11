@@ -55,7 +55,7 @@ class ValidateInstallation(bpy.types.Operator):
         try:
             # Support Apple Silicon GPUs as much as possible.
             os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-            from .stable_diffusion.ldm.simplet2i import T2I
+            from .stable_diffusion.ldm.generate import Generate
             
             is_install_valid = True
         except Exception as e:

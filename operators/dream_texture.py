@@ -33,6 +33,9 @@ class DreamTexture(bpy.types.Operator):
     width: IntProperty(name="Width", default=512)
     height: IntProperty(name="Height", default=512)
 
+    # Simple Options
+    seamless: BoolProperty(name="Seamless", default=False)
+
     # Advanced
     show_advanced: BoolProperty(name="", default=False)
     seed: IntProperty(name="Seed", default=-1)
@@ -78,9 +81,10 @@ class DreamTexture(bpy.types.Operator):
             segment_row.prop(context.scene, enum_prop, icon_only=is_custom)
         
         size_box = layout.box()
-        size_box.label(text="Size")
+        size_box.label(text="Configuration")
         size_box.prop(self, "width")
         size_box.prop(self, "height")
+        size_box.prop(self, "seamless")
         
         init_img_box = layout.box()
         init_img_heading = init_img_box.row()
@@ -144,7 +148,7 @@ class DreamTexture(bpy.types.Operator):
         # Support Apple Silicon GPUs as much as possible.
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
-        from ..stable_diffusion.ldm.simplet2i import T2I
+        from ..stable_diffusion.ldm.generate import Generate
         from omegaconf import OmegaConf
         
         config  = absolute_path('stable_diffusion/configs/models.yaml')
@@ -156,21 +160,20 @@ class DreamTexture(bpy.types.Operator):
         config  = absolute_path('stable_diffusion/' + models[model].config)
         weights = absolute_path('stable_diffusion/' + models[model].weights)
 
-        t2i = T2I(
+        generator = Generate(
             width=width,
             height=height,
             sampler_name=self.sampler,
             weights=weights,
             full_precision=self.full_precision,
+            seamless=self.seamless,
             config=config,
             grid=False,
-            
-            latent_diffusion_weights=False,
             embedding_path=None,
             device_type='cuda'
         )
 
-        t2i.load_model()
+        generator.load_model()
 
         node_tree = context.material.node_tree
         screen = context.screen
@@ -194,14 +197,14 @@ class DreamTexture(bpy.types.Operator):
             nonlocal last_data_block
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
-                    step_image = pil_to_image(t2i._sample_to_image(samples), name=f'Step {step + 1}/{self.steps}')
+                    step_image = pil_to_image(generator._sample_to_image(samples), name=f'Step {step + 1}/{self.steps}')
                     area.spaces.active.image = step_image
                     if last_data_block is not None:
                         bpy.data.images.remove(last_data_block)
                     last_data_block = step_image
 
         def perform():
-            t2i.prompt2image(
+            generator.prompt2image(
                 # prompt string (no default)
                 prompt=generated_prompt,
                 # iterations (1); image count=iterations

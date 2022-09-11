@@ -1,3 +1,4 @@
 [submodule "stable-diffusion"]
 	path = stable_diffusion
 	url = https://github.com/lstein/stable-diffusion
+	branch = development

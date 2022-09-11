@@ -115,9 +115,9 @@ def install_and_import_requirements():
     python_devel_tgz.extractall(path=python_include_dir, members=members(python_devel_tgz))
 
     if sys.platform == 'win32':
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path("requirements-win32.txt")], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path("stable_diffusion/requirements-win.txt")], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
     else:
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path("stable_diffusion/requirements.txt")], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path("stable_diffusion/requirements-mac.txt")], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
 
 class InstallDependencies(bpy.types.Operator):
     bl_idname = "stable_diffusion.install_dependencies"

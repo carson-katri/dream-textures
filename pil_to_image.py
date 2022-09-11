@@ -1,5 +1,6 @@
 import bpy
 import numpy as np
+from PIL import ImageOps
 
 def pil_to_image(pil_image, name):
     """
@@ -12,7 +13,8 @@ def pil_to_image(pil_image, name):
 
     bpy_image = bpy.data.images.new(name, width=width, height=height)
 
-    bpy_image.pixels[:] = (np.asarray(pil_image.convert('RGBA'),dtype=np.float32) * byte_to_normalized).ravel()
+    # Images are upside down for Blender, so use `ImageOps.flip` to fix it.
+    bpy_image.pixels[:] = (np.asarray(ImageOps.flip(pil_image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).ravel()
     bpy_image.pack()
 
     return bpy_image

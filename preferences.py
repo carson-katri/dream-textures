@@ -81,6 +81,9 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
         layout = self.layout
 
         weights_installed = os.path.exists(WEIGHTS_PATH)
+
+        warning_box = layout.box()
+        warning_box.label(text="10GB+ of VRAM is recommended. Smaller images are possible on lower end cards", icon="INFO")
         
         if are_dependencies_installed() and weights_installed:
             layout.label(text="Addon setup complete", icon="CHECKMARK")

@@ -1,12 +1,12 @@
 import bpy
 import numpy as np
-from PIL import ImageOps
 
 def pil_to_image(pil_image, name):
     """
     PIL image pixels is 2D array of byte tuple (when mode is 'RGB', 'RGBA') or byte (when mode is 'L')
     bpy image pixels is flat array of normalized values in RGBA order
     """
+    from PIL import ImageOps
     width = pil_image.width
     height = pil_image.height
     byte_to_normalized = 1.0 / 255.0

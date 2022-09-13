@@ -17,3 +17,6 @@ class ShaderMenu(bpy.types.Menu):
 
 def shader_menu_draw(self, context):
     self.layout.menu(ShaderMenu.bl_idname)
+
+def image_menu_draw(self, context):
+    self.layout.menu(ShaderMenu.bl_idname)

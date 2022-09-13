@@ -35,7 +35,7 @@ from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .absolute_path import absolute_path
 from .classes import CLASSES, PREFERENCE_CLASSES
-from .shader_menu import shader_menu_draw
+from .shader_menu import shader_menu_draw, image_menu_draw
 from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
 
 def register():
@@ -82,6 +82,7 @@ def register():
         bpy.utils.register_class(cls)
     
     bpy.types.NODE_HT_header.append(shader_menu_draw)
+    bpy.types.IMAGE_HT_header.append(image_menu_draw)
 
 def unregister():
     bpy.utils.unregister_class(AsyncLoopModalOperator)
@@ -93,6 +94,7 @@ def unregister():
         for cls in CLASSES:
             bpy.utils.unregister_class(cls)
         bpy.types.NODE_HT_header.remove(shader_menu_draw)
+        bpy.types.IMAGE_HT_header.remove(image_menu_draw)
 
 
 if __name__ == "__main__":

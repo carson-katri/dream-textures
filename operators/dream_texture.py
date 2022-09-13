@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import StringProperty, FloatProperty, IntProperty, EnumProperty, BoolProperty
+from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty
 import asyncio
 import os
 from ..async_loop import *
@@ -19,31 +19,36 @@ sampler_options = [
     ("k_heun", "KHEUN", "", 8),
 ]
 
+# A shared `Generate` instance.
+# This allows the slow model loading process to happen once,
+# and re-use the model on subsequent calls.
+generator = None
+
 class DreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture"
     bl_label = "Dream Texture"
     bl_description = "Generate a texture with AI"
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_options = {'REGISTER'}
 
     # Prompt
-    prompt: StringProperty(name="Prompt")
-    prompt_structure: EnumProperty(name="Preset", items=prompt_structures_items)
+    prompt_structure: EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly")
 
     # Size
     width: IntProperty(name="Width", default=512)
     height: IntProperty(name="Height", default=512)
 
     # Simple Options
-    seamless: BoolProperty(name="Seamless", default=False)
+    seamless: BoolProperty(name="Seamless", default=False, description="Enables seamless/tilable image generation")
 
     # Advanced
     show_advanced: BoolProperty(name="", default=False)
-    seed: IntProperty(name="Seed", default=-1)
-    full_precision: BoolProperty(name="Full Precision", default=True)
-    iterations: IntProperty(name="Iterations", default=1, min=1)
+    seed: IntProperty(name="Seed", default=-1, description="Seed for RNG. Using the same seed will give the same image. A seed of '-1' will pick a random seed each time")
+    full_precision: BoolProperty(name="Full Precision", default=False, description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs")
+    iterations: IntProperty(name="Iterations", default=1, min=1, description="How many images to generate")
     steps: IntProperty(name="Steps", default=25, min=1)
-    cfgscale: FloatProperty(name="CFG Scale", default=7.5)
+    cfgscale: FloatProperty(name="CFG Scale", default=7.5, min=1, description="How strongly the prompt influences the image")
     sampler: EnumProperty(name="Sampler", items=sampler_options, default=3)
+    show_steps: BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=True)
 
     # Init Image
     use_init_img: BoolProperty(name="", default=False)
@@ -100,10 +105,11 @@ class DreamTexture(bpy.types.Operator):
         if self.show_advanced:
             advanced_box.prop(self, "full_precision")
             advanced_box.prop(self, "seed")
-            advanced_box.prop(self, "iterations")
+            # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
             advanced_box.prop(self, "steps")
             advanced_box.prop(self, "cfgscale")
             advanced_box.prop(self, "sampler")
+            advanced_box.prop(self, "show_steps")
 
     def cancel(self, context):
         pass
@@ -139,39 +145,39 @@ class DreamTexture(bpy.types.Operator):
         config  = absolute_path('stable_diffusion/' + models[model].config)
         weights = absolute_path('stable_diffusion/' + models[model].weights)
 
-        generator = Generate(
-            width=width,
-            height=height,
-            sampler_name=self.sampler,
-            weights=weights,
-            full_precision=self.full_precision,
-            seamless=self.seamless,
-            config=config,
-            grid=False,
-            embedding_path=None,
-            device_type='cuda'
-        )
+        global generator
+        if generator is None:
+            generator = Generate(
+                width=width,
+                height=height,
+                sampler_name=self.sampler,
+                weights=weights,
+                full_precision=self.full_precision,
+                seamless=self.seamless,
+                config=config,
+            )
+            generator.load_model()
 
-        generator.load_model()
-
-        node_tree = context.material.node_tree
+        node_tree = context.material.node_tree if hasattr(context, 'material') else None
         screen = context.screen
         last_data_block = None
         scene = context.scene
         def image_writer(image, seed, upscaled=False):
             nonlocal last_data_block
-            # Only use the non-upscaled texture, as upscaling is disabled due to crashes on Windows.
+            # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
             if not upscaled:
                 if last_data_block is not None:
                     bpy.data.images.remove(last_data_block)
                     last_data_block = None
-                nodes = node_tree.nodes
-                texture_node = nodes.new("ShaderNodeTexImage")
-                texture_node.image = pil_to_image(image, name=f"{seed}")
-                nodes.active = texture_node
+                image = pil_to_image(image, name=f"{seed}")
+                if node_tree is not None:
+                    nodes = node_tree.nodes
+                    texture_node = nodes.new("ShaderNodeTexImage")
+                    texture_node.image = image
+                    nodes.active = texture_node
                 for area in screen.areas:
                     if area.type == 'IMAGE_EDITOR':
-                        area.spaces.active.image = texture_node.image
+                        area.spaces.active.image = image
         def view_step(samples, step):
             nonlocal last_data_block
             for area in screen.areas:
@@ -181,6 +187,14 @@ class DreamTexture(bpy.types.Operator):
                     if last_data_block is not None:
                         bpy.data.images.remove(last_data_block)
                     last_data_block = step_image
+                    return # Only perform this on the first image editor found.
+
+        report = self.report
+        def log_step(samples, step):
+            report({'ERROR'}, f"Step {step + 1}/{self.steps}")
+            # def step_menu(self, context):
+            #     self.layout.label(text=f"Step {step + 1}/{self.steps}")
+            # window_manager.popup .popup_menu(step_menu, title = "Dream Texture Progress", icon = "INFO")
 
         def perform():
             generator.prompt2image(
@@ -205,17 +219,13 @@ class DreamTexture(bpy.types.Operator):
                 # strength for noising/unnoising init_img. 0.0 preserves image exactly, 1.0 replaces it completely
                 strength=self.strength,
                 # strength for GFPGAN. 0.0 preserves image exactly, 1.0 replaces it completely
-                gfpgan_strength=0.0, # Use zero to disable upscaling, which fixes a crash on Windows.
+                gfpgan_strength=0.0, # 0 disables upscaling, which is currently not supported by the addon.
                 # image randomness (eta=0.0 means the same seed always produces the same image)
                 ddim_eta=0.0,
                 # a function or method that will be called each step
-                step_callback=view_step,
+                step_callback=view_step if self.show_steps else log_step,
                 # a function or method that will be called each time an image is generated
                 image_callback=image_writer,
-                # a weighted list [(seed_1, weight_1), (seed_2, weight_2), ...] of variations which should be applied before doing any generation
-                with_variations=None,
-                # optional 0-1 value to slerp from -S noise to random noise (allows variations on an image)
-                variation_amount=0.0,
                 
                 sampler_name=self.sampler
             )

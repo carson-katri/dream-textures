@@ -1,4 +1,5 @@
 import bpy
+from bpy.props import CollectionProperty
 import os
 import sys
 import webbrowser
@@ -7,6 +8,7 @@ from shutil import which
 from .help_section import help_section
 from .absolute_path import WEIGHTS_PATH
 from .operators.install_dependencies import InstallDependencies, are_dependencies_installed
+from .property_groups.dream_prompt import DreamPrompt
 
 class OpenHuggingFace(bpy.types.Operator):
     bl_idname = "stable_diffusion.open_hugging_face"
@@ -76,6 +78,8 @@ class ValidateInstallation(bpy.types.Operator):
 
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
+
+    history: CollectionProperty(type=DreamPrompt)
 
     def draw(self, context):
         layout = self.layout

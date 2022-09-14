@@ -24,7 +24,7 @@ bl_info = {
 }
 
 import bpy
-from bpy.props import StringProperty, EnumProperty, PointerProperty
+from bpy.props import IntProperty, PointerProperty, CollectionProperty
 import sys
 import importlib
 
@@ -37,6 +37,7 @@ from .absolute_path import absolute_path
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .shader_menu import shader_menu_draw, image_menu_draw
 from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
+from .property_groups.dream_prompt import DreamPrompt
 
 def register():
     async_loop.setup_asyncio_executor()
@@ -48,20 +49,6 @@ def register():
     sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
 
     set_dependencies_installed(False)
-
-    bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
-
-    def map_structure_token_items(value):
-        return (value[0], value[1], '')
-    for structure in prompt_structures:
-        for token in structure.structure:
-            if not isinstance(token, str) and not hasattr(bpy.types.Scene, token.id):
-                setattr(bpy.types.Scene, 'prompt_structure_token_' + token.id, StringProperty(name=token.label))
-                setattr(bpy.types.Scene, 'prompt_structure_token_' + token.id + '_enum', EnumProperty(
-                    name=token.label,
-                    items=[('custom', 'Custom', '')] + list(map(map_structure_token_items, token.values)),
-                    default='custom' if len(token.values) == 0 else token.values[0][0],
-                ))
     
     register_section_props()
 
@@ -80,6 +67,10 @@ def register():
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)
+
+    bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
+    bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
+    bpy.types.Scene.dream_textures_history_selection = IntProperty()
     
     bpy.types.NODE_HT_header.append(shader_menu_draw)
     bpy.types.IMAGE_HT_header.append(image_menu_draw)

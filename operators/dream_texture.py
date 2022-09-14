@@ -118,6 +118,7 @@ class DreamTexture(bpy.types.Operator):
             generator.load_model()
 
         node_tree = context.material.node_tree if hasattr(context, 'material') else None
+        window_manager = context.window_manager
         screen = context.screen
         last_data_block = None
         scene = context.scene
@@ -138,8 +139,10 @@ class DreamTexture(bpy.types.Operator):
                 for area in screen.areas:
                     if area.type == 'IMAGE_EDITOR':
                         area.spaces.active.image = image
+                window_manager.progress_end()
         
         def view_step(samples, step):
+            step_progress(samples, step)
             nonlocal last_data_block
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
@@ -149,8 +152,12 @@ class DreamTexture(bpy.types.Operator):
                         bpy.data.images.remove(last_data_block)
                     last_data_block = step_image
                     return # Only perform this on the first image editor found.
+        
+        def step_progress(samples, step):
+            window_manager.progress_update(step)
 
         def perform():
+            window_manager.progress_begin(0, scene.dream_textures_prompt.steps)
             generator.prompt2image(
                 # prompt string (no default)
                 prompt=generated_prompt,
@@ -177,7 +184,7 @@ class DreamTexture(bpy.types.Operator):
                 # image randomness (eta=0.0 means the same seed always produces the same image)
                 ddim_eta=0.0,
                 # a function or method that will be called each step
-                step_callback=view_step if scene.dream_textures_prompt.show_steps else None,
+                step_callback=view_step if scene.dream_textures_prompt.show_steps else step_progress,
                 # a function or method that will be called each time an image is generated
                 image_callback=image_writer,
                 

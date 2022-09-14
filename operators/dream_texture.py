@@ -107,13 +107,11 @@ class DreamTexture(bpy.types.Operator):
         global generator
         if generator is None:
             generator = Generate(
-                width=width,
-                height=height,
-                sampler_name=context.scene.dream_textures_prompt.sampler,
+                model=model,
+                conf=absolute_path('stable_diffusion/configs/models.yaml'),
+                # These args are deprecated, but we need them to specify an absolute path to the weights.
                 weights=weights,
-                full_precision=context.scene.dream_textures_prompt.full_precision,
-                seamless=context.scene.dream_textures_prompt.seamless,
-                config=config,
+                config=config
             )
             generator.load_model()
 

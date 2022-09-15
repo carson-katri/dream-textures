@@ -114,6 +114,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
         else:
             if sys.platform == 'win32':
                 dependencies_box.label(text="You must run Blender as an administrator for the installation to work.")
+        dependencies_box.prop(context.scene, 'dream_textures_requirements_path')
         dependencies_box.operator(InstallDependencies.bl_idname, icon="CONSOLE")
 
         model_weights_box = layout.box()

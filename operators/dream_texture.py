@@ -116,18 +116,18 @@ class DreamTexture(bpy.types.Operator):
         from ..stable_diffusion.ldm.generate import Generate
         from omegaconf import OmegaConf
         
-        config  = absolute_path('stable_diffusion/configs/models.yaml')
+        models_config  = absolute_path('stable_diffusion/configs/models.yaml')
         model   = 'stable-diffusion-1.4'
 
-        models  = OmegaConf.load(config)
+        models  = OmegaConf.load(models_config)
         config  = absolute_path('stable_diffusion/' + models[model].config)
         weights = absolute_path('stable_diffusion/' + models[model].weights)
 
         global generator
         if generator is None:
             generator = Generate(
+                conf=models_config,
                 model=model,
-                conf=absolute_path('stable_diffusion/configs/models.yaml'),
                 # These args are deprecated, but we need them to specify an absolute path to the weights.
                 weights=weights,
                 config=config

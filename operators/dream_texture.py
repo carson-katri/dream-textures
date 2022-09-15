@@ -1,6 +1,8 @@
+from importlib.resources import path
 import bpy
 import asyncio
 import os
+import math
 
 from ..preferences import StableDiffusionPreferences
 from ..async_loop import *
@@ -9,10 +11,19 @@ from ..prompt_engineering import *
 from ..absolute_path import WEIGHTS_PATH, absolute_path
 from .install_dependencies import are_dependencies_installed
 
+import tempfile
+
 # A shared `Generate` instance.
 # This allows the slow model loading process to happen once,
 # and re-use the model on subsequent calls.
 generator = None
+
+def image_has_alpha(img):
+    b = 32 if img.is_float else 8
+    return (
+        img.depth == 2*b or   # Grayscale+Alpha
+        img.depth == 4*b      # RGB+Alpha
+    )
 
 class DreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture"
@@ -56,14 +67,24 @@ class DreamTexture(bpy.types.Operator):
         size_box.prop(scene.dream_textures_prompt, "height")
         size_box.prop(scene.dream_textures_prompt, "seamless")
         
-        init_img_box = layout.box()
-        init_img_heading = init_img_box.row()
-        init_img_heading.prop(scene.dream_textures_prompt, "use_init_img")
-        init_img_heading.label(text="Init Image")
-        if scene.dream_textures_prompt.use_init_img:
-            init_img_box.template_ID(context.scene, "init_img", open="image.open")
-            init_img_box.prop(scene.dream_textures_prompt, "strength")
-            init_img_box.prop(scene.dream_textures_prompt, "fit")
+        for area in context.screen.areas:
+            if area.type == 'IMAGE_EDITOR':
+                if area.spaces.active.image is not None and image_has_alpha(area.spaces.active.image):
+                    inpainting_box = layout.box()
+                    inpainting_heading = inpainting_box.row()
+                    inpainting_heading.prop(scene.dream_textures_prompt, "use_inpainting")
+                    inpainting_heading.label(text="Inpaint Open Image")
+                    break
+
+        if not scene.dream_textures_prompt.use_inpainting:
+            init_img_box = layout.box()
+            init_img_heading = init_img_box.row()
+            init_img_heading.prop(scene.dream_textures_prompt, "use_init_img")
+            init_img_heading.label(text="Init Image")
+            if scene.dream_textures_prompt.use_init_img:
+                init_img_box.template_ID(context.scene, "init_img", open="image.open")
+                init_img_box.prop(scene.dream_textures_prompt, "strength")
+                init_img_box.prop(scene.dream_textures_prompt, "fit")
 
         advanced_box = layout.box()
         advanced_box_heading = advanced_box.row()
@@ -99,8 +120,6 @@ class DreamTexture(bpy.types.Operator):
         model   = 'stable-diffusion-1.4'
 
         models  = OmegaConf.load(config)
-        width   = models[model].width
-        height  = models[model].height
         config  = absolute_path('stable_diffusion/' + models[model].config)
         weights = absolute_path('stable_diffusion/' + models[model].weights)
 
@@ -154,8 +173,38 @@ class DreamTexture(bpy.types.Operator):
         def step_progress(samples, step):
             window_manager.progress_update(step)
 
+        def save_temp_image(img, path=None):
+            path = path if path is not None else tempfile.NamedTemporaryFile().name
+
+            settings = scene.render.image_settings
+            file_format = settings.file_format
+            mode = settings.color_mode
+            depth = settings.color_depth
+
+            settings.file_format = 'PNG'
+            settings.color_mode = 'RGBA'
+            settings.color_depth = '8'
+
+            img.save_render(path)
+
+            settings.file_format = file_format
+            settings.color_mode = mode
+            settings.color_depth = depth
+
+            return path
+
         def perform():
             window_manager.progress_begin(0, scene.dream_textures_prompt.steps)
+            init_img = scene.init_img if scene.dream_textures_prompt.use_init_img else None
+            if scene.dream_textures_prompt.use_inpainting:
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        if area.spaces.active.image is not None and image_has_alpha(area.spaces.active.image):
+                            init_img = area.spaces.active.image
+            init_img_path = None
+            if init_img is not None:
+                init_img_path = save_temp_image(init_img)
+
             generator.prompt2image(
                 # prompt string (no default)
                 prompt=generated_prompt,
@@ -172,7 +221,7 @@ class DreamTexture(bpy.types.Operator):
                 # how strongly the prompt influences the image (7.5) (must be >1)
                 cfg_scale=scene.dream_textures_prompt.cfgscale,
                 # path to an initial image - its dimensions override width and height
-                init_img=scene.init_img.filepath if scene.init_img is not None and scene.dream_textures_prompt.use_init_img else None,
+                init_img=init_img_path,
 
                 fit=scene.dream_textures_prompt.fit,
                 # strength for noising/unnoising init_img. 0.0 preserves image exactly, 1.0 replaces it completely

@@ -36,6 +36,7 @@ attributes = {
 
     # Init Image
     "use_init_img": BoolProperty(name="", default=False),
+    "use_inpainting": BoolProperty(name="", default=False),
     "strength": FloatProperty(name="Strength", default=0.75, min=0, max=1),
     "fit": BoolProperty(name="Fit to width/height", default=True),
 }

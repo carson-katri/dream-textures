@@ -23,8 +23,11 @@ bl_info = {
     "category": "Node"
 }
 
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning) 
+
 import bpy
-from bpy.props import IntProperty, PointerProperty, CollectionProperty
+from bpy.props import IntProperty, PointerProperty
 import sys
 import importlib
 
@@ -35,6 +38,7 @@ from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .absolute_path import absolute_path
 from .classes import CLASSES, PREFERENCE_CLASSES
+from .tools import TOOLS
 from .shader_menu import shader_menu_draw, image_menu_draw
 from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
 from .property_groups.dream_prompt import DreamPrompt
@@ -68,8 +72,12 @@ def register():
     for cls in CLASSES:
         bpy.utils.register_class(cls)
 
+    for tool in TOOLS:
+        bpy.utils.register_tool(tool)
+
     bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
+    bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
     bpy.types.Scene.dream_textures_history_selection = IntProperty()
     
     bpy.types.NODE_HT_header.append(shader_menu_draw)
@@ -86,6 +94,8 @@ def unregister():
             bpy.utils.unregister_class(cls)
         bpy.types.NODE_HT_header.remove(shader_menu_draw)
         bpy.types.IMAGE_HT_header.remove(image_menu_draw)
+        for tool in TOOLS:
+            bpy.utils.unregister_tool(tool)
 
 
 if __name__ == "__main__":

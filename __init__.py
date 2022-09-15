@@ -27,7 +27,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning) 
 
 import bpy
-from bpy.props import IntProperty, PointerProperty
+from bpy.props import IntProperty, PointerProperty, EnumProperty
 import sys
 import importlib
 
@@ -43,6 +43,12 @@ from .shader_menu import shader_menu_draw, image_menu_draw
 from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
 from .property_groups.dream_prompt import DreamPrompt
 
+requirements_path_items = (
+    ('requirements-lin-AMD.txt', 'Linux (AMD)', 'Linux with AMD GPU'),
+    ('requirements-lin-win-colab-CUDA.txt', 'Linux/Windows (CUDA)', 'Linux or Windows with NVIDIA GPU'),
+    ('requirements-mac-MPS-CPU.txt', 'Apple Silicon', 'Apple M1/M2'),
+)
+
 def register():
     async_loop.setup_asyncio_executor()
     bpy.utils.register_class(AsyncLoopModalOperator)
@@ -53,6 +59,7 @@ def register():
     sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
 
     set_dependencies_installed(False)
+    bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-lin-win-colab-CUDA.txt')
     
     register_section_props()
 

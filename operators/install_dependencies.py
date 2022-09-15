@@ -93,7 +93,7 @@ def install_and_import_module(module_name, package_name=None, global_name=None):
     # The installation succeeded, attempt to import the module again
     import_module(module_name, global_name)
 
-def install_and_import_requirements():
+def install_and_import_requirements(requirements_txt=None):
     """
     Installs all modules in the 'requirements.txt' file.
     """
@@ -114,10 +114,13 @@ def install_and_import_requirements():
                 yield member
     python_devel_tgz.extractall(path=python_include_dir, members=members(python_devel_tgz))
 
-    if sys.platform == 'win32':
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path("stable_diffusion/requirements-win.txt")], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
-    else:
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path("stable_diffusion/requirements-mac.txt")], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
+    requirements_path = requirements_txt
+    if requirements_path is None:
+        if sys.platform == 'darwin': # Use MPS dependencies list on macOS
+            requirements_path = 'requirements-mac-MPS-CPU.txt'
+        else: # Use CUDA dependencies by default on Linux/Windows
+            requirements_path = 'requirements-lin-win-colab-CUDA.txt'
+    subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path(f"stable_diffusion/{requirements_path}")], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
 
 class InstallDependencies(bpy.types.Operator):
     bl_idname = "stable_diffusion.install_dependencies"
@@ -130,7 +133,7 @@ class InstallDependencies(bpy.types.Operator):
     def execute(self, context):
         try:
             install_pip()
-            install_and_import_requirements()
+            install_and_import_requirements(requirements_txt=context.scene.dream_textures_requirements_path)
         except (subprocess.CalledProcessError, ImportError) as err:
             self.report({"ERROR"}, str(err))
             return {"CANCELLED"}
@@ -138,7 +141,7 @@ class InstallDependencies(bpy.types.Operator):
         global dependencies_installed
         dependencies_installed = True
 
-        if sys.platform == 'win32':
+        if sys.platform not in {'darwin'}:
             subprocess.run([sys.executable, absolute_path("stable_diffusion/scripts/preload_models.py")], check=True, cwd=absolute_path("stable_diffusion/"))
 
         return {"FINISHED"}

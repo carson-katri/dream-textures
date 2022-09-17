@@ -117,10 +117,11 @@ def install_and_import_requirements(requirements_txt=None):
     requirements_path = requirements_txt
     if requirements_path is None:
         if sys.platform == 'darwin': # Use MPS dependencies list on macOS
-            requirements_path = 'requirements-mac-MPS-CPU.txt'
-        else: # Use CUDA dependencies by default on Linux/Windows
-            requirements_path = 'requirements-lin-win-colab-CUDA.txt'
-    subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path(f"stable_diffusion/{requirements_path}")], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
+            requirements_path = 'stable_diffusion/requirements-mac-MPS-CPU.txt'
+        else: # Use CUDA dependencies by default on Linux/Windows.
+            # These are not the submodule dependencies from the `development` branch, but use the `main` branch deps for PyTorch 1.11.0.
+            requirements_path = 'requirements-win-torch-1-11-0.txt'
+    subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path(requirements_path), "--no-cache-dir"], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
 
 class InstallDependencies(bpy.types.Operator):
     bl_idname = "stable_diffusion.install_dependencies"
@@ -131,6 +132,10 @@ class InstallDependencies(bpy.types.Operator):
     bl_options = {"REGISTER", "INTERNAL"}
 
     def execute(self, context):
+        # Open the console so we can watch the progress.
+        if sys.platform == 'win32':
+            bpy.ops.wm.console_toggle()
+
         try:
             install_pip()
             install_and_import_requirements(requirements_txt=context.scene.dream_textures_requirements_path)

@@ -81,6 +81,7 @@ def help_section(layout, context):
         title="It still doesn't work!",
         steps=[
             "Reinstall Blender 3.3 fresh from blender.org then try installing the addon again.",
+            "You can completely reset your Blender system by deleting 'C:\\Program Files\\Blender Foundation' and 'C:\\Users\\[YOU]\\AppData\\Roaming\\Blender Foundation'" if sys.platform == 'win32' else None,
             "If you are still unable to fix the issue, please file a bug on GitHub. Include the following:",
             "1. The logs of the error found from the system console",
             "2. Your graphics card specifications.",

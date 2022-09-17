@@ -124,13 +124,14 @@ class DreamTexture(bpy.types.Operator):
         weights = absolute_path('stable_diffusion/' + models[model].weights)
 
         global generator
-        if generator is None:
+        if generator is None or generator.full_precision != context.scene.dream_textures_prompt.full_precision:
             generator = Generate(
                 conf=models_config,
                 model=model,
                 # These args are deprecated, but we need them to specify an absolute path to the weights.
                 weights=weights,
-                config=config
+                config=config,
+                full_precision=context.scene.dream_textures_prompt.full_precision
             )
             generator.load_model()
 
@@ -222,6 +223,9 @@ class DreamTexture(bpy.types.Operator):
                 cfg_scale=scene.dream_textures_prompt.cfgscale,
                 # path to an initial image - its dimensions override width and height
                 init_img=init_img_path,
+
+                # generate tileable/seamless textures
+                seamless=scene.dream_textures_prompt.seamless,
 
                 fit=scene.dream_textures_prompt.fit,
                 # strength for noising/unnoising init_img. 0.0 preserves image exactly, 1.0 replaces it completely

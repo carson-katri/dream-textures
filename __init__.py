@@ -44,9 +44,10 @@ from .operators.install_dependencies import are_dependencies_installed, set_depe
 from .property_groups.dream_prompt import DreamPrompt
 
 requirements_path_items = (
-    ('requirements-lin-AMD.txt', 'Linux (AMD)', 'Linux with AMD GPU'),
-    ('requirements-lin-win-colab-CUDA.txt', 'Linux/Windows (CUDA)', 'Linux or Windows with NVIDIA GPU'),
-    ('requirements-mac-MPS-CPU.txt', 'Apple Silicon', 'Apple M1/M2'),
+    # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
+    ('requirements-win-torch-1-11-0.txt', 'Linux/Windows (CUDA)', 'Linux or Windows with NVIDIA GPU'),
+    ('stable_diffusion/requirements-mac-MPS-CPU.txt', 'Apple Silicon', 'Apple M1/M2'),
+    ('stable_diffusion/requirements-lin-AMD.txt', 'Linux (AMD)', 'Linux with AMD GPU'),
 )
 
 def register():
@@ -59,7 +60,7 @@ def register():
     sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
 
     set_dependencies_installed(False)
-    bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-lin-win-colab-CUDA.txt')
+    bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
     
     register_section_props()
 

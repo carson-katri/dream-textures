@@ -3,9 +3,15 @@
 > Stable Diffusion built-in to the Blender shader editor.
 
 * Create textures, concept art, background assets, and more with a simple text prompt
+* Use the 'Seamless' option to create textures that tile perfectly with no visible seam
 * Quickly create variations on an existing texture
 * Experiment with AI image generation
 * Run the models on your machine to iterate without slowdowns from a service
+
+## Installation
+1. Download the [latest version](https://github.com/carson-katri/dream-textures/releases/tag/0.0.4) from the Releases tab.
+2. Install the addon in Blender's preferences window.
+3. Follow the steps in the 'Dream Textures' preferences window to install the necessary dependencies.
 
 | Enter a prompt | Generate a unique texture in a few seconds |
 | -------------- | ------------------------------------------ |
@@ -15,11 +21,6 @@
 | Take an existing texture | Modify it with a text prompt |
 | ------------------------ | ---------------------------- |
 | ![](readme_assets/marble.jpg) | ![](readme_assets/marble_brick_wall_texture.png) |
-
-## Installation
-1. Download the addon ZIP file from the [Releases tab](https://github.com/carson-katri/dream-textures/releases) on GitHub.
-2. Install the addon in Blender's preferences window.
-3. Follow the steps in the 'Dream Textures' preferences to install the necessary dependencies.
 
 > On Windows, you will need to run Blender as an administrator for the installation to complete successfully.
 

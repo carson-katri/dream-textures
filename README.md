@@ -12,6 +12,10 @@
 1. Download the [latest version](https://github.com/carson-katri/dream-textures/releases/tag/0.0.4) from the Releases tab.
 2. Install the addon in Blender's preferences window.
 3. Follow the steps in the 'Dream Textures' preferences window to install the necessary dependencies.
+   - _*Note for Windows users*_ - If you get an error when installing dependencies that looks similar to the one described [here](https://github.com/carson-katri/dream-textures/issues/13), your dependency file paths might be too long (can't be longer than 256 characters). You can solve it by telling Windows to allow long file paths in the registry:
+     1. Open up the Window registry (Start > Run > `regedit`)
+     2. Navigate to `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem`
+     3. Set `LongPathsEnabled` to `1`
 
 | Enter a prompt | Generate a unique texture in a few seconds |
 | -------------- | ------------------------------------------ |

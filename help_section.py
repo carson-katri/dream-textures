@@ -6,6 +6,7 @@ def register_section_props():
     for prop in [
         "err_deps_visible",
         "err_wrong_download",
+        "err_long_file_path",
         "err_crash",
         "err_silent_fail",
         "err_catchall",
@@ -48,6 +49,18 @@ def help_section(layout, context):
         steps=[
             "You most likely downloaded the source code, not the bundled addon.",
             "Go to the Releases sidebar tab on GitHub and download the file called 'dream_textures.zip'.",
+        ]
+    )
+
+    faq_box(
+        "err_long_file_path",
+        title="ERROR: No matching distribution found for basicsr>=1.4.2 ...",
+        steps=[
+            "You might have reached Windows' file path character limit.",
+            "1. Open up the Window registry (Start > Run > regedit)",
+            "2. Navigate to HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem",
+            "3. Set LongPathsEnabled to 1",
+            "You will need to restart your computer and re-install the dependencies.",
         ]
     )
 

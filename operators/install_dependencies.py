@@ -146,7 +146,6 @@ class InstallDependencies(bpy.types.Operator):
         global dependencies_installed
         dependencies_installed = True
 
-        if sys.platform not in {'darwin'}:
-            subprocess.run([sys.executable, absolute_path("stable_diffusion/scripts/preload_models.py")], check=True, cwd=absolute_path("stable_diffusion/"))
+        subprocess.run([sys.executable, absolute_path("stable_diffusion/scripts/preload_models.py")], check=True, cwd=absolute_path("stable_diffusion/"))
 
         return {"FINISHED"}

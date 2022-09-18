@@ -17,14 +17,11 @@ bl_info = {
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
     "warning": "Requires installation of dependencies",
     "blender": (2, 80, 0),
-    "version": (0, 0, 4),
+    "version": (0, 0, 5),
     "location": "",
     "warning": "",
     "category": "Node"
 }
-
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning) 
 
 import bpy
 from bpy.props import IntProperty, PointerProperty, EnumProperty

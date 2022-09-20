@@ -85,7 +85,7 @@ class DreamTexture(bpy.types.Operator):
                 if last_data_block is not None:
                     bpy.data.images.remove(last_data_block)
                     last_data_block = None
-                image = pil_to_image(image, name=f"{generated_prompt}")
+                image = pil_to_image(image, name=f"{seed}")
                 if node_tree is not None:
                     nodes = node_tree.nodes
                     texture_node = nodes.new("ShaderNodeTexImage")
@@ -144,7 +144,7 @@ class DreamTexture(bpy.types.Operator):
                 init_img_path = save_temp_image(init_img)
 
             generator.prompt2image(
-                # prompt string (no default)                
+                # prompt string (no default)
                 prompt=generated_prompt,
                 # iterations (1); image count=iterations
                 iterations=scene.dream_textures_prompt.iterations,

@@ -75,7 +75,7 @@ def draw_panel(self, context):
 
 class DREAM_PT_dream_panel(Panel):
     """Creates a Panel in the scene context of the properties editor"""
-    bl_label = "Dream"
+    bl_label = "Dream Texture"
     bl_category = "Dream"
     bl_idname = "DREAM_PT_dream_panel"
     bl_space_type = 'IMAGE_EDITOR'
@@ -86,7 +86,7 @@ class DREAM_PT_dream_panel(Panel):
 
 class DREAM_PT_dream_node_panel(Panel):
     bl_idname = "DREAM_PT_dream_node_panel"
-    bl_label = "Dream"
+    bl_label = "Dream Texture"
     bl_category = "Dream"
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'

@@ -71,7 +71,7 @@ def draw_panel(self, context):
     row.operator(HelpPanel.bl_idname, icon="QUESTION", text="")
     row = layout.row()
     row.scale_y = 1.5
-    row.operator("shade.dream_texture", icon="PLAY", text="GO")
+    row.operator("shade.dream_texture", icon="PLAY", text="Generate")
 
 class DREAM_PT_dream_panel(Panel):
     """Creates a Panel in the scene context of the properties editor"""

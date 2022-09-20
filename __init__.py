@@ -13,7 +13,7 @@
 
 bl_info = {
     "name": "Dream Textures",
-    "author": "Carson Katri",
+    "author": "Carson Katri, Kevin C. Burke",
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
     "warning": "Requires installation of dependencies",
     "blender": (2, 80, 0),

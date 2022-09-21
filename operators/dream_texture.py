@@ -78,6 +78,8 @@ class DreamTexture(bpy.types.Operator):
         last_data_block = None
         scene = context.scene
 
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=context.scene.dream_textures_prompt.steps)
+
         def image_writer(image, seed, upscaled=False):
             nonlocal last_data_block
             # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
@@ -95,6 +97,7 @@ class DreamTexture(bpy.types.Operator):
                     if area.type == 'IMAGE_EDITOR':
                         area.spaces.active.image = image
                 window_manager.progress_end()
+                bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=-1, min=-1, max=0)
         
         def view_step(samples, step):
             step_progress(samples, step)
@@ -110,6 +113,7 @@ class DreamTexture(bpy.types.Operator):
         
         def step_progress(samples, step):
             window_manager.progress_update(step)
+            scene.dream_textures_progress = step
 
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
@@ -187,4 +191,16 @@ class DreamTexture(bpy.types.Operator):
         # async_task.add_done_callback(done_callback)
         ensure_async_loop()
 
+        return {'FINISHED'}
+
+class ReleaseGenerator(bpy.types.Operator):
+    bl_idname = "shade.dream_textures_release_generator"
+    bl_label = "Release Generator"
+    bl_description = "Releases the generator class to free up VRAM"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        global generator
+        generator = None
+        bpy.types.Scene = bpy.props.IntProperty(name="Progress", default=-1, min=-1, max=0)
         return {'FINISHED'}

@@ -24,7 +24,7 @@ bl_info = {
 }
 
 import bpy
-from bpy.props import IntProperty, PointerProperty, EnumProperty
+from bpy.props import IntProperty, PointerProperty, EnumProperty, FloatProperty
 import sys
 import importlib
 
@@ -74,18 +74,17 @@ def register():
         # Don't register other panels, operators etc.
         return
 
+    bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
+    bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
+    bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
+    bpy.types.Scene.dream_textures_history_selection = IntProperty()
+    bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=-1, min=-1, max=0)
+
     for cls in CLASSES:
         bpy.utils.register_class(cls)
 
     for tool in TOOLS:
         bpy.utils.register_tool(tool)
-
-    bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
-    bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
-    bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
-    bpy.types.Scene.dream_textures_history_selection = IntProperty()
-
-    panel.register()
 
 def unregister():
     bpy.utils.unregister_class(AsyncLoopModalOperator)
@@ -98,8 +97,6 @@ def unregister():
             bpy.utils.unregister_class(cls)
         for tool in TOOLS:
             bpy.utils.unregister_tool(tool)
-
-    panel.unregister()
 
 if __name__ == "__main__":
     register()

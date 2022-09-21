@@ -13,7 +13,7 @@
 
 bl_info = {
     "name": "Dream Textures",
-    "author": "Carson Katri",
+    "author": "Carson Katri, Greg Richardson, Kevin C. Burke",
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
     "warning": "Requires installation of dependencies",
     "blender": (2, 80, 0),
@@ -36,9 +36,9 @@ from .operators.open_latest_version import check_for_updates
 from .absolute_path import absolute_path
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
-from .shader_menu import shader_menu_draw, image_menu_draw
 from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
 from .property_groups.dream_prompt import DreamPrompt
+from .ui import panel
 
 requirements_path_items = (
     # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
@@ -84,9 +84,8 @@ def register():
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
     bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
     bpy.types.Scene.dream_textures_history_selection = IntProperty()
-    
-    bpy.types.NODE_HT_header.append(shader_menu_draw)
-    bpy.types.IMAGE_HT_header.append(image_menu_draw)
+
+    panel.register()
 
 def unregister():
     bpy.utils.unregister_class(AsyncLoopModalOperator)
@@ -97,11 +96,10 @@ def unregister():
     if are_dependencies_installed():
         for cls in CLASSES:
             bpy.utils.unregister_class(cls)
-        bpy.types.NODE_HT_header.remove(shader_menu_draw)
-        bpy.types.IMAGE_HT_header.remove(image_menu_draw)
         for tool in TOOLS:
             bpy.utils.unregister_tool(tool)
 
+    panel.unregister()
 
 if __name__ == "__main__":
     register()

@@ -7,13 +7,11 @@ from .operators.inpaint_area_brush import InpaintAreaStroke
 from .property_groups.dream_prompt import DreamPrompt
 
 from .preferences import OpenGitDownloads, OpenHuggingFace, OpenWeightsDirectory, OpenRustInstaller, ValidateInstallation, StableDiffusionPreferences
-from .shader_menu import ShaderMenu
 
 CLASSES = (
     DreamTexture,
     HelpPanel,
     OpenLatestVersion,
-    ShaderMenu,
     ViewHistory,
     RecallHistoryEntry,
     InpaintAreaStroke,

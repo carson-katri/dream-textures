@@ -72,7 +72,7 @@ def draw_panel(self, context):
     row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
     row = layout.row()
     row.scale_y = 1.5
-    if context.scene.dream_textures_progress <= -1:
+    if context.scene.dream_textures_progress <= 0:
         row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
     else:
         row.prop(context.scene, 'dream_textures_progress', slider=True)

@@ -59,7 +59,10 @@ def draw_panel(self, context):
     advanced_box_heading.label(text="Advanced Configuration")
     if scene.dream_textures_prompt.show_advanced:
         advanced_box.prop(scene.dream_textures_prompt, "full_precision")
-        advanced_box.prop(scene.dream_textures_prompt, "seed")
+        advanced_box.prop(scene.dream_textures_prompt, "random_seed")
+        seed_row = advanced_box.row()
+        seed_row.prop(scene.dream_textures_prompt, "seed")
+        seed_row.enabled = not scene.dream_textures_prompt.random_seed
         # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
         advanced_box.prop(scene.dream_textures_prompt, "steps")
         advanced_box.prop(scene.dream_textures_prompt, "cfgscale")

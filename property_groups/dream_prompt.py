@@ -13,6 +13,15 @@ sampler_options = [
     ("k_heun", "KHEUN", "", 8),
 ]
 
+def seed_clamp(self, ctx):
+    # clamp seed right after input to make it clear what the limits are
+    try:
+        s = str(max(0,min(int(float(self.seed)),2**32-1))) # float() first to make sure any seed that is a number gets clamped, not just ints
+        if s != self.seed:
+            self.seed = s
+    except ValueError:
+        pass # will get hashed once generated
+
 attributes = {
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
@@ -26,7 +35,8 @@ attributes = {
 
     # Advanced
     "show_advanced": BoolProperty(name="", default=False),
-    "seed": IntProperty(name="Seed", default=-1, description="Seed for RNG. Using the same seed will give the same image. A seed of '-1' will pick a random seed each time"),
+    "random_seed": BoolProperty(name="Random Seed", default=True, description="Randomly pick a seed"),
+    "seed": StringProperty(name="Seed", default="0", description="Manually pick a seed", update=seed_clamp),
     "full_precision": BoolProperty(name="Full Precision", default=False, description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
     "iterations": IntProperty(name="Iterations", default=1, min=1, description="How many images to generate"),
     "steps": IntProperty(name="Steps", default=25, min=1),
@@ -82,5 +92,19 @@ def get_prompt_subject(self):
             return getattr(self, 'prompt_structure_token_' + segment.id)
     return self.generate_prompt()
 
+def get_seed(self):
+    import numpy
+    numpy.random.randn()
+    if self.random_seed:
+        return None # let stable diffusion automatically pick one
+    try:
+        return max(0,min(int(float(self.seed)),2**32-1)) # clamp int
+    except ValueError:
+        h = hash(self.seed) # not an int, let's hash it!
+        if h < 0:
+            h = ~h
+        return (h & 0xFFFFFFFF) ^ (h >> 32) # 64 bit hash down to 32 bits
+
 DreamPrompt.generate_prompt = generate_prompt
 DreamPrompt.get_prompt_subject = get_prompt_subject
+DreamPrompt.get_seed = get_seed

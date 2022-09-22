@@ -3,7 +3,7 @@ from bpy.types import Panel
 from ..async_loop import *
 from ..pil_to_image import *
 from ..prompt_engineering import *
-from ..operators.dream_texture import image_has_alpha
+from ..operators.dream_texture import DreamTexture, image_has_alpha, ReleaseGenerator
 from ..operators.view_history import ViewHistory
 from ..operators.open_latest_version import OpenLatestVersion, new_version_available
 from ..operators.help_panel import HelpPanel
@@ -69,9 +69,14 @@ def draw_panel(self, context):
     row = layout.row()
     row.operator(ViewHistory.bl_idname, icon="RECOVER_LAST")
     row.operator(HelpPanel.bl_idname, icon="QUESTION", text="")
+    row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
     row = layout.row()
     row.scale_y = 1.5
-    row.operator("shade.dream_texture", icon="PLAY", text="Generate")
+    if context.scene.dream_textures_progress <= 0:
+        row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
+    else:
+        row.prop(context.scene, 'dream_textures_progress', slider=True)
+        row.enabled = False
 
 class DREAM_PT_dream_panel(Panel):
     """Creates a Panel in the scene context of the properties editor"""
@@ -92,19 +97,4 @@ class DREAM_PT_dream_node_panel(Panel):
     bl_region_type = 'UI'
 
     def draw(self, context):
-        draw_panel(self,context)
-
-classes = (
-    DREAM_PT_dream_panel,
-    DREAM_PT_dream_node_panel,
-)
-
-def register():
-    from bpy.utils import register_class
-    for cls in classes:
-        register_class(cls)
-
-def unregister():
-    from bpy.utils import unregister_class
-    for cls in classes:
-        unregister_class(cls)
+        draw_panel(self, context)

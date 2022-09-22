@@ -78,7 +78,7 @@ class DreamTexture(bpy.types.Operator):
         scene = context.scene
 
         def step_progress_update(self, context):
-            if hasattr(context.area,"regions"):
+            if hasattr(context.area, "regions"):
                 for region in context.area.regions:
                     if region.type == "UI":
                         region.tag_redraw()

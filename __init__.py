@@ -78,7 +78,7 @@ def register():
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
     bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
     bpy.types.Scene.dream_textures_history_selection = IntProperty()
-    bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=-1, min=-1, max=0)
+    bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)

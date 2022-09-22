@@ -101,6 +101,7 @@ class DreamTexture(bpy.types.Operator):
                     if area.type == 'IMAGE_EDITOR':
                         area.spaces.active.image = image
                 scene.dream_textures_progress = 0
+                scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
         
         def view_step(samples, step):
             step_progress(samples, step)
@@ -156,7 +157,7 @@ class DreamTexture(bpy.types.Operator):
                 # refinement steps per iteration
                 steps=scene.dream_textures_prompt.steps,
                 # seed for random number generator
-                seed=None if scene.dream_textures_prompt.seed == -1 else scene.dream_textures_prompt.seed,
+                seed=scene.dream_textures_prompt.get_seed(),
                 # width of image, in multiples of 64 (512)
                 width=scene.dream_textures_prompt.width,
                 # height of image, in multiples of 64 (512)

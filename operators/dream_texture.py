@@ -203,6 +203,11 @@ class ReleaseGenerator(bpy.types.Operator):
 
     def execute(self, context):
         global generator
+        if generator:
+            generator.model.cpu()
         generator = None
+        gc.collect()
+        import torch
+        torch.cuda.empty_cache()
         context.scene.dream_textures_progress = 0
         return {'FINISHED'}

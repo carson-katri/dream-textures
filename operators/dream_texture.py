@@ -9,6 +9,7 @@ from ..async_loop import *
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..absolute_path import WEIGHTS_PATH, absolute_path
+from ..generator_process import GeneratorProcess
 from .install_dependencies import are_dependencies_installed
 
 import tempfile
@@ -47,35 +48,14 @@ class DreamTexture(bpy.types.Operator):
 
         generated_prompt = context.scene.dream_textures_prompt.generate_prompt()
 
-        # Support Apple Silicon GPUs as much as possible.
-        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-
-        from ..stable_diffusion.ldm.generate import Generate
-        from omegaconf import OmegaConf
-        
-        models_config  = absolute_path('stable_diffusion/configs/models.yaml')
-        model   = 'stable-diffusion-1.4'
-
-        models  = OmegaConf.load(models_config)
-        config  = absolute_path('stable_diffusion/' + models[model].config)
-        weights = absolute_path('stable_diffusion/' + models[model].weights)
-
-        global generator
-        if generator is None or generator.full_precision != context.scene.dream_textures_prompt.full_precision:
-            generator = Generate(
-                conf=models_config,
-                model=model,
-                # These args are deprecated, but we need them to specify an absolute path to the weights.
-                weights=weights,
-                config=config,
-                full_precision=context.scene.dream_textures_prompt.full_precision
-            )
-            generator.load_model()
-
         node_tree = context.material.node_tree if hasattr(context, 'material') else None
         screen = context.screen
         last_data_block = None
         scene = context.scene
+
+        global generator
+        if generator is None:
+            generator = GeneratorProcess()
 
         def step_progress_update(self, context):
             if hasattr(context.area, "regions"):
@@ -86,14 +66,18 @@ class DreamTexture(bpy.types.Operator):
 
         bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=1, min=0, max=context.scene.dream_textures_prompt.steps + 1, update=step_progress_update)
 
-        def image_writer(image, seed, upscaled=False):
+        def image_writer(seed, width, height, pixels, upscaled=False):
             nonlocal last_data_block
             # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
             if not upscaled:
                 if last_data_block is not None:
                     bpy.data.images.remove(last_data_block)
                     last_data_block = None
-                image = pil_to_image(image, name=f"{seed}")
+                if generator is None or generator.process.poll() or width == 0 or height == 0:
+                    return # process was closed
+                image = bpy.data.images.new(f"{seed}", width=width, height=height)
+                image.pixels[:] = pixels
+                image.pack()
                 if node_tree is not None:
                     nodes = node_tree.nodes
                     texture_node = nodes.new("ShaderNodeTexImage")
@@ -175,16 +159,14 @@ class DreamTexture(bpy.types.Operator):
                 fit=scene.dream_textures_prompt.fit,
                 # strength for noising/unnoising init_img. 0.0 preserves image exactly, 1.0 replaces it completely
                 strength=scene.dream_textures_prompt.strength,
-                # strength for GFPGAN. 0.0 preserves image exactly, 1.0 replaces it completely
-                gfpgan_strength=0.0, # 0 disables upscaling, which is currently not supported by the addon.
-                # image randomness (eta=0.0 means the same seed always produces the same image)
-                ddim_eta=0.0,
                 # a function or method that will be called each step
                 step_callback=view_step if scene.dream_textures_prompt.show_steps else step_progress,
                 # a function or method that will be called each time an image is generated
                 image_callback=image_writer,
                 
-                sampler_name=scene.dream_textures_prompt.sampler
+                sampler_name=scene.dream_textures_prompt.sampler,
+
+                full_precision=scene.dream_textures_prompt.full_precision
             )
 
         loop = asyncio.get_running_loop()
@@ -197,6 +179,12 @@ class DreamTexture(bpy.types.Operator):
 
         return {'FINISHED'}
 
+def kill_generator():
+    global generator
+    if generator:
+        generator.kill()
+    generator = None
+
 class ReleaseGenerator(bpy.types.Operator):
     bl_idname = "shade.dream_textures_release_generator"
     bl_label = "Release Generator"
@@ -204,7 +192,9 @@ class ReleaseGenerator(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     def execute(self, context):
-        global generator
-        generator = None
+        kill_generator()
         context.scene.dream_textures_progress = 0
         return {'FINISHED'}
+
+import atexit
+atexit.register(kill_generator)

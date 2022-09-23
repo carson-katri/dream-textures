@@ -179,12 +179,6 @@ class DreamTexture(bpy.types.Operator):
 
         return {'FINISHED'}
 
-def kill_generator():
-    global generator
-    if generator:
-        generator.kill()
-    generator = None
-
 class ReleaseGenerator(bpy.types.Operator):
     bl_idname = "shade.dream_textures_release_generator"
     bl_label = "Release Generator"
@@ -192,9 +186,9 @@ class ReleaseGenerator(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     def execute(self, context):
-        kill_generator()
+        global generator
+        if generator:
+            generator.kill()
+        generator = None
         context.scene.dream_textures_progress = 0
         return {'FINISHED'}
-
-import atexit
-atexit.register(kill_generator)

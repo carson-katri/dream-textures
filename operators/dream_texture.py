@@ -78,10 +78,12 @@ class DreamTexture(bpy.types.Operator):
         scene = context.scene
 
         def step_progress_update(self, context):
-            for region in context.area.regions:
-                if region.type == "UI":
-                    region.tag_redraw()
+            if hasattr(context.area, "regions"):
+                for region in context.area.regions:
+                    if region.type == "UI":
+                        region.tag_redraw()
             return None
+
         bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=1, min=0, max=context.scene.dream_textures_prompt.steps + 1, update=step_progress_update)
 
         def image_writer(image, seed, upscaled=False):

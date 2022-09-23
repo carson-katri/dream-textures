@@ -6,14 +6,9 @@ import numpy as np
 
 class GeneratorProcess():
     def __init__(self):
-        # self.pipe, sub = Pipe()
-        # super().__init__(target=main, args=(sub,))
-        # self.start()
         self.process = subprocess.Popen([sys.executable,'generator_process.py'],cwd=os.path.dirname(os.path.realpath(__file__)),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
     
     def kill(self):
-        # self.pipe.close()
-        #super().kill()
         self.process.kill()
     
     def prompt2image(
@@ -93,9 +88,7 @@ def main():
             stdout.write(seed.to_bytes(4,sys.byteorder,signed=False))
             stdout.write(image.width.to_bytes(4,sys.byteorder,signed=False))
             stdout.write(image.height.to_bytes(4,sys.byteorder,signed=False))
-            # stdout.write((np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).tobytes())
             b = (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).tobytes()
-            l = len(b)
             for i in range(0,len(b),1024*64):
                 stdout.write(b[i:i+1024*64])
             # written = stdout.write(b) # writing it all at once was causing this to exit without error
@@ -104,9 +97,7 @@ def main():
 
     generator = None
     while True:
-        # args = json.loads(stdin.read(int.from_bytes(stdin.read(8),sys.byteorder,signed=False)))
-        json_len = int.from_bytes(stdin.read(8),sys.byteorder,signed=False)
-        args = json.loads(stdin.read(json_len))
+        args = json.loads(stdin.read(int.from_bytes(stdin.read(8),sys.byteorder,signed=False)))
 
         if generator is None or generator.full_precision != args['full_precision']:
             generator = Generate(

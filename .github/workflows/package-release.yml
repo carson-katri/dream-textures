@@ -43,8 +43,14 @@ jobs:
         shell: bash
         run: 'python -m pip install -r ../requirements-win-torch-1-11-0.txt --no-cache-dir --target ../.python_dependencies'
         working-directory: stable_diffusion
+      - name: Archive Release
+        uses: thedoctor0/zip-release@main
+        with:
+          type: zip
+          filename: dream_textures-win32-cuda.zip
+          exclusions: '*.git*'
       - name: Archive and upload artifact
         uses: actions/upload-artifact@v3
         with:
           name: dream_textures-win32-cuda
-          path: ${{ github.workspace }}
+          path: release.zip

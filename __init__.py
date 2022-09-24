@@ -23,7 +23,6 @@ bl_info = {
     "category": "Node"
 }
 
-from imp import is_frozen_package
 import bpy
 from bpy.props import IntProperty, PointerProperty, EnumProperty, FloatProperty
 import sys

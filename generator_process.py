@@ -39,6 +39,8 @@ class GeneratorProcess():
                         break
                     else:
                         step_callback(seed, width, height, image) # seed is step number in this case
+                elif action == 4:
+                    step_callback(readUInt(4))
                 else:
                     raise RuntimeError(f"Unexpected action id {action}")
 
@@ -85,7 +87,6 @@ def main():
         for i in range(0,len(b),1024*64):
             stdout.write(b[i:i+1024*64])
         # stdout.write(b) # writing it all at once was causing this to exit without error
-        stdout.flush()
 
     def image_writer(image, seed, upscaled=False):
         # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
@@ -93,11 +94,17 @@ def main():
             writeUInt(1,2)
             writeUInt(4,seed)
             write_pixels(image)
+            stdout.flush()
     
     def view_step(samples, step):
-        writeUInt(1,3)
-        writeUInt(4,step)
-        write_pixels(generator._sample_to_image(samples))
+        if args['show_steps']:
+            writeUInt(1,3)
+            writeUInt(4,step)
+            write_pixels(generator._sample_to_image(samples))
+        else:
+            writeUInt(1,4)
+            writeUInt(4,step)
+        stdout.flush()
 
     generator = None
     while True:
@@ -120,7 +127,7 @@ def main():
         writeInfo("Starting")
         generator.prompt2image(
             # a function or method that will be called each step
-            step_callback=view_step if args['show_steps'] else None,
+            step_callback=view_step,
             # a function or method that will be called each time an image is generated
             image_callback=image_writer,
             **args

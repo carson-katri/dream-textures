@@ -100,8 +100,11 @@ class DreamTexture(bpy.types.Operator):
                 scene.dream_textures_progress = 0
                 scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
         
-        def view_step(step, width, height, pixels):
-            step_progress(step)
+        def view_step(step, width=None, height=None, pixels=None):
+            info() # clear variable
+            scene.dream_textures_progress = step + 1
+            if pixels is None:
+                return # show steps disabled
             nonlocal last_data_block
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
@@ -111,11 +114,6 @@ class DreamTexture(bpy.types.Operator):
                         bpy.data.images.remove(last_data_block)
                     last_data_block = step_image
                     return # Only perform this on the first image editor found.
-
-        
-        def step_progress(step, *args):
-            info() # clear variable
-            scene.dream_textures_progress = step + 1
 
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
@@ -155,7 +153,7 @@ class DreamTexture(bpy.types.Operator):
 
             generator.prompt2image(args,
                 # a function or method that will be called each step
-                step_callback=view_step if scene.dream_textures_prompt.show_steps else step_progress,
+                step_callback=view_step,
                 # a function or method that will be called each time an image is generated
                 image_callback=image_writer,
                 # a function or method that will recieve messages

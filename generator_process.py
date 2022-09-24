@@ -33,7 +33,10 @@ def main():
     from absolute_path import absolute_path
     # Support Apple Silicon GPUs as much as possible.
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-
+    sys.path.append(absolute_path("stable_diffusion/"))
+    sys.path.append(absolute_path("stable_diffusion/src/clip"))
+    sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
+    sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
     from stable_diffusion.ldm.generate import Generate
     from omegaconf import OmegaConf
     from PIL import ImageOps

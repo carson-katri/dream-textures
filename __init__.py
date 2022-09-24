@@ -52,10 +52,11 @@ def register():
     async_loop.setup_asyncio_executor()
     bpy.utils.register_class(AsyncLoopModalOperator)
 
-    # sys.path.insert(0, absolute_path(".python_dependencies"))
-    # os.environ['PYTHON_PATH']
-    site.addusersitepackages(absolute_path(".python_dependencies"))
-    print(sys.path)
+    site.addsitedir(absolute_path(".python_dependencies"))
+
+    import pkg_resources
+    pkg_resources._initialize_master_working_set()
+
     sys.path.append(absolute_path("stable_diffusion/"))
     sys.path.append(absolute_path("stable_diffusion/src/clip"))
     sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))

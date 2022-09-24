@@ -20,7 +20,7 @@ class GeneratorProcess():
         stdin.flush()
 
         def readUInt(length):
-            return int.from_bytes(self.process.stdout.read(length),sys.byteorder,signed=False)
+            return int.from_bytes(stdout.read(length),sys.byteorder,signed=False)
 
         for i in range(0,args['iterations']):
             while True:

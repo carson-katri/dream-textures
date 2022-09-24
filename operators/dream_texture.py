@@ -54,9 +54,8 @@ class DreamTexture(bpy.types.Operator):
         last_data_block = None
         scene = context.scene
 
-        global generator
-        if generator is None:
-            generator = GeneratorProcess()
+        def info(msg=""):
+            scene.dream_textures_info = msg
 
         def step_progress_update(self, context):
             if hasattr(context.area, "regions"):
@@ -65,7 +64,19 @@ class DreamTexture(bpy.types.Operator):
                         region.tag_redraw()
             return None
 
-        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=1, min=0, max=context.scene.dream_textures_prompt.steps + 1, update=step_progress_update)
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=context.scene.dream_textures_prompt.steps + 1, update=step_progress_update)
+        bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info", update=step_progress_update)
+
+        global generator
+        if generator is None:
+            info("Initializing Process")
+            generator = GeneratorProcess()
+
+        def bpy_image(name, width, height, pixels):
+            image = bpy.data.images.new(name, width=width, height=height)
+            image.pixels[:] = pixels
+            image.pack()
+            return image
 
         def image_writer(seed, width, height, pixels, upscaled=False):
             nonlocal last_data_block
@@ -76,9 +87,7 @@ class DreamTexture(bpy.types.Operator):
                     last_data_block = None
                 if generator is None or generator.process.poll() or width == 0 or height == 0:
                     return # process was closed
-                image = bpy.data.images.new(f"{seed}", width=width, height=height)
-                image.pixels[:] = pixels
-                image.pack()
+                image = bpy_image(f"{seed}", width, height, pixels)
                 if node_tree is not None:
                     nodes = node_tree.nodes
                     texture_node = nodes.new("ShaderNodeTexImage")
@@ -90,19 +99,21 @@ class DreamTexture(bpy.types.Operator):
                 scene.dream_textures_progress = 0
                 scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
         
-        def view_step(samples, step):
-            step_progress(samples, step)
+        def view_step(step, width, height, pixels):
+            step_progress(step)
             nonlocal last_data_block
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
-                    step_image = pil_to_image(generator._sample_to_image(samples), name=f'Step {step + 1}/{scene.dream_textures_prompt.steps}')
+                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, pixels)
                     area.spaces.active.image = step_image
                     if last_data_block is not None:
                         bpy.data.images.remove(last_data_block)
                     last_data_block = step_image
                     return # Only perform this on the first image editor found.
+
         
-        def step_progress(samples, step):
+        def step_progress(step, *args):
+            info() # clear variable
             scene.dream_textures_progress = step + 1
 
         def save_temp_image(img, path=None):
@@ -145,7 +156,9 @@ class DreamTexture(bpy.types.Operator):
                 # a function or method that will be called each step
                 step_callback=view_step if scene.dream_textures_prompt.show_steps else step_progress,
                 # a function or method that will be called each time an image is generated
-                image_callback=image_writer
+                image_callback=image_writer,
+                # a function or method that will recieve messages
+                info_callback=info
             )
 
         loop = asyncio.get_running_loop()
@@ -158,6 +171,14 @@ class DreamTexture(bpy.types.Operator):
 
         return {'FINISHED'}
 
+def kill_generator(context=bpy.context):
+    global generator
+    if generator:
+        generator.kill()
+    generator = None
+    bpy.context.scene.dream_textures_progress = 0
+    bpy.context.scene.dream_textures_info = ""
+
 class ReleaseGenerator(bpy.types.Operator):
     bl_idname = "shade.dream_textures_release_generator"
     bl_label = "Release Generator"
@@ -165,9 +186,5 @@ class ReleaseGenerator(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     def execute(self, context):
-        global generator
-        if generator:
-            generator.kill()
-        generator = None
-        context.scene.dream_textures_progress = 0
+        kill_generator(context)
         return {'FINISHED'}

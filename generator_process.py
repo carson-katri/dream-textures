@@ -11,21 +11,37 @@ class GeneratorProcess():
     def kill(self):
         self.process.kill()
     
-    def prompt2image(self, args, step_callback, image_callback):
-        b = bytes(json.dumps(args), "utf-8")
-        self.process.stdin.write(len(b).to_bytes(8,sys.byteorder,signed=False))
-        self.process.stdin.write(b)
-        self.process.stdin.flush()
+    def prompt2image(self, args, step_callback, image_callback, info_callback):
+        stdin = self.process.stdin
+        stdout = self.process.stdout
+        b = bytes(json.dumps(args), 'utf-8')
+        stdin.write(len(b).to_bytes(8,sys.byteorder,signed=False))
+        stdin.write(b)
+        stdin.flush()
+
+        def readUInt(length):
+            return int.from_bytes(self.process.stdout.read(length),sys.byteorder,signed=False)
+
         if image_callback:
             for i in range(0,args['iterations']):
-                image_callback(*self.get_image())
-
-    def get_image(self):
-        seed = int.from_bytes(self.process.stdout.read(4),sys.byteorder,signed=False)
-        width = int.from_bytes(self.process.stdout.read(4),sys.byteorder,signed=False)
-        height = int.from_bytes(self.process.stdout.read(4),sys.byteorder,signed=False)
-        image = np.frombuffer(self.process.stdout.read(width*height*4*4),dtype=np.float32)
-        return (seed, width, height, image)
+                while True:
+                    action = readUInt(1)
+                    if action == 0:
+                        return # stdout closed
+                    elif action == 1:
+                        info_callback(str(stdout.read(readUInt(4)), encoding='utf-8'))
+                    elif action == 2 or action == 3:
+                        seed = readUInt(4)
+                        width = readUInt(4)
+                        height = readUInt(4)
+                        image = np.frombuffer(stdout.read(width*height*4*4),dtype=np.float32)
+                        if action == 2:
+                            image_callback(seed, width, height, image, False)
+                            break
+                        else:
+                            step_callback(seed, width, height, image) # seed is step number in this case
+                    else:
+                        raise RuntimeError("Unexpected action id")
 
 
 
@@ -52,19 +68,37 @@ def main():
     stdout = sys.stdout.buffer
     sys.stdout = open(os.devnull, 'w') # stable diffusion logs won't break get_image() now
 
+    def writeInfo(msg):
+        writeUInt(1,1)
+        b = bytes(msg,encoding='utf-8')
+        writeUInt(4,len(b))
+        stdout.write(b)
+        stdout.flush()
+
+    def writeUInt(length, value):
+        stdout.write(value.to_bytes(length,sys.byteorder,signed=False))
+
     byte_to_normalized = 1.0 / 255.0
+    def write_pixels(image):
+        writeUInt(4,image.width)
+        writeUInt(4,image.height)
+        b = (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).tobytes()
+        for i in range(0,len(b),1024*64):
+            stdout.write(b[i:i+1024*64])
+        # stdout.write(b) # writing it all at once was causing this to exit without error
+        stdout.flush()
+
     def image_writer(image, seed, upscaled=False):
         # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
         if not upscaled:
-            stdout.write(seed.to_bytes(4,sys.byteorder,signed=False))
-            stdout.write(image.width.to_bytes(4,sys.byteorder,signed=False))
-            stdout.write(image.height.to_bytes(4,sys.byteorder,signed=False))
-            b = (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).tobytes()
-            for i in range(0,len(b),1024*64):
-                stdout.write(b[i:i+1024*64])
-            # stdout.write(b) # writing it all at once was causing this to exit without error
-            stdout.flush()
-            return
+            writeUInt(1,2)
+            writeUInt(4,seed)
+            write_pixels(image)
+    
+    def view_step(samples, step):
+        writeUInt(1,3)
+        writeUInt(4,step)
+        write_pixels(generator._sample_to_image(samples))
 
     generator = None
     while True:
@@ -74,6 +108,7 @@ def main():
         args = json.loads(stdin.read(json_len))
 
         if generator is None or generator.full_precision != args['full_precision']:
+            writeInfo("Initializing Generator")
             generator = Generate(
                 conf=models_config,
                 model=model,
@@ -83,10 +118,10 @@ def main():
                 full_precision=args['full_precision']
             )
             generator.load_model()
-        
+        writeInfo("Starting")
         generator.prompt2image(
             # a function or method that will be called each step
-            step_callback=None,
+            step_callback=view_step,
             # a function or method that will be called each time an image is generated
             image_callback=image_writer,
             **args

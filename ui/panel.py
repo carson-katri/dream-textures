@@ -76,7 +76,10 @@ def draw_panel(self, context):
     row = layout.row()
     row.scale_y = 1.5
     if context.scene.dream_textures_progress <= 0:
-        row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
+        if context.scene.dream_textures_info != "":
+            row.label(text=context.scene.dream_textures_info, icon="INFO")
+        else:
+            row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
     else:
         row.prop(context.scene, 'dream_textures_progress', slider=True)
         row.enabled = False

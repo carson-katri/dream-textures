@@ -37,6 +37,7 @@ from .absolute_path import absolute_path
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
 from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
+from .operators.dream_texture import kill_generator
 from .property_groups.dream_prompt import DreamPrompt
 from .ui import panel
 
@@ -74,6 +75,7 @@ def register():
     bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
     bpy.types.Scene.dream_textures_history_selection = IntProperty()
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
+    bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)
@@ -92,6 +94,7 @@ def unregister():
             bpy.utils.unregister_class(cls)
         for tool in TOOLS:
             bpy.utils.unregister_tool(tool)
+        kill_generator()
 
 if __name__ == "__main__":
     register()

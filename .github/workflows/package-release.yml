@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: '3.10'
       - name: Install dependencies into target
-        run: pip install -r requirements-mac-MPS-CPU.txt --no-cache-dir --target ../.python_dependencies
+        run: 'pip install -r requirements-mac-MPS-CPU.txt --no-cache-dir --only-binary=:all: --platform=macosx_11_1_arm64 --target ../.python_dependencies'
         working-directory: stable_diffusion
       - name: Archive Release
         uses: thedoctor0/zip-release@main
@@ -28,5 +28,5 @@ jobs:
       - name: Archive addon
         uses: actions/upload-artifact@v3
         with:
-          name: dream_textures-darwin-arm64-release.zip
+          name: dream_textures-darwin-arm64
           path: release.zip

@@ -31,12 +31,12 @@ class GeneratorProcess():
 
 def main():
     from absolute_path import absolute_path
+    # Support Apple Silicon GPUs as much as possible.
+    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
     from stable_diffusion.ldm.generate import Generate
     from omegaconf import OmegaConf
     from PIL import ImageOps
-
-    # Support Apple Silicon GPUs as much as possible.
-    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
     models_config  = absolute_path('stable_diffusion/configs/models.yaml')
     model   = 'stable-diffusion-1.4'

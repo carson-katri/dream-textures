@@ -10,6 +10,7 @@ from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..absolute_path import WEIGHTS_PATH, absolute_path
 from ..generator_process import GeneratorProcess
+from ..property_groups.dream_prompt import DreamPrompt
 from .install_dependencies import are_dependencies_installed
 
 import tempfile
@@ -135,38 +136,16 @@ class DreamTexture(bpy.types.Operator):
             if init_img is not None:
                 init_img_path = save_temp_image(init_img)
 
-            generator.prompt2image(
-                # prompt string (no default)
-                prompt=generated_prompt,
-                # iterations (1); image count=iterations
-                iterations=scene.dream_textures_prompt.iterations,
-                # refinement steps per iteration
-                steps=scene.dream_textures_prompt.steps,
-                # seed for random number generator
-                seed=scene.dream_textures_prompt.get_seed(),
-                # width of image, in multiples of 64 (512)
-                width=scene.dream_textures_prompt.width,
-                # height of image, in multiples of 64 (512)
-                height=scene.dream_textures_prompt.height,
-                # how strongly the prompt influences the image (7.5) (must be >1)
-                cfg_scale=scene.dream_textures_prompt.cfgscale,
-                # path to an initial image - its dimensions override width and height
-                init_img=init_img_path,
+            args = {key: getattr(scene.dream_textures_prompt,key) for key in DreamPrompt.__annotations__}
+            args['prompt'] = context.scene.dream_textures_prompt.generate_prompt()
+            args['seed'] = scene.dream_textures_prompt.get_seed()
+            args['init_img'] = init_img_path
 
-                # generate tileable/seamless textures
-                seamless=scene.dream_textures_prompt.seamless,
-
-                fit=scene.dream_textures_prompt.fit,
-                # strength for noising/unnoising init_img. 0.0 preserves image exactly, 1.0 replaces it completely
-                strength=scene.dream_textures_prompt.strength,
+            generator.prompt2image(args,
                 # a function or method that will be called each step
                 step_callback=view_step if scene.dream_textures_prompt.show_steps else step_progress,
                 # a function or method that will be called each time an image is generated
-                image_callback=image_writer,
-                
-                sampler_name=scene.dream_textures_prompt.sampler,
-
-                full_precision=scene.dream_textures_prompt.full_precision
+                image_callback=image_writer
             )
 
         loop = asyncio.get_running_loop()

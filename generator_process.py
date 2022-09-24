@@ -65,7 +65,7 @@ def main():
 
     stdin = sys.stdin.buffer
     stdout = sys.stdout.buffer
-    sys.stdout = open(os.devnull, 'w') # stable diffusion logs won't break get_image() now
+    sys.stdout = open(os.devnull, 'w') # prevent stable diffusion logs from breaking ipc
 
     def writeInfo(msg):
         writeUInt(1,1)

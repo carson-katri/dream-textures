@@ -15,7 +15,7 @@ bl_info = {
     "name": "Dream Textures",
     "author": "Carson Katri, Greg Richardson, Kevin C. Burke",
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
-    "warning": "Requires installation of dependencies",
+    "warning": "Requires installation of Stable Diffusion model weights",
     "blender": (2, 80, 0),
     "version": (0, 0, 5),
     "location": "",
@@ -26,6 +26,7 @@ bl_info = {
 import bpy
 from bpy.props import IntProperty, PointerProperty, EnumProperty, FloatProperty
 import sys
+import site
 import importlib
 
 from .help_section import register_section_props
@@ -51,6 +52,10 @@ def register():
     async_loop.setup_asyncio_executor()
     bpy.utils.register_class(AsyncLoopModalOperator)
 
+    # sys.path.insert(0, absolute_path(".python_dependencies"))
+    # os.environ['PYTHON_PATH']
+    site.addusersitepackages(absolute_path(".python_dependencies"))
+    print(sys.path)
     sys.path.append(absolute_path("stable_diffusion/"))
     sys.path.append(absolute_path("stable_diffusion/src/clip"))
     sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))

@@ -23,6 +23,7 @@ bl_info = {
     "category": "Node"
 }
 
+from imp import is_frozen_package
 import bpy
 from bpy.props import IntProperty, PointerProperty, EnumProperty, FloatProperty
 import sys
@@ -37,7 +38,7 @@ from .absolute_path import absolute_path
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
 from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
-from .operators.dream_texture import kill_generator
+from .operators.dream_texture import handle_exception_queue, kill_generator
 from .property_groups.dream_prompt import DreamPrompt
 from .ui import panel
 
@@ -82,6 +83,8 @@ def register():
 
     for tool in TOOLS:
         bpy.utils.register_tool(tool)
+    
+    bpy.app.timers.register(handle_exception_queue, persistent=True)
 
 def unregister():
     bpy.utils.unregister_class(AsyncLoopModalOperator)
@@ -95,6 +98,8 @@ def unregister():
         for tool in TOOLS:
             bpy.utils.unregister_tool(tool)
         kill_generator()
+        if bpy.app.timers.is_registered(handle_exception_queue): # sometimes causing issues during development if not checked first
+            bpy.app.timers.unregister(handle_exception_queue)
 
 if __name__ == "__main__":
     register()

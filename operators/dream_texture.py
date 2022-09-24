@@ -1,4 +1,5 @@
 from importlib.resources import path
+from queue import Empty, Queue
 import bpy
 import asyncio
 import os
@@ -19,6 +20,7 @@ import tempfile
 # This allows the slow model loading process to happen once,
 # and re-use the model on subsequent calls.
 generator = None
+exception_queue = Queue(4)
 
 def image_has_alpha(img):
     b = 32 if img.is_float else 8
@@ -32,14 +34,13 @@ class DreamTexture(bpy.types.Operator):
     bl_label = "Dream Texture"
     bl_description = "Generate a texture with AI"
     bl_options = {'REGISTER'}
-    
+
     def invoke(self, context, event):
         weights_installed = os.path.exists(WEIGHTS_PATH)
         if not weights_installed or not are_dependencies_installed():
             self.report({'ERROR'}, "Please complete setup in the preferences window.")
-            return {"FINISHED"}
-        else:
-            return self.execute(context)
+            return {'CANCELLED'}
+        return self.execute(context)
 
     async def dream_texture(self, context):
         history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
@@ -56,6 +57,15 @@ class DreamTexture(bpy.types.Operator):
 
         def info(msg=""):
             scene.dream_textures_info = msg
+        
+        def handle_exception(fatal, err):
+            info() # clear variable
+            if fatal:
+                kill_generator()
+            import sys
+            sys.stderr.write(f"{'ERROR' if fatal else 'WARNING'} {err}\n")
+            exception_queue.put((fatal, err)) # ui needs to run in main thread
+
 
         def step_progress_update(self, context):
             if hasattr(context.area, "regions"):
@@ -71,6 +81,8 @@ class DreamTexture(bpy.types.Operator):
         if generator is None:
             info("Initializing Process")
             generator = GeneratorProcess()
+        else:
+            info("Waiting For Process")
 
         def bpy_image(name, width, height, pixels):
             image = bpy.data.images.new(name, width=width, height=height)
@@ -157,7 +169,8 @@ class DreamTexture(bpy.types.Operator):
                 # a function or method that will be called each time an image is generated
                 image_callback=image_writer,
                 # a function or method that will recieve messages
-                info_callback=info
+                info_callback=info,
+                exception_callback=handle_exception
             )
 
         loop = asyncio.get_running_loop()
@@ -169,6 +182,15 @@ class DreamTexture(bpy.types.Operator):
         ensure_async_loop()
 
         return {'FINISHED'}
+
+def handle_exception_queue():
+    try:
+        (fatal, err) = exception_queue.get_nowait()
+        bpy.ops.shade.dream_textures_exception("INVOKE_DEFAULT",exception_level="ERROR" if fatal else "INFO",exception=err)
+        exception_queue.task_done()
+    except Empty:
+        pass
+    return 1
 
 def kill_generator(context=bpy.context):
     global generator

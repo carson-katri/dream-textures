@@ -27,8 +27,8 @@ attributes = {
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
 
     # Size
-    "width": IntProperty(name="Width", default=512),
-    "height": IntProperty(name="Height", default=512),
+    "width": IntProperty(name="Width", default=512, min=64, step=64),
+    "height": IntProperty(name="Height", default=512, min=64, step=64),
 
     # Simple Options
     "seamless": BoolProperty(name="Seamless", default=False, description="Enables seamless/tilable image generation"),

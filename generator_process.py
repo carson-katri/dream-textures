@@ -22,26 +22,25 @@ class GeneratorProcess():
         def readUInt(length):
             return int.from_bytes(self.process.stdout.read(length),sys.byteorder,signed=False)
 
-        if image_callback:
-            for i in range(0,args['iterations']):
-                while True:
-                    action = readUInt(1)
-                    if action == 0:
-                        return # stdout closed
-                    elif action == 1:
-                        info_callback(str(stdout.read(readUInt(4)), encoding='utf-8'))
-                    elif action == 2 or action == 3:
-                        seed = readUInt(4)
-                        width = readUInt(4)
-                        height = readUInt(4)
-                        image = np.frombuffer(stdout.read(width*height*4*4),dtype=np.float32)
-                        if action == 2:
-                            image_callback(seed, width, height, image, False)
-                            break
-                        else:
-                            step_callback(seed, width, height, image) # seed is step number in this case
+        for i in range(0,args['iterations']):
+            while True:
+                action = readUInt(1)
+                if action == 0:
+                    return # stdout closed
+                elif action == 1:
+                    info_callback(str(stdout.read(readUInt(4)), encoding='utf-8'))
+                elif action == 2 or action == 3:
+                    seed = readUInt(4)
+                    width = readUInt(4)
+                    height = readUInt(4)
+                    image = np.frombuffer(stdout.read(width*height*4*4),dtype=np.float32)
+                    if action == 2:
+                        image_callback(seed, width, height, image, False)
+                        break
                     else:
-                        raise RuntimeError("Unexpected action id")
+                        step_callback(seed, width, height, image) # seed is step number in this case
+                else:
+                    raise RuntimeError(f"Unexpected action id {action}")
 
 
 
@@ -121,7 +120,7 @@ def main():
         writeInfo("Starting")
         generator.prompt2image(
             # a function or method that will be called each step
-            step_callback=view_step,
+            step_callback=view_step if args['show_steps'] else None,
             # a function or method that will be called each time an image is generated
             image_callback=image_writer,
             **args

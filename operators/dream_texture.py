@@ -79,6 +79,7 @@ class DreamTexture(bpy.types.Operator):
             return image
 
         def image_writer(seed, width, height, pixels, upscaled=False):
+            info() # clear variable
             nonlocal last_data_block
             # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
             if not upscaled:

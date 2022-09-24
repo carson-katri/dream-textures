@@ -51,11 +51,6 @@ def register():
     async_loop.setup_asyncio_executor()
     bpy.utils.register_class(AsyncLoopModalOperator)
 
-    sys.path.append(absolute_path("stable_diffusion/"))
-    sys.path.append(absolute_path("stable_diffusion/src/clip"))
-    sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
-    sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
-
     set_dependencies_installed(False)
     bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
     

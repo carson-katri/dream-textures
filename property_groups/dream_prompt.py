@@ -19,7 +19,7 @@ def seed_clamp(self, ctx):
         s = str(max(0,min(int(float(self.seed)),2**32-1))) # float() first to make sure any seed that is a number gets clamped, not just ints
         if s != self.seed:
             self.seed = s
-    except ValueError:
+    except (ValueError, OverflowError):
         pass # will get hashed once generated
 
 attributes = {
@@ -99,7 +99,7 @@ def get_seed(self):
         return None # let stable diffusion automatically pick one
     try:
         return max(0,min(int(float(self.seed)),2**32-1)) # clamp int
-    except ValueError:
+    except (ValueError, OverflowError):
         h = hash(self.seed) # not an int, let's hash it!
         if h < 0:
             h = ~h

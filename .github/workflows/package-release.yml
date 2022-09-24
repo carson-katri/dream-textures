@@ -53,4 +53,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: dream_textures-win32-cuda
-          path: release.zip
+          path: dream_textures-win32-cuda.zip

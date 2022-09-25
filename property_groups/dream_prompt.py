@@ -19,7 +19,7 @@ def seed_clamp(self, ctx):
         s = str(max(0,min(int(float(self.seed)),2**32-1))) # float() first to make sure any seed that is a number gets clamped, not just ints
         if s != self.seed:
             self.seed = s
-    except ValueError:
+    except (ValueError, OverflowError):
         pass # will get hashed once generated
 
 attributes = {
@@ -27,8 +27,8 @@ attributes = {
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
 
     # Size
-    "width": IntProperty(name="Width", default=512),
-    "height": IntProperty(name="Height", default=512),
+    "width": IntProperty(name="Width", default=512, min=64, step=64),
+    "height": IntProperty(name="Height", default=512, min=64, step=64),
 
     # Simple Options
     "seamless": BoolProperty(name="Seamless", default=False, description="Enables seamless/tilable image generation"),
@@ -40,7 +40,7 @@ attributes = {
     "full_precision": BoolProperty(name="Full Precision", default=False, description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
     "iterations": IntProperty(name="Iterations", default=1, min=1, description="How many images to generate"),
     "steps": IntProperty(name="Steps", default=25, min=1),
-    "cfgscale": FloatProperty(name="CFG Scale", default=7.5, min=1, description="How strongly the prompt influences the image"),
+    "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, description="How strongly the prompt influences the image"),
     "sampler": EnumProperty(name="Sampler", items=sampler_options, default=3),
     "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=True),
 
@@ -99,7 +99,7 @@ def get_seed(self):
         return None # let stable diffusion automatically pick one
     try:
         return max(0,min(int(float(self.seed)),2**32-1)) # clamp int
-    except ValueError:
+    except (ValueError, OverflowError):
         h = hash(self.seed) # not an int, let's hash it!
         if h < 0:
             h = ~h

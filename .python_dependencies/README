@@ -1,0 +1,2 @@
+# Python Dependencies
+When releasing the addon, the dependencies are put into this directory. It is then added to `sys.path` for module lookup.

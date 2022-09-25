@@ -6,10 +6,9 @@ import math
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
-from ..absolute_path import WEIGHTS_PATH, absolute_path
+from ..absolute_path import WEIGHTS_PATH
 from ..generator_process import GeneratorProcess
 from ..property_groups.dream_prompt import DreamPrompt
-from .install_dependencies import are_dependencies_installed
 
 import tempfile
 
@@ -41,7 +40,7 @@ class DreamTexture(bpy.types.Operator):
 
     def invoke(self, context, event):
         weights_installed = os.path.exists(WEIGHTS_PATH)
-        if not weights_installed or not are_dependencies_installed():
+        if not weights_installed:
             self.report({'ERROR'}, "Please complete setup in the preferences window.")
             return {'CANCELLED'}
         return self.execute(context)

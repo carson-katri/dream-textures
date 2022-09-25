@@ -27,83 +27,31 @@ on:
 #           path: ${{ github.workspace }}
 
 jobs:
-  windows-cuda:
+  win32-cuda:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
+          submodules: recursive
           path: dream_textures
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+          cache: 'pip'
       - name: Install dependencies into target
         shell: bash
-        run: 'python -m pip install -r requirements/win-linux-cuda.txt --no-cache-dir --target .python_dependencies'
-        working-directory: dream_textures
+        run: 'python -m pip install -r ../requirements-win-torch-1-11-0.txt --no-cache-dir --target ../.python_dependencies'
+        working-directory: dream_textures/stable_diffusion
       - name: Archive Release
         uses: thedoctor0/zip-release@main
         with:
           type: zip
-          filename: dream_textures-windows-cuda.zip
+          filename: dream_textures-win32-cuda.zip
           exclusions: '*.git*'
       - name: Archive and upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: dream_textures-windows-cuda
-          path: dream_textures-windows-cuda.zip
-  windows-dreamstudio:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          path: dream_textures
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      - name: Install dependencies into target
-        shell: bash
-        run: 'python -m pip install -r requirements/dreamstudio.txt --no-cache-dir --target .python_dependencies'
-        working-directory: dream_textures
-      - name: Archive Release
-        uses: thedoctor0/zip-release@main
-        with:
-          type: zip
-          filename: dream_textures-windows-dreamstudio.zip
-          exclusions: '*.git*'
-      - name: Archive and upload artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: dream_textures-windows-dreamstudio
-          path: dream_textures-windows-dreamstudio.zip
-  # No universal wheels for grpcio means we need separate macOS installations for Intel/ARM.
-  # GitHub Actions does not have Apple Silicon runners, so that build still needs to be created manually.
-  macos-intel-dreamstudio:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          path: dream_textures
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      - name: Install dependencies into target
-        shell: bash
-        run: 'python -m pip install -r requirements/dreamstudio.txt --no-cache-dir --target .python_dependencies'
-        working-directory: dream_textures
-      - name: Archive Release
-        uses: thedoctor0/zip-release@main
-        with:
-          type: zip
-          filename: dream_textures-macos-intel-dreamstudio.zip
-          exclusions: '*.git*'
-      - name: Archive and upload artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: dream_textures-macos-intel-dreamstudio
-          path: dream_textures-macos-intel-dreamstudio.zip
+          name: dream_textures-win32-cuda
+          path: dream_textures-win32-cuda.zip

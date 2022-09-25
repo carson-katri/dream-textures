@@ -3,6 +3,7 @@ import subprocess
 import sys
 import os
 import threading
+import site
 import numpy as np
 from enum import IntEnum as Lawsuit
 
@@ -119,6 +120,11 @@ def main():
     sys.path.append(absolute_path("stable_diffusion/src/clip"))
     sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
     sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
+
+    site.addsitedir(absolute_path(".python_dependencies"))
+    import pkg_resources
+    pkg_resources._initialize_master_working_set()
+
     from stable_diffusion.ldm.generate import Generate
     from omegaconf import OmegaConf
     from PIL import ImageOps

@@ -15,7 +15,7 @@ bl_info = {
     "name": "Dream Textures",
     "author": "Carson Katri, Greg Richardson, Kevin C. Burke",
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
-    "warning": "Requires installation of dependencies",
+    "warning": "Requires installation of Stable Diffusion model weights",
     "blender": (2, 80, 0),
     "version": (0, 0, 5),
     "location": "",
@@ -24,7 +24,7 @@ bl_info = {
 }
 
 import bpy
-from bpy.props import IntProperty, PointerProperty, EnumProperty, FloatProperty
+from bpy.props import IntProperty, PointerProperty, EnumProperty
 import sys
 import importlib
 
@@ -32,13 +32,10 @@ from .help_section import register_section_props
 
 from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
-from .absolute_path import absolute_path
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
-from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
 from .operators.dream_texture import kill_generator
 from .property_groups.dream_prompt import DreamPrompt
-from .ui import panel
 
 requirements_path_items = (
     # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
@@ -48,7 +45,6 @@ requirements_path_items = (
 )
 
 def register():
-    set_dependencies_installed(False)
     bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
     
     register_section_props()
@@ -57,14 +53,6 @@ def register():
         bpy.utils.register_class(cls)
 
     check_for_updates()
-
-    try:
-        # Check if the last dependency is installed.
-        importlib.import_module("transformers")
-        set_dependencies_installed(True)
-    except ModuleNotFoundError:
-        # Don't register other panels, operators etc.
-        return
 
     bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
@@ -83,12 +71,11 @@ def unregister():
     for cls in PREFERENCE_CLASSES:
         bpy.utils.unregister_class(cls)
 
-    if are_dependencies_installed():
-        for cls in CLASSES:
-            bpy.utils.unregister_class(cls)
-        for tool in TOOLS:
-            bpy.utils.unregister_tool(tool)
-        kill_generator()
+    for cls in CLASSES:
+        bpy.utils.unregister_class(cls)
+    for tool in TOOLS:
+        bpy.utils.unregister_tool(tool)
+    kill_generator()
 
 if __name__ == "__main__":
     register()

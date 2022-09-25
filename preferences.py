@@ -7,7 +7,7 @@ from shutil import which
 
 from .help_section import help_section
 from .absolute_path import WEIGHTS_PATH
-from .operators.install_dependencies import InstallDependencies, are_dependencies_installed
+from .operators.install_dependencies import InstallDependencies
 from .property_groups.dream_prompt import DreamPrompt
 
 class OpenHuggingFace(bpy.types.Operator):
@@ -86,33 +86,10 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
         weights_installed = os.path.exists(WEIGHTS_PATH)
 
-        if are_dependencies_installed() and weights_installed:
+        if weights_installed:
             layout.label(text="Addon setup complete", icon="CHECKMARK")
         else:
             layout.label(text="Complete the following steps to finish setting up the addon:")
-
-        if which('git') is None:
-            git_box = layout.box()
-            git_box.label(text="Install Git", icon="IMPORT")
-            git_box.label(text="Git is used to fetch some dependencies.")
-            git_box.operator(OpenGitDownloads.bl_idname, icon="URL")
-        
-        if which('cargo') is None and sys.platform == 'darwin':
-            rust_box = layout.box()
-            rust_box.label(text="Install Rust", icon="IMPORT")
-            rust_box.label(text="Rust is used to build some dependencies on macOS.")
-            rust_box.operator(OpenRustInstaller.bl_idname, icon="URL")
-
-        dependencies_box = layout.box()
-        dependencies_box.label(text="Install Dependencies", icon="IMPORT")
-        if are_dependencies_installed():
-            dependencies_box.label(text="Dependencies installed successfully.", icon="CHECKMARK")
-            dependencies_box.label(text="Only click 'Install Dependencies' if you need to repeat this step in the future.")
-        else:
-            if sys.platform == 'win32':
-                dependencies_box.label(text="You must run Blender as an administrator for the installation to work.")
-        dependencies_box.prop(context.scene, 'dream_textures_requirements_path')
-        dependencies_box.operator(InstallDependencies.bl_idname, icon="CONSOLE")
 
         model_weights_box = layout.box()
         model_weights_box.label(text="Setup Model Weights", icon="SETTINGS")
@@ -128,23 +105,12 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             warning_box.label(text="Make sure the file is renamed to 'model.ckpt', not 'sd-v1-4.ckpt'", icon="ERROR")
             model_weights_box.operator(OpenWeightsDirectory.bl_idname, icon="FOLDER_REDIRECT")
         
-        if weights_installed and are_dependencies_installed():
-            restart_box = layout.box()
-            restart_box.label(text="Restart Blender", icon="FILE_REFRESH")
-            restart_box.label(text="After installing Blender may need a restart.")
-
-        if are_dependencies_installed() and weights_installed:
-            is_valid_box = layout.box()
-            is_valid_box.label(text="Validate Installation", icon="EXPERIMENTAL")
-            if is_install_valid is not None:
-                if is_install_valid:
-                    is_valid_box.label(text="Install validation succeeded.", icon="CHECKMARK")
-                else:
-                    is_valid_box.label(text="Install validation failed.", icon="ERROR")
-            else:
-                is_valid_box.operator(ValidateInstallation.bl_idname)
-        
         troubleshooting_box = layout.box()
         troubleshooting_box.label(text="Troubleshooting", icon="ERROR")
         help_section(troubleshooting_box, context)
-    
+
+        if context.preferences.view.show_developer_ui: # If 'Developer Extras' is enabled, show addon development tools
+            developer_box = layout.box()
+            developer_box.label(text="Development Tools", icon="CONSOLE")
+            developer_box.prop(context.scene, 'dream_textures_requirements_path')
+            developer_box.operator(InstallDependencies.bl_idname, icon="CONSOLE")

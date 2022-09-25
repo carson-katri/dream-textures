@@ -20,13 +20,6 @@ generator_advance = None
 last_data_block = None
 timer = None
 
-def image_has_alpha(img):
-    b = 32 if img.is_float else 8
-    return (
-        img.depth == 2*b or   # Grayscale+Alpha
-        img.depth == 4*b      # RGB+Alpha
-    )
-
 class DreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture"
     bl_label = "Dream Texture"
@@ -162,7 +155,7 @@ class DreamTexture(bpy.types.Operator):
         if scene.dream_textures_prompt.use_inpainting:
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
-                    if area.spaces.active.image is not None and image_has_alpha(area.spaces.active.image):
+                    if area.spaces.active.image is not None:
                         init_img = area.spaces.active.image
         init_img_path = None
         if init_img is not None:

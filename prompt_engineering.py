@@ -98,16 +98,6 @@ subject_type_token = PromptToken('subject_type', 'Subject Type', (
     ('vehicle', 'Vehicle'),
 ))
 
-concept_artist_token = PromptToken('concept_artist', 'Concept Artist', (
-    ('blevins', 'Neil Blevins'),
-    ('grimmer', 'Jordan Grimmer'),
-    ('mullins', 'Craig Mullins'),
-    ('rutkowski', 'Greg Rutkowski'),
-    ('shinkai', 'Makoto Shinkai'),
-    ('simonetti', 'Mark Simonetti'),
-    ('stalenhag', 'Simon Stalenhag'),
-))
-
 genre_token = PromptToken('genre', 'Genre', (
     ('scifi', 'Sci-Fi'),
     ('fantasy', 'Fantasy'),
@@ -116,12 +106,12 @@ genre_token = PromptToken('genre', 'Genre', (
 ))
 
 def concept_art_prompt(tokens):
-    return f"{tokens.subject}, {tokens.subject_type} concept art, {tokens.genre} digital painting, by {tokens.concept_artist}, trending on ArtStation"
+    return f"{tokens.subject}, {tokens.subject_type} concept art, {tokens.genre} digital painting, trending on ArtStation"
 
 concept_art_structure = PromptStructure(
     'concept_art',
     'Concept Art',
-    (subject_token, subject_type_token, genre_token, concept_artist_token),
+    (subject_token, subject_type_token, genre_token),
     concept_art_prompt
 )
 

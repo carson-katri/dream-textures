@@ -13,7 +13,7 @@ SPACE_TYPES = {'IMAGE_EDITOR', 'NODE_EDITOR'}
 def draw_panel(self, context):
     layout = self.layout
     scene = context.scene
-
+    
     if new_version_available():
         layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
 

@@ -66,8 +66,6 @@ def register():
     for tool in TOOLS:
         bpy.utils.register_tool(tool)
 
-    print(CLASSES)
-
 def unregister():
     for cls in PREFERENCE_CLASSES:
         bpy.utils.unregister_class(cls)

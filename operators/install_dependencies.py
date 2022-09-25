@@ -9,16 +9,6 @@ import tarfile
 
 from ..absolute_path import absolute_path
 
-dependencies_installed = False
-
-def are_dependencies_installed():
-    global dependencies_installed
-    return dependencies_installed
-
-def set_dependencies_installed(are_installed):
-    global dependencies_installed
-    dependencies_installed = are_installed
-
 def install_pip():
     """
     Installs pip if not already present. Please note that ensurepip.bootstrap() also calls pip, which adds the
@@ -86,9 +76,6 @@ class InstallDependencies(bpy.types.Operator):
         except (subprocess.CalledProcessError, ImportError) as err:
             self.report({"ERROR"}, str(err))
             return {"CANCELLED"}
-
-        global dependencies_installed
-        dependencies_installed = True
 
         subprocess.run([sys.executable, absolute_path("stable_diffusion/scripts/preload_models.py")], check=True, cwd=absolute_path("stable_diffusion/"))
 

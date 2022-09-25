@@ -34,7 +34,6 @@ from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
-from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
 from .operators.dream_texture import kill_generator
 from .property_groups.dream_prompt import DreamPrompt
 
@@ -46,7 +45,6 @@ requirements_path_items = (
 )
 
 def register():
-    set_dependencies_installed(False)
     bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
     
     register_section_props()
@@ -55,14 +53,6 @@ def register():
         bpy.utils.register_class(cls)
 
     check_for_updates()
-
-    try:
-        # Check if the last dependency is installed.
-        importlib.import_module("transformers")
-        set_dependencies_installed(True)
-    except ModuleNotFoundError:
-        # Don't register other panels, operators etc.
-        return
 
     bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
@@ -81,12 +71,11 @@ def unregister():
     for cls in PREFERENCE_CLASSES:
         bpy.utils.unregister_class(cls)
 
-    if are_dependencies_installed():
-        for cls in CLASSES:
-            bpy.utils.unregister_class(cls)
-        for tool in TOOLS:
-            bpy.utils.unregister_tool(tool)
-        kill_generator()
+    for cls in CLASSES:
+        bpy.utils.unregister_class(cls)
+    for tool in TOOLS:
+        bpy.utils.unregister_tool(tool)
+    kill_generator()
 
 if __name__ == "__main__":
     register()

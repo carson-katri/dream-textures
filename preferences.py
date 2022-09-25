@@ -7,7 +7,7 @@ from shutil import which
 
 from .help_section import help_section
 from .absolute_path import WEIGHTS_PATH
-from .operators.install_dependencies import InstallDependencies, are_dependencies_installed
+from .operators.install_dependencies import InstallDependencies
 from .property_groups.dream_prompt import DreamPrompt
 
 class OpenHuggingFace(bpy.types.Operator):
@@ -86,7 +86,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
         weights_installed = os.path.exists(WEIGHTS_PATH)
 
-        if are_dependencies_installed() and weights_installed:
+        if weights_installed:
             layout.label(text="Addon setup complete", icon="CHECKMARK")
         else:
             layout.label(text="Complete the following steps to finish setting up the addon:")

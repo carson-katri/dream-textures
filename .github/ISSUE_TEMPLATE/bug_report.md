@@ -28,11 +28,11 @@ If applicable, add screenshots to help explain your problem.
 
 **System (please complete the following information):**
 - OS
-  - [ ] Windows
+  - [x] Windows
   - [ ] macOS
   - [ ] Other
 - GPU
-  - [ ] NVIDIA
+  - [x] NVIDIA
   - [ ] NVIDIA 16*XX*
   - [ ] Apple Silicon
   - [ ] AMD

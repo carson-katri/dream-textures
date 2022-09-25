@@ -2,18 +2,19 @@ import bpy
 from bpy.types import Panel
 from ..pil_to_image import *
 from ..prompt_engineering import *
-from ..operators.dream_texture import DreamTexture, image_has_alpha, ReleaseGenerator
+from ..operators.dream_texture import DreamTexture, ReleaseGenerator
 from ..operators.view_history import SCENE_UL_HistoryList, RecallHistoryEntry
 from ..operators.open_latest_version import OpenLatestVersion, new_version_available
 from ..help_section import help_section
 from ..preferences import StableDiffusionPreferences
+import sys
 
 SPACE_TYPES = {'IMAGE_EDITOR', 'NODE_EDITOR'}
 
 def draw_panel(self, context):
     layout = self.layout
     scene = context.scene
-    
+
     if new_version_available():
         layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
 
@@ -36,16 +37,17 @@ def draw_panel(self, context):
     size_box.prop(scene.dream_textures_prompt, "height")
     size_box.prop(scene.dream_textures_prompt, "seamless")
     
-    for area in context.screen.areas:
-        if area.type == 'IMAGE_EDITOR':
-            if area.spaces.active.image is not None and image_has_alpha(area.spaces.active.image):
-                inpainting_box = layout.box()
-                inpainting_heading = inpainting_box.row()
-                inpainting_heading.prop(scene.dream_textures_prompt, "use_inpainting")
-                inpainting_heading.label(text="Inpaint Open Image")
-                break
+    if not scene.dream_textures_prompt.use_init_img:
+        for area in context.screen.areas:
+            if area.type == 'IMAGE_EDITOR':
+                if area.spaces.active.image is not None:
+                    inpainting_box = layout.box()
+                    inpainting_heading = inpainting_box.row()
+                    inpainting_heading.prop(scene.dream_textures_prompt, "use_inpainting")
+                    inpainting_heading.label(text="Inpaint Open Image")
+                    break
 
-    if not scene.dream_textures_prompt.use_inpainting:
+    if not scene.dream_textures_prompt.use_inpainting or area.spaces.active.image is None:
         init_img_box = layout.box()
         init_img_heading = init_img_box.row()
         init_img_heading.prop(scene.dream_textures_prompt, "use_init_img")
@@ -60,7 +62,8 @@ def draw_panel(self, context):
     advanced_box_heading.prop(scene.dream_textures_prompt, "show_advanced", icon="DOWNARROW_HLT" if scene.dream_textures_prompt.show_advanced else "RIGHTARROW_THIN", emboss=False, icon_only=True)
     advanced_box_heading.label(text="Advanced Configuration")
     if scene.dream_textures_prompt.show_advanced:
-        advanced_box.prop(scene.dream_textures_prompt, "full_precision")
+        if sys.platform not in {'darwin'}:
+            advanced_box.prop(scene.dream_textures_prompt, "full_precision")
         advanced_box.prop(scene.dream_textures_prompt, "random_seed")
         seed_row = advanced_box.row()
         seed_row.prop(scene.dream_textures_prompt, "seed")

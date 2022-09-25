@@ -16,17 +16,16 @@ bl_info = {
     "author": "Carson Katri, Greg Richardson, Kevin C. Burke",
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
     "warning": "Requires installation of Stable Diffusion model weights",
-    "blender": (2, 80, 0),
-    "version": (0, 0, 5),
+    "blender": (3, 0, 0),
+    "version": (0, 0, 6),
     "location": "",
     "warning": "",
-    "category": "Node"
+    "category": "Paint"
 }
 
 import bpy
 from bpy.props import IntProperty, PointerProperty, EnumProperty
 import sys
-import importlib
 
 from .help_section import register_section_props
 

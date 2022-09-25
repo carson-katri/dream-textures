@@ -198,8 +198,8 @@ def main():
             return # stdin closed
         args = json.loads(stdin.read(json_len))
 
-        if generator is None or generator.full_precision != args['full_precision']:
-            writeInfo("Initializing Generator")
+        if generator is None or (generator.full_precision != args['full_precision'] and sys.platform != 'darwin'):
+            writeInfo("Loading Model")
             try:
                 generator = Generate(
                     conf=models_config,

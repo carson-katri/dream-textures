@@ -1,6 +1,7 @@
 import bpy
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, PointerProperty
 from ..prompt_engineering import *
+import sys
 
 sampler_options = [
     ("ddim", "DDIM", "", 1),
@@ -37,7 +38,7 @@ attributes = {
     "show_advanced": BoolProperty(name="", default=False),
     "random_seed": BoolProperty(name="Random Seed", default=True, description="Randomly pick a seed"),
     "seed": StringProperty(name="Seed", default="0", description="Manually pick a seed", update=seed_clamp),
-    "full_precision": BoolProperty(name="Full Precision", default=False, description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
+    "full_precision": BoolProperty(name="Full Precision", default=True if sys.platform == 'darwin' else False, description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
     "iterations": IntProperty(name="Iterations", default=1, min=1, description="How many images to generate"),
     "steps": IntProperty(name="Steps", default=25, min=1),
     "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, description="How strongly the prompt influences the image"),

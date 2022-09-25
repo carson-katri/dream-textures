@@ -233,7 +233,7 @@ def main():
                     low_ram = re.search(r"(Not enough memory, use lower resolution)( \(max approx. \d+x\d+\))",s,re.IGNORECASE)
                     if low_ram:
                         writeException(False, f"{low_ram[1]}{' or disable full precision' if args['full_precision'] else ''}{low_ram[2]}")
-                    elif s.find("CUDA out of memory. Tried to allocate"):
+                    elif s.find("CUDA out of memory. Tried to allocate") != -1:
                         writeException(False, f"Not enough memory, use lower resolution{' or disable full precision' if args['full_precision'] else ''}")
                     else:
                         writeException(True, s) # consider all unknown exceptions to be fatal so the generator process is fully restarted next time

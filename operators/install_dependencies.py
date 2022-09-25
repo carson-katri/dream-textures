@@ -9,36 +9,6 @@ import tarfile
 
 from ..absolute_path import absolute_path
 
-dependencies_installed = False
-
-def are_dependencies_installed():
-    global dependencies_installed
-    return dependencies_installed
-
-def set_dependencies_installed(are_installed):
-    global dependencies_installed
-    dependencies_installed = are_installed
-
-def import_module(module_name, global_name=None, reload=True):
-    """
-    Import a module.
-    :param module_name: Module to import.
-    :param global_name: (Optional) Name under which the module is imported. If None the module_name will be used.
-       This allows to import under a different name with the same effect as e.g. "import numpy as np" where "np" is
-       the global_name under which the module can be accessed.
-    :raises: ImportError and ModuleNotFoundError
-    """
-    if global_name is None:
-        global_name = module_name
-
-    if global_name in globals():
-        importlib.reload(globals()[global_name])
-    else:
-        # Attempt to import the module and assign it to globals dictionary. This allow to access the module under
-        # the given name, just like the regular import would.
-        globals()[global_name] = importlib.import_module(module_name)
-
-
 def install_pip():
     """
     Installs pip if not already present. Please note that ensurepip.bootstrap() also calls pip, which adds the
@@ -58,40 +28,6 @@ def install_pip():
 
         ensurepip.bootstrap()
         os.environ.pop("PIP_REQ_TRACKER", None)
-
-
-def install_and_import_module(module_name, package_name=None, global_name=None):
-    """
-    Installs the package through pip and attempts to import the installed module.
-    :param module_name: Module to import.
-    :param package_name: (Optional) Name of the package that needs to be installed. If None it is assumed to be equal
-       to the module_name.
-    :param global_name: (Optional) Name under which the module is imported. If None the module_name will be used.
-       This allows to import under a different name with the same effect as e.g. "import numpy as np" where "np" is
-       the global_name under which the module can be accessed.
-    :raises: subprocess.CalledProcessError and ImportError
-    """
-    if package_name is None:
-        package_name = module_name
-
-    if global_name is None:
-        global_name = module_name
-
-    # Blender disables the loading of user site-packages by default. However, pip will still check them to determine
-    # if a dependency is already installed. This can cause problems if the packages is installed in the user
-    # site-packages and pip deems the requirement satisfied, but Blender cannot import the package from the user
-    # site-packages. Hence, the environment variable PYTHONNOUSERSITE is set to disallow pip from checking the user
-    # site-packages. If the package is not already installed for Blender's Python interpreter, it will then try to.
-    # The paths used by pip can be checked with `subprocess.run([bpy.app.binary_path_python, "-m", "site"], check=True)`
-
-    # Create a copy of the environment variables and modify them for the subprocess call
-    environ_copy = dict(os.environ)
-    environ_copy["PYTHONNOUSERSITE"] = "1"
-
-    subprocess.run([sys.executable, "-m", "pip", "install", package_name], check=True, env=environ_copy)
-
-    # The installation succeeded, attempt to import the module again
-    import_module(module_name, global_name)
 
 def install_and_import_requirements(requirements_txt=None):
     """
@@ -121,14 +57,12 @@ def install_and_import_requirements(requirements_txt=None):
         else: # Use CUDA dependencies by default on Linux/Windows.
             # These are not the submodule dependencies from the `development` branch, but use the `main` branch deps for PyTorch 1.11.0.
             requirements_path = 'requirements-win-torch-1-11-0.txt'
-    subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path(requirements_path), "--no-cache-dir"], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
+    subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path(requirements_path), "--no-cache-dir", "--target", absolute_path('.python_dependencies')], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
 
 class InstallDependencies(bpy.types.Operator):
     bl_idname = "stable_diffusion.install_dependencies"
-    bl_label = "Install dependencies"
-    bl_description = ("Downloads and installs the required python packages for this add-on. "
-                      "Internet connection is required. Blender may have to be started with "
-                      "elevated permissions in order to install the package")
+    bl_label = "Install Dependencies"
+    bl_description = ("Downloads and installs the required python packages into the '.python_dependencies' directory of the addon.")
     bl_options = {"REGISTER", "INTERNAL"}
 
     def execute(self, context):
@@ -142,9 +76,6 @@ class InstallDependencies(bpy.types.Operator):
         except (subprocess.CalledProcessError, ImportError) as err:
             self.report({"ERROR"}, str(err))
             return {"CANCELLED"}
-
-        global dependencies_installed
-        dependencies_installed = True
 
         subprocess.run([sys.executable, absolute_path("stable_diffusion/scripts/preload_models.py")], check=True, cwd=absolute_path("stable_diffusion/"))
 

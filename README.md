@@ -11,7 +11,7 @@
 ## Installation
 1. Download the [latest version](https://github.com/carson-katri/dream-textures/releases/tag/0.0.5) from the Releases tab.
 2. Install the addon in Blender's preferences window.
-3. Follow the steps in the 'Dream Textures' preferences window to install the necessary dependencies.
+3. Follow the steps in the 'Dream Textures' preferences window to download the model weights.
    - _*Note for Windows users*_ - If you get an error when installing dependencies that looks similar to the one described [here](https://github.com/carson-katri/dream-textures/issues/13), your dependency file paths might be too long (can't be longer than 256 characters). You can solve it by telling Windows to allow long file paths in the registry:
      1. Open up the Window registry (Start > Run > `regedit`)
      2. Navigate to `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem`
@@ -75,3 +75,17 @@ If you have an issue with a supported GPU, please create an issue.
 ## Future Directions
 * Other image map types (normal, roughness, displacement, etc.) using a new LDM checkpoint and vocabulary.
 * AI upscaling and face fixing with ESRGAN and GFPGAN
+
+## Contributing
+After cloning the repository, there a few more steps you need to complete to setup your development environment:
+1. Install submodules:
+```sh
+git submodule update --init --recursive
+```
+2. I recommend the [Blender Development](https://marketplace.visualstudio.com/items?itemName=JacquesLucke.blender-development) extension for VS Code.
+3. After running the local add-on in Blender, setup the model weights like normal.
+4. Install dependencies locally
+    * Open Blender's preferences window
+    * Enable *Interface* > *Display* > *Developer Extras*
+    * Then install dependencies for development under *Add-ons* > *Dream Textures* > *Development Tools*
+    * This will download all pip dependencies for the selected platform into `.python_dependencies`

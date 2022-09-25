@@ -156,7 +156,7 @@ def main():
         from io import StringIO
     except ModuleNotFoundError as e:
         min_files = 10 # bump this up if more files get added to .python_dependencies in source
-                       # don't set too high so it can still pass info on indiviual missing modules
+                       # don't set too high so it can still pass info on individual missing modules
         if not os.path.exists(".python_dependencies") or len(os.listdir()) < min_files:
             e = "Python dependencies are missing. Click update to download full addon."
         writeException(True, e)

@@ -4,9 +4,10 @@ import sys
 import os
 import threading
 import numpy as np
-from enum import IntEnum
+from enum import IntEnum as Lawsuit
 
-class Action(IntEnum):
+# IPC message types from subprocess
+class Action(Lawsuit): # can't help myself
     UNKNOWN = -1
     CLOSED = 0
     INFO = 1
@@ -19,15 +20,49 @@ class Action(IntEnum):
     def _missing_(cls, value):
         return cls.UNKNOWN
 
-class BackgroundReader():
-    def __init__(self, reader):
-        self.reader = reader
+class GeneratorProcess():
+    def __init__(self):
+        self.process = subprocess.Popen([sys.executable,'generator_process.py'],cwd=os.path.dirname(os.path.realpath(__file__)),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
+        self.reader = self.process.stdout
         self.queue = []
         self.args = None
         self.killed = False
         self.thread = threading.Thread(target=self._run,daemon=True,name="BackgroundReader")
         self.thread.start()
+    
+    def kill(self):
+        self.killed = True
+        self.process.kill()
+    
+    def prompt2image(self, args, step_callback, image_callback, info_callback, exception_callback):
+        self.args = args
+        stdin = self.process.stdin
+        b = bytes(json.dumps(args), encoding='utf-8')
+        stdin.write(len(b).to_bytes(8,sys.byteorder,signed=False))
+        stdin.write(b)
+        stdin.flush()
 
+        queue = self.queue
+        callbacks = {
+            Action.INFO: info_callback,
+            Action.IMAGE: image_callback,
+            Action.STEP_IMAGE: step_callback,
+            Action.STEP_NO_SHOW: step_callback,
+            Action.EXCEPTION: exception_callback
+        }
+
+        for i in range(0,args['iterations']):
+            while True:
+                while len(queue) == 0:
+                    yield # nothing in queue, let blender resume
+                tup = queue.pop()
+                action = tup[0]
+                callbacks[action](*tup[1:])
+                if action == Action.IMAGE:
+                    break
+                elif action == Action.EXCEPTION:
+                    return
+    
     def _run(self):
         reader = self.reader
         def readStr():
@@ -40,7 +75,7 @@ class BackgroundReader():
             queue.append((Action.EXCEPTION, fatal, err))
 
         image_buffer = bytearray(512*512*16)
-        while True:
+        while not self.killed:
             action = readUInt(1)
             if action == Action.CLOSED:
                 if not self.killed:
@@ -75,45 +110,6 @@ class BackgroundReader():
             else:
                 queue_exception(True, f"Internal error, unexpected action id: {action}")
                 return
-
-class GeneratorProcess():
-    def __init__(self):
-        self.process = subprocess.Popen([sys.executable,'generator_process.py'],cwd=os.path.dirname(os.path.realpath(__file__)),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
-        self.background_reader = BackgroundReader(self.process.stdout)
-    
-    def kill(self):
-        self.background_reader.killed = True
-        self.process.kill()
-    
-    def prompt2image(self, args, step_callback, image_callback, info_callback, exception_callback):
-        self.background_reader.args = args
-        stdin = self.process.stdin
-        b = bytes(json.dumps(args), encoding='utf-8')
-        stdin.write(len(b).to_bytes(8,sys.byteorder,signed=False))
-        stdin.write(b)
-        stdin.flush()
-
-        queue = self.background_reader.queue
-        callbacks = {
-            Action.INFO: info_callback,
-            Action.IMAGE: image_callback,
-            Action.STEP_IMAGE: step_callback,
-            Action.STEP_NO_SHOW: step_callback,
-            Action.EXCEPTION: exception_callback
-        }
-
-        for i in range(0,args['iterations']):
-            while True:
-                if len(queue) == 0:
-                    yield
-                    continue
-                tup = queue.pop()
-                action = tup[0]
-                callbacks[action](*tup[1:])
-                if action == Action.IMAGE:
-                    break
-                elif action == Action.EXCEPTION:
-                    return
 
 def main():
     from absolute_path import absolute_path
@@ -166,8 +162,8 @@ def main():
         b = (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).tobytes()
         for i in range(0,len(b),1024*64):
             stdout.write(b[i:i+1024*64])
-            stdout.flush()
-        # stdout.write(b) # keep above alternative in case if this starts crashing the subprocess without raising any exception again
+            # stdout.write(memoryview(b)[i:i+1024*64]) # won't accept memoryview for some reason, writer thinks it needs serialized but fails
+        # stdout.write(b) # writing full image has caused the subprocess to crash without raising any exception, safer not to use
         stdout.flush()
 
     def image_writer(image, seed, upscaled=False):
@@ -184,7 +180,6 @@ def main():
             writeUInt(1,Action.STEP_IMAGE)
             writeUInt(4,step)
             write_pixels(pixels)
-            # write_pixels(image)
         else:
             writeUInt(1,Action.STEP_NO_SHOW)
             writeUInt(4,step)
@@ -237,6 +232,7 @@ def main():
                         writeException(False, f"Not enough memory, use lower resolution{' or disable full precision' if args['full_precision'] else ''}")
                     else:
                         writeException(True, s) # consider all unknown exceptions to be fatal so the generator process is fully restarted next time
+                        return
         except Exception as e:
             writeException(True, str(e))
             return

@@ -18,6 +18,7 @@ import tempfile
 # and re-use the model on subsequent calls.
 generator = None
 generator_advance = None
+last_data_block = None
 timer = None
 
 def image_has_alpha(img):
@@ -32,6 +33,11 @@ class DreamTexture(bpy.types.Operator):
     bl_label = "Dream Texture"
     bl_description = "Generate a texture with AI"
     bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context):
+        global timer
+        return timer is None
 
     def invoke(self, context, event):
         weights_installed = os.path.exists(WEIGHTS_PATH)
@@ -61,7 +67,6 @@ class DreamTexture(bpy.types.Operator):
 
         node_tree = context.material.node_tree if hasattr(context, 'material') else None
         screen = context.screen
-        last_data_block = None
         scene = context.scene
 
         def info(msg=""):
@@ -99,7 +104,7 @@ class DreamTexture(bpy.types.Operator):
 
         def image_writer(seed, width, height, pixels, upscaled=False):
             info() # clear variable
-            nonlocal last_data_block
+            global last_data_block
             # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
             if not upscaled:
                 if last_data_block is not None:
@@ -124,7 +129,7 @@ class DreamTexture(bpy.types.Operator):
             scene.dream_textures_progress = step + 1
             if pixels is None:
                 return # show steps disabled
-            nonlocal last_data_block
+            global last_data_block
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, pixels)
@@ -197,6 +202,10 @@ def kill_generator(context=bpy.context):
     remove_timer(context)
     bpy.context.scene.dream_textures_progress = 0
     bpy.context.scene.dream_textures_info = ""
+    global last_data_block
+    if last_data_block is not None:
+        bpy.data.images.remove(last_data_block)
+        last_data_block = None
 
 class ReleaseGenerator(bpy.types.Operator):
     bl_idname = "shade.dream_textures_release_generator"

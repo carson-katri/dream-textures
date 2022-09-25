@@ -1,6 +1,5 @@
 import bpy
 from bpy.types import Panel
-from ..async_loop import *
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..operators.dream_texture import DreamTexture, image_has_alpha, ReleaseGenerator

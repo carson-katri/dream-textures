@@ -2,8 +2,8 @@ import json
 import subprocess
 import sys
 import os
+import threading
 import numpy as np
-
 from enum import IntEnum
 
 class Action(IntEnum):
@@ -19,54 +19,101 @@ class Action(IntEnum):
     def _missing_(cls, value):
         return cls.UNKNOWN
 
+class BackgroundReader():
+    def __init__(self, reader):
+        self.reader = reader
+        self.queue = []
+        self.args = None
+        self.killed = False
+        self.thread = threading.Thread(target=self._run,daemon=True,name="BackgroundReader")
+        self.thread.start()
+
+    def _run(self):
+        reader = self.reader
+        def readStr():
+            return str(reader.read(readUInt(4)), encoding='utf-8')
+        def readUInt(length):
+            return int.from_bytes(reader.read(length),sys.byteorder,signed=False)
+
+        queue = self.queue
+        def queue_exception(fatal, err):
+            queue.append((Action.EXCEPTION, fatal, err))
+
+        image_buffer = bytearray(512*512*16)
+        while True:
+            action = readUInt(1)
+            if action == Action.CLOSED:
+                if not self.killed:
+                    queue_exception(True, "Process closed unexpectedly")
+                return
+            elif action == Action.INFO:
+                queue.append((action, readStr()))
+            elif action == Action.IMAGE or action == Action.STEP_IMAGE:
+                seed = readUInt(4)
+                width = readUInt(4)
+                height = readUInt(4)
+                length = width*height*16
+                import math
+                w = math.floor(self.args['width']/64)*64 # stable diffusion rounds down internally
+                h = math.floor(self.args['height']/64)*64
+                if width != w or height != h:
+                    queue_exception(True, f"Internal error, received image of wrong resolution {width}x{height}, expected {w}x{h}")
+                    return
+                if length > len(image_buffer):
+                    image_buffer = bytearray(length)
+                m = memoryview(image_buffer)[:length]
+                reader.readinto(m)
+                image = np.frombuffer(m,dtype=np.float32)
+                queue.append((action, seed, width, height, image))
+            elif action == Action.STEP_NO_SHOW:
+                queue.append((action, readUInt(4)))
+            elif action == Action.EXCEPTION:
+                fatal = readUInt(1) != 0
+                queue_exception(fatal, readStr())
+                if fatal:
+                    return
+            else:
+                queue_exception(True, f"Internal error, unexpected action id: {action}")
+                return
+
 class GeneratorProcess():
     def __init__(self):
         self.process = subprocess.Popen([sys.executable,'generator_process.py'],cwd=os.path.dirname(os.path.realpath(__file__)),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
+        self.background_reader = BackgroundReader(self.process.stdout)
     
     def kill(self):
+        self.background_reader.killed = True
         self.process.kill()
     
     def prompt2image(self, args, step_callback, image_callback, info_callback, exception_callback):
+        self.background_reader.args = args
         stdin = self.process.stdin
-        stdout = self.process.stdout
-        b = bytes(json.dumps(args), 'utf-8')
+        b = bytes(json.dumps(args), encoding='utf-8')
         stdin.write(len(b).to_bytes(8,sys.byteorder,signed=False))
         stdin.write(b)
         stdin.flush()
 
-        def readStr():
-            return str(stdout.read(readUInt(4)), encoding='utf-8')
-
-        def readUInt(length):
-            return int.from_bytes(stdout.read(length),sys.byteorder,signed=False)
+        queue = self.background_reader.queue
+        callbacks = {
+            Action.INFO: info_callback,
+            Action.IMAGE: image_callback,
+            Action.STEP_IMAGE: step_callback,
+            Action.STEP_NO_SHOW: step_callback,
+            Action.EXCEPTION: exception_callback
+        }
 
         for i in range(0,args['iterations']):
             while True:
-                action = readUInt(1)
-                if action == Action.CLOSED:
-                    exception_callback(True, "Process closed unexpectedly")
-                    return
-                elif action == Action.INFO:
-                    info_callback(readStr())
-                elif action == Action.IMAGE or action == Action.STEP_IMAGE:
-                    seed = readUInt(4)
-                    width = readUInt(4)
-                    height = readUInt(4)
-                    image = np.frombuffer(stdout.read(width*height*4*4),dtype=np.float32)
-                    if action == Action.IMAGE:
-                        image_callback(seed, width, height, image, False)
-                        break
-                    else:
-                        step_callback(seed, width, height, image) # seed is step number in this case
-                elif action == Action.STEP_NO_SHOW:
-                    step_callback(readUInt(4))
+                if len(queue) == 0:
+                    yield
+                    continue
+                tup = queue.pop()
+                action = tup[0]
+                callbacks[action](*tup[1:])
+                if action == Action.IMAGE:
+                    break
                 elif action == Action.EXCEPTION:
-                    exception_callback(readUInt(1) != 0, readStr())
                     return
-                else:
-                    exception_callback(True, f"Unexpected action id: {action}")
-
-
 
 def main():
     from absolute_path import absolute_path
@@ -119,7 +166,9 @@ def main():
         b = (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).tobytes()
         for i in range(0,len(b),1024*64):
             stdout.write(b[i:i+1024*64])
-        # stdout.write(b) # writing it all at once was causing this to exit without error
+            stdout.flush()
+        # stdout.write(b) # keep above alternative in case if this starts crashing the subprocess without raising any exception again
+        stdout.flush()
 
     def image_writer(image, seed, upscaled=False):
         # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
@@ -131,9 +180,11 @@ def main():
     
     def view_step(samples, step):
         if args['show_steps']:
+            pixels = generator._sample_to_image(samples) # May run out of memory, keep before any writing
             writeUInt(1,Action.STEP_IMAGE)
             writeUInt(4,step)
-            write_pixels(generator._sample_to_image(samples))
+            write_pixels(pixels)
+            # write_pixels(image)
         else:
             writeUInt(1,Action.STEP_NO_SHOW)
             writeUInt(4,step)
@@ -182,6 +233,8 @@ def main():
                     low_ram = re.search(r"(Not enough memory, use lower resolution)( \(max approx. \d+x\d+\))",s,re.IGNORECASE)
                     if low_ram:
                         writeException(False, f"{low_ram[1]}{' or disable full precision' if args['full_precision'] else ''}{low_ram[2]}")
+                    elif s.find("CUDA out of memory. Tried to allocate"):
+                        writeException(False, f"Not enough memory, use lower resolution{' or disable full precision' if args['full_precision'] else ''}")
                     else:
                         writeException(True, s) # consider all unknown exceptions to be fatal so the generator process is fully restarted next time
         except Exception as e:

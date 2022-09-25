@@ -30,14 +30,13 @@ import importlib
 
 from .help_section import register_section_props
 
-from .async_loop import *
 from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .absolute_path import absolute_path
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
 from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
-from .operators.dream_texture import handle_exception_queue, kill_generator
+from .operators.dream_texture import kill_generator
 from .property_groups.dream_prompt import DreamPrompt
 from .ui import panel
 
@@ -49,9 +48,6 @@ requirements_path_items = (
 )
 
 def register():
-    async_loop.setup_asyncio_executor()
-    bpy.utils.register_class(AsyncLoopModalOperator)
-
     set_dependencies_installed(False)
     bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
     
@@ -82,12 +78,8 @@ def register():
 
     for tool in TOOLS:
         bpy.utils.register_tool(tool)
-    
-    bpy.app.timers.register(handle_exception_queue, persistent=True)
 
 def unregister():
-    bpy.utils.unregister_class(AsyncLoopModalOperator)
-
     for cls in PREFERENCE_CLASSES:
         bpy.utils.unregister_class(cls)
 
@@ -97,8 +89,6 @@ def unregister():
         for tool in TOOLS:
             bpy.utils.unregister_tool(tool)
         kill_generator()
-        if bpy.app.timers.is_registered(handle_exception_queue): # sometimes causing issues during development if not checked first
-            bpy.app.timers.unregister(handle_exception_queue)
 
 if __name__ == "__main__":
     register()

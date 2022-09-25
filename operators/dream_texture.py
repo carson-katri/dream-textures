@@ -1,12 +1,9 @@
 from importlib.resources import path
-from queue import Empty, Queue
 import bpy
-import asyncio
 import os
 import math
 
 from ..preferences import StableDiffusionPreferences
-from ..async_loop import *
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..absolute_path import WEIGHTS_PATH, absolute_path
@@ -20,7 +17,8 @@ import tempfile
 # This allows the slow model loading process to happen once,
 # and re-use the model on subsequent calls.
 generator = None
-exception_queue = Queue(4)
+generator_advance = None
+timer = None
 
 def image_has_alpha(img):
     b = 32 if img.is_float else 8
@@ -42,13 +40,24 @@ class DreamTexture(bpy.types.Operator):
             return {'CANCELLED'}
         return self.execute(context)
 
-    async def dream_texture(self, context):
+    def modal(self, context, event):
+        if event.type != 'TIMER':
+            return {'PASS_THROUGH'}
+        try:
+            next(generator_advance)
+        except StopIteration:
+            remove_timer(context)
+            return {'FINISHED'}
+        except Exception as e:
+            remove_timer(context)
+            raise e
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
         history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
         for prop in context.scene.dream_textures_prompt.__annotations__.keys():
             if hasattr(history_entry, prop):
                 setattr(history_entry, prop, getattr(context.scene.dream_textures_prompt, prop))
-
-        generated_prompt = context.scene.dream_textures_prompt.generate_prompt()
 
         node_tree = context.material.node_tree if hasattr(context, 'material') else None
         screen = context.screen
@@ -62,9 +71,7 @@ class DreamTexture(bpy.types.Operator):
             info() # clear variable
             if fatal:
                 kill_generator()
-            import sys
-            sys.stderr.write(f"{'ERROR' if fatal else 'WARNING'} {err}\n")
-            exception_queue.put((fatal, err)) # ui needs to run in main thread
+            self.report({'ERROR'},err)
 
 
         def step_progress_update(self, context):
@@ -147,56 +154,47 @@ class DreamTexture(bpy.types.Operator):
 
             return path
 
-        def perform():
-            init_img = scene.init_img if scene.dream_textures_prompt.use_init_img else None
-            if scene.dream_textures_prompt.use_inpainting:
-                for area in screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
-                        if area.spaces.active.image is not None and image_has_alpha(area.spaces.active.image):
-                            init_img = area.spaces.active.image
-            init_img_path = None
-            if init_img is not None:
-                init_img_path = save_temp_image(init_img)
+        init_img = scene.init_img if scene.dream_textures_prompt.use_init_img else None
+        if scene.dream_textures_prompt.use_inpainting:
+            for area in screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    if area.spaces.active.image is not None and image_has_alpha(area.spaces.active.image):
+                        init_img = area.spaces.active.image
+        init_img_path = None
+        if init_img is not None:
+            init_img_path = save_temp_image(init_img)
 
-            args = {key: getattr(scene.dream_textures_prompt,key) for key in DreamPrompt.__annotations__}
-            args['prompt'] = context.scene.dream_textures_prompt.generate_prompt()
-            args['seed'] = scene.dream_textures_prompt.get_seed()
-            args['init_img'] = init_img_path
+        args = {key: getattr(scene.dream_textures_prompt,key) for key in DreamPrompt.__annotations__}
+        args['prompt'] = context.scene.dream_textures_prompt.generate_prompt()
+        args['seed'] = scene.dream_textures_prompt.get_seed()
+        args['init_img'] = init_img_path
 
-            generator.prompt2image(args,
-                # a function or method that will be called each step
-                step_callback=view_step,
-                # a function or method that will be called each time an image is generated
-                image_callback=image_writer,
-                # a function or method that will recieve messages
-                info_callback=info,
-                exception_callback=handle_exception
-            )
+        global generator_advance
+        generator_advance = generator.prompt2image(args,
+            # a function or method that will be called each step
+            step_callback=view_step,
+            # a function or method that will be called each time an image is generated
+            image_callback=image_writer,
+            # a function or method that will recieve messages
+            info_callback=info,
+            exception_callback=handle_exception
+        )
+        context.window_manager.modal_handler_add(self)
+        self.timer = context.window_manager.event_timer_add(1 / 15, window=context.window)
+        return {'RUNNING_MODAL'}
 
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, perform)
-
-    def execute(self, context):
-        async_task = asyncio.ensure_future(self.dream_texture(context))
-        # async_task.add_done_callback(done_callback)
-        ensure_async_loop()
-
-        return {'FINISHED'}
-
-def handle_exception_queue():
-    try:
-        (fatal, err) = exception_queue.get_nowait()
-        bpy.ops.shade.dream_textures_exception("INVOKE_DEFAULT",exception_level="ERROR" if fatal else "INFO",exception=err)
-        exception_queue.task_done()
-    except Empty:
-        pass
-    return 1
+def remove_timer(context):
+    global timer
+    if timer:
+        context.window_manager.event_timer_remove(timer)
+        timer = None
 
 def kill_generator(context=bpy.context):
     global generator
     if generator:
         generator.kill()
     generator = None
+    remove_timer(context)
     bpy.context.scene.dream_textures_progress = 0
     bpy.context.scene.dream_textures_info = ""
 

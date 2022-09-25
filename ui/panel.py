@@ -1,6 +1,5 @@
 import bpy
 from bpy.types import Panel
-from ..async_loop import *
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..operators.dream_texture import DreamTexture, image_has_alpha, ReleaseGenerator
@@ -65,7 +64,7 @@ def draw_panel(self, context):
         seed_row.enabled = not scene.dream_textures_prompt.random_seed
         # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
         advanced_box.prop(scene.dream_textures_prompt, "steps")
-        advanced_box.prop(scene.dream_textures_prompt, "cfgscale")
+        advanced_box.prop(scene.dream_textures_prompt, "cfg_scale")
         advanced_box.prop(scene.dream_textures_prompt, "sampler")
         advanced_box.prop(scene.dream_textures_prompt, "show_steps")
     
@@ -76,7 +75,10 @@ def draw_panel(self, context):
     row = layout.row()
     row.scale_y = 1.5
     if context.scene.dream_textures_progress <= 0:
-        row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
+        if context.scene.dream_textures_info != "":
+            row.label(text=context.scene.dream_textures_info, icon="INFO")
+        else:
+            row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
     else:
         row.prop(context.scene, 'dream_textures_progress', slider=True)
         row.enabled = False

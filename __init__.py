@@ -24,22 +24,19 @@ bl_info = {
 }
 
 import bpy
-from bpy.props import IntProperty, PointerProperty, EnumProperty, FloatProperty
+from bpy.props import IntProperty, PointerProperty, EnumProperty
 import sys
-import site
 import importlib
 
 from .help_section import register_section_props
 
-from .async_loop import *
 from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
-from .absolute_path import absolute_path
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
 from .operators.install_dependencies import are_dependencies_installed, set_dependencies_installed
+from .operators.dream_texture import kill_generator
 from .property_groups.dream_prompt import DreamPrompt
-from .ui import panel
 
 requirements_path_items = (
     # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
@@ -49,19 +46,6 @@ requirements_path_items = (
 )
 
 def register():
-    async_loop.setup_asyncio_executor()
-    bpy.utils.register_class(AsyncLoopModalOperator)
-
-    site.addsitedir(absolute_path(".python_dependencies"))
-
-    import pkg_resources
-    pkg_resources._initialize_master_working_set()
-
-    sys.path.append(absolute_path("stable_diffusion/"))
-    sys.path.append(absolute_path("stable_diffusion/src/clip"))
-    sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
-    sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
-
     set_dependencies_installed(False)
     bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
     
@@ -85,6 +69,7 @@ def register():
     bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
     bpy.types.Scene.dream_textures_history_selection = IntProperty()
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
+    bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)
@@ -93,8 +78,6 @@ def register():
         bpy.utils.register_tool(tool)
 
 def unregister():
-    bpy.utils.unregister_class(AsyncLoopModalOperator)
-
     for cls in PREFERENCE_CLASSES:
         bpy.utils.unregister_class(cls)
 
@@ -103,6 +86,7 @@ def unregister():
             bpy.utils.unregister_class(cls)
         for tool in TOOLS:
             bpy.utils.unregister_tool(tool)
+        kill_generator()
 
 if __name__ == "__main__":
     register()

@@ -85,7 +85,7 @@ git submodule update --init --recursive
 2. I recommend the [Blender Development](https://marketplace.visualstudio.com/items?itemName=JacquesLucke.blender-development) extension for VS Code.
 3. After running the local add-on in Blender, setup the model weights like normal.
 4. Install dependencies locally
-  * Open Blender's preferences window.
-  * Enable *Interface* > *Developer Extras*
-  * Then install dependencies for development under *Add-ons* > *Dream Textures*
-  * This will download all pip dependencies for the selected platform into `.python_dependencies`.
+    * Open Blender's preferences window
+    * Enable *Interface* > *Display* > *Developer Extras*
+    * Then install dependencies for development under *Add-ons* > *Dream Textures* > *Development Tools*
+    * This will download all pip dependencies for the selected platform into `.python_dependencies`

@@ -3,9 +3,12 @@ from bpy.types import Panel
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..operators.dream_texture import DreamTexture, image_has_alpha, ReleaseGenerator
-from ..operators.view_history import ViewHistory
+from ..operators.view_history import SCENE_UL_HistoryList, RecallHistoryEntry
 from ..operators.open_latest_version import OpenLatestVersion, new_version_available
-from ..operators.help_panel import HelpPanel
+from ..help_section import help_section
+from ..preferences import StableDiffusionPreferences
+
+SPACE_TYPES = {'IMAGE_EDITOR', 'NODE_EDITOR'}
 
 def draw_panel(self, context):
     layout = self.layout
@@ -69,10 +72,6 @@ def draw_panel(self, context):
         advanced_box.prop(scene.dream_textures_prompt, "show_steps")
     
     row = layout.row()
-    row.operator(ViewHistory.bl_idname, icon="RECOVER_LAST")
-    row.operator(HelpPanel.bl_idname, icon="QUESTION", text="")
-    row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
-    row = layout.row()
     row.scale_y = 1.5
     if context.scene.dream_textures_progress <= 0:
         if context.scene.dream_textures_info != "":
@@ -80,26 +79,82 @@ def draw_panel(self, context):
         else:
             row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
     else:
-        row.prop(context.scene, 'dream_textures_progress', slider=True)
-        row.enabled = False
+        disabled_row = row.row()
+        disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
+        disabled_row.enabled = False
+    row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
 
-class DREAM_PT_dream_panel(Panel):
-    """Creates a Panel in the scene context of the properties editor"""
-    bl_label = "Dream Texture"
-    bl_category = "Dream"
-    bl_idname = "DREAM_PT_dream_panel"
-    bl_space_type = 'IMAGE_EDITOR'
-    bl_region_type = 'UI'
+def panels():
+    for space_type in SPACE_TYPES:
+        class DreamTexturePanel(Panel):
+            """Creates a Panel in the scene context of the properties editor"""
+            bl_label = "Dream Texture"
+            bl_category = "Dream"
+            bl_idname = f"DREAM_PT_dream_panel_{space_type}"
+            bl_space_type = space_type
+            bl_region_type = 'UI'
 
-    def draw(self, context):
-        draw_panel(self, context)
+            @classmethod
+            def poll(self, context):
+                if self.bl_space_type == 'NODE_EDITOR':
+                    return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
+                else:
+                    return True
 
-class DREAM_PT_dream_node_panel(Panel):
-    bl_idname = "DREAM_PT_dream_node_panel"
-    bl_label = "Dream Texture"
-    bl_category = "Dream"
-    bl_space_type = 'NODE_EDITOR'
-    bl_region_type = 'UI'
+            def draw(self, context):
+                draw_panel(self, context)
+        DreamTexturePanel.__name__ = f"DREAM_PT_dream_panel_{space_type}"
+        yield DreamTexturePanel
 
-    def draw(self, context):
-        draw_panel(self, context)
+def history_panels():
+    for space_type in SPACE_TYPES:
+        class HistoryPanel(Panel):
+            """Panel for Dream Textures History"""
+            bl_label = "History"
+            bl_category = "Dream"
+            bl_idname = f"DREAM_PT_dream_history_panel_{space_type}"
+            bl_space_type = space_type
+            bl_region_type = 'UI'
+
+            selection: bpy.props.IntProperty(name="Selection")
+
+            @classmethod
+            def poll(self, context):
+                if self.bl_space_type == 'NODE_EDITOR':
+                    return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
+                else:
+                    return True
+
+            def draw(self, context):
+                header = self.layout.row()
+                header.label(text="Subject")
+                header.label(text="Size")
+                header.label(text="Steps")
+                header.label(text="Sampler")
+                self.layout.template_list("SCENE_UL_HistoryList", "", context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences, "history", context.scene, "dream_textures_history_selection")
+                self.layout.operator(RecallHistoryEntry.bl_idname)
+        HistoryPanel.__name__ = f"DREAM_PT_dream_history_panel_{space_type}"
+        yield HistoryPanel
+
+def troubleshooting_panels():
+    for space_type in SPACE_TYPES:
+        class TroubleshootingPanel(Panel):
+            """Panel for Dream Textures Troubleshooting"""
+            bl_label = "Troubleshooting"
+            bl_category = "Dream"
+            bl_idname = f"DREAM_PT_dream_troubleshooting_panel_{space_type}"
+            bl_space_type = space_type
+            bl_region_type = 'UI'
+            bl_options = {'DEFAULT_CLOSED'}
+
+            @classmethod
+            def poll(self, context):
+                if self.bl_space_type == 'NODE_EDITOR':
+                    return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
+                else:
+                    return True
+
+            def draw(self, context):
+                help_section(self.layout, context)
+        TroubleshootingPanel.__name__ = f"DREAM_PT_dream_troubleshooting_panel_{space_type}"
+        yield TroubleshootingPanel

@@ -69,6 +69,9 @@ class DreamTexture(bpy.types.Operator):
             if fatal:
                 kill_generator()
             self.report({'ERROR'},err)
+            if err == "Python dependencies are missing. Click update to download full addon.":
+                from .open_latest_version import force_show_update
+                force_show_update()
 
 
         def step_progress_update(self, context):

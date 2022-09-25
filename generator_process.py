@@ -113,30 +113,6 @@ class GeneratorProcess():
                 return
 
 def main():
-    from absolute_path import absolute_path
-    # Support Apple Silicon GPUs as much as possible.
-    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-    sys.path.append(absolute_path("stable_diffusion/"))
-    sys.path.append(absolute_path("stable_diffusion/src/clip"))
-    sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
-    sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
-
-    site.addsitedir(absolute_path(".python_dependencies"))
-    import pkg_resources
-    pkg_resources._initialize_master_working_set()
-
-    from stable_diffusion.ldm.generate import Generate
-    from omegaconf import OmegaConf
-    from PIL import ImageOps
-    from io import StringIO
-
-    models_config  = absolute_path('stable_diffusion/configs/models.yaml')
-    model   = 'stable-diffusion-1.4'
-
-    models  = OmegaConf.load(models_config)
-    config  = absolute_path('stable_diffusion/' + models[model].config)
-    weights = absolute_path('stable_diffusion/' + models[model].weights)
-
     stdin = sys.stdin.buffer
     stdout = sys.stdout.buffer
     sys.stdout = open(os.devnull, 'w') # prevent stable diffusion logs from breaking ipc
@@ -160,6 +136,38 @@ def main():
         writeUInt(1,1 if fatal else 0)
         writeStr(e)
         stdout.flush()
+
+    try:
+        from absolute_path import absolute_path
+        # Support Apple Silicon GPUs as much as possible.
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+        sys.path.append(absolute_path("stable_diffusion/"))
+        sys.path.append(absolute_path("stable_diffusion/src/clip"))
+        sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
+        sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
+
+        site.addsitedir(absolute_path(".python_dependencies"))
+        import pkg_resources
+        pkg_resources._initialize_master_working_set()
+
+        from stable_diffusion.ldm.generate import Generate
+        from omegaconf import OmegaConf
+        from PIL import ImageOps
+        from io import StringIO
+    except Exception as e:
+        e = str(e)
+        if e.startswith("No module named"):
+            if not os.path.exists(".python_dependencies") or len(os.listdir()) < 10: # bump this up if more files get added to .python_dependencies in source
+                e = "Python dependencies are missing. Click update to download full addon."
+        writeException(True, e)
+        return
+
+    models_config  = absolute_path('stable_diffusion/configs/models.yaml')
+    model   = 'stable-diffusion-1.4'
+
+    models  = OmegaConf.load(models_config)
+    config  = absolute_path('stable_diffusion/' + models[model].config)
+    weights = absolute_path('stable_diffusion/' + models[model].weights)
 
     byte_to_normalized = 1.0 / 255.0
     def write_pixels(image):

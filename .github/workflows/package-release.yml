@@ -1,8 +1,8 @@
 name: Package Release
-on: [push]
-  # push:
-  #   branches:
-  #     - "releases/**"
+on:
+  push:
+    branches:
+      - "releases/**"
 
 # This is complicated without native ARM runners. For now, macOS builds can be deployed manually.
 # jobs:

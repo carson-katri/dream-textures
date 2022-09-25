@@ -129,11 +129,11 @@ def history_panels():
                     return True
 
             def draw(self, context):
-                header = self.layout.row()
-                header.label(text="Subject")
-                header.label(text="Size")
-                header.label(text="Steps")
-                header.label(text="Sampler")
+                if len(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history) < 1:
+                    header = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
+                else:
+                    header = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history[0]
+                header.prompt_structure_token_subject = "SCENE_UL_HistoryList_header"
                 self.layout.template_list("SCENE_UL_HistoryList", "", context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences, "history", context.scene, "dream_textures_history_selection")
                 self.layout.operator(RecallHistoryEntry.bl_idname)
         HistoryPanel.__name__ = f"DREAM_PT_dream_history_panel_{space_type}"

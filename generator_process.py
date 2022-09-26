@@ -206,6 +206,52 @@ def main():
             writeUInt(4,step)
         stdout.flush()
 
+    def preload_models():
+        from huggingface_hub.utils.tqdm import tqdm
+
+        current_model_name = ""
+        def start_preloading(model_name):
+            nonlocal current_model_name
+            current_model_name = model_name
+            writeInfo(f"Downloading {model_name} (0%)")
+
+        def update_decorator(original):
+            def update(self, n=1):
+                result = original(self, n)
+                nonlocal current_model_name
+                frac = self.n / self.total
+                percentage = int(frac * 100)
+                if self.n - self.last_print_n >= self.miniters:
+                    writeInfo(f"Downloading {current_model_name} ({percentage}%)")
+                return result
+            return update
+        old_update = tqdm.update
+        tqdm.update = update_decorator(tqdm.update)
+
+        import warnings
+        import transformers
+        transformers.logging.set_verbosity_error()
+
+        start_preloading("BERT tokenizer")
+        transformers.BertTokenizerFast.from_pretrained('bert-base-uncased')
+
+        writeInfo("Preloading `kornia` requirements")
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=DeprecationWarning)
+            import kornia
+
+        start_preloading("CLIP")
+        clip_version = 'openai/clip-vit-large-patch14'
+        transformers.CLIPTokenizer.from_pretrained(clip_version)
+        transformers.CLIPTextModel.from_pretrained(clip_version)
+
+        tqdm.update = old_update
+    
+    from transformers.utils.hub import TRANSFORMERS_CACHE
+    model_paths = {'bert-base-uncased', 'openai--clip-vit-large-patch14'}
+    if any(not os.path.isdir(os.path.join(TRANSFORMERS_CACHE, f'models--{path}')) for path in model_paths):
+        preload_models()
+
     generator = None
     while True:
         json_len = int.from_bytes(stdin.read(8),sys.byteorder,signed=False)

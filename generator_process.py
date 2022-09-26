@@ -159,6 +159,8 @@ def main():
                        # don't set too high so it can still pass info on individual missing modules
         if not os.path.exists(".python_dependencies") or len(os.listdir()) < min_files:
             e = "Python dependencies are missing. Click update to download full addon."
+        else:
+            e = repr(e)
         writeException(True, e)
         return
     except Exception as e:

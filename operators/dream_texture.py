@@ -116,6 +116,7 @@ class DreamTexture(bpy.types.Operator):
                 scene.dream_textures_progress = 0
                 scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
                 history_entry.seed = str(seed)
+                history_entry.random_seed = False
         
         def view_step(step, width=None, height=None, pixels=None):
             info() # clear variable

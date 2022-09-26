@@ -196,7 +196,7 @@ def main():
         import transformers
         transformers.logging.set_verbosity_error()
 
-        writeInfo("Preloading BERT tokenizer")
+        writeInfo("Preloading BERT tokenizer (440MB)")
         transformers.BertTokenizerFast.from_pretrained('bert-base-uncased')
 
         writeInfo("Preloading `kornia` requirements")
@@ -204,12 +204,15 @@ def main():
             warnings.filterwarnings('ignore', category=DeprecationWarning)
             import kornia
 
-        writeInfo("Preloading CLIP model")
+        writeInfo("Preloading CLIP model (1.71GB)")
         clip_version = 'openai/clip-vit-large-patch14'
         transformers.CLIPTokenizer.from_pretrained(clip_version)
         transformers.CLIPTextModel.from_pretrained(clip_version)
     
-    preload_models()
+    from transformers.utils.hub import TRANSFORMERS_CACHE
+    model_paths = {'bert-base-uncased', 'openai--clip-vit-large-patch14'}
+    if any(not os.path.isdir(os.path.join(TRANSFORMERS_CACHE, f'models--{path}')) for path in model_paths):
+        preload_models()
 
     generator = None
     while True:

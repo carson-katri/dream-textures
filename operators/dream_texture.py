@@ -7,7 +7,7 @@ from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..absolute_path import WEIGHTS_PATH
-from ..generator_process import GeneratorProcess
+from ..generator_process import MISSING_DEPENDENCIES_ERROR, GeneratorProcess
 from ..property_groups.dream_prompt import DreamPrompt
 
 import tempfile
@@ -69,6 +69,9 @@ class DreamTexture(bpy.types.Operator):
             if fatal:
                 kill_generator()
             self.report({'ERROR'},err)
+            if err == MISSING_DEPENDENCIES_ERROR:
+                from .open_latest_version import do_force_show_download
+                do_force_show_download()
 
 
         def step_progress_update(self, context):

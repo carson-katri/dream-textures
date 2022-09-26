@@ -7,6 +7,8 @@ import site
 import numpy as np
 from enum import IntEnum as Lawsuit
 
+MISSING_DEPENDENCIES_ERROR = "Python dependencies are missing. Click Download Latest Release to fix."
+
 # IPC message types from subprocess
 class Action(Lawsuit): # can't help myself
     UNKNOWN = -1
@@ -113,30 +115,6 @@ class GeneratorProcess():
                 return
 
 def main():
-    from absolute_path import absolute_path
-    # Support Apple Silicon GPUs as much as possible.
-    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-    sys.path.append(absolute_path("stable_diffusion/"))
-    sys.path.append(absolute_path("stable_diffusion/src/clip"))
-    sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
-    sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
-
-    site.addsitedir(absolute_path(".python_dependencies"))
-    import pkg_resources
-    pkg_resources._initialize_master_working_set()
-
-    from stable_diffusion.ldm.generate import Generate
-    from omegaconf import OmegaConf
-    from PIL import ImageOps
-    from io import StringIO
-
-    models_config  = absolute_path('stable_diffusion/configs/models.yaml')
-    model   = 'stable-diffusion-1.4'
-
-    models  = OmegaConf.load(models_config)
-    config  = absolute_path('stable_diffusion/' + models[model].config)
-    weights = absolute_path('stable_diffusion/' + models[model].weights)
-
     stdin = sys.stdin.buffer
     stdout = sys.stdout.buffer
     sys.stdout = open(os.devnull, 'w') # prevent stable diffusion logs from breaking ipc
@@ -160,6 +138,43 @@ def main():
         writeUInt(1,1 if fatal else 0)
         writeStr(e)
         stdout.flush()
+
+    try:
+        from absolute_path import absolute_path
+        # Support Apple Silicon GPUs as much as possible.
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+        sys.path.append(absolute_path("stable_diffusion/"))
+        sys.path.append(absolute_path("stable_diffusion/src/clip"))
+        sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
+        sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
+
+        site.addsitedir(absolute_path(".python_dependencies"))
+        import pkg_resources
+        pkg_resources._initialize_master_working_set()
+
+        from stable_diffusion.ldm.generate import Generate
+        from omegaconf import OmegaConf
+        from PIL import ImageOps
+        from io import StringIO
+    except ModuleNotFoundError as e:
+        min_files = 10 # bump this up if more files get added to .python_dependencies in source
+                       # don't set too high so it can still pass info on individual missing modules
+        if not os.path.exists(".python_dependencies") or len(os.listdir()) < min_files:
+            e = MISSING_DEPENDENCIES_ERROR
+        else:
+            e = repr(e)
+        writeException(True, e)
+        return
+    except Exception as e:
+        writeException(True, repr(e))
+        return
+
+    models_config  = absolute_path('stable_diffusion/configs/models.yaml')
+    model   = 'stable-diffusion-1.4'
+
+    models  = OmegaConf.load(models_config)
+    config  = absolute_path('stable_diffusion/' + models[model].config)
+    weights = absolute_path('stable_diffusion/' + models[model].weights)
 
     byte_to_normalized = 1.0 / 255.0
     def write_pixels(image):
@@ -211,7 +226,7 @@ def main():
                 )
                 generator.load_model()
             except Exception as e:
-                writeException(True, str(e))
+                writeException(True, repr(e))
                 return
         writeInfo("Starting")
         
@@ -240,7 +255,7 @@ def main():
                         writeException(True, s) # consider all unknown exceptions to be fatal so the generator process is fully restarted next time
                         return
         except Exception as e:
-            writeException(True, str(e))
+            writeException(True, repr(e))
             return
         finally:
             sys.stderr = stderr

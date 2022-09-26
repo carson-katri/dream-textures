@@ -164,7 +164,7 @@ def main():
         writeException(True, e)
         return
     except Exception as e:
-        writeException(True, e)
+        writeException(True, repr(e))
         return
 
     models_config  = absolute_path('stable_diffusion/configs/models.yaml')

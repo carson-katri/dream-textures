@@ -18,12 +18,14 @@ def check_for_updates():
         pass
 
 def new_version_available():
-    return FORCE_SHOW_UPDATE or not latest_version == VERSION
+    return not latest_version == VERSION
 
-FORCE_SHOW_UPDATE = False
-def force_show_update():
-    global FORCE_SHOW_UPDATE
-    FORCE_SHOW_UPDATE = True
+force_show_download = False
+def do_force_show_download():
+    global force_show_download
+    force_show_download = True
+def is_force_show_download():
+    return force_show_download
 
 class OpenLatestVersion(bpy.types.Operator):
     bl_idname = "stable_diffusion.open_latest_version"

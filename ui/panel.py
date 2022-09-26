@@ -4,7 +4,7 @@ from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..operators.dream_texture import DreamTexture, ReleaseGenerator
 from ..operators.view_history import SCENE_UL_HistoryList, RecallHistoryEntry
-from ..operators.open_latest_version import OpenLatestVersion, new_version_available
+from ..operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ..help_section import help_section
 from ..preferences import StableDiffusionPreferences
 import sys
@@ -15,7 +15,9 @@ def draw_panel(self, context):
     layout = self.layout
     scene = context.scene
 
-    if new_version_available():
+    if is_force_show_download():
+        layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
+    elif new_version_available():
         layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
 
     prompt_box = layout.box()

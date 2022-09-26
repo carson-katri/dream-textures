@@ -224,7 +224,7 @@ def main():
                 )
                 generator.load_model()
             except Exception as e:
-                writeException(True, str(e))
+                writeException(True, repr(e))
                 return
         writeInfo("Starting")
         
@@ -253,7 +253,7 @@ def main():
                         writeException(True, s) # consider all unknown exceptions to be fatal so the generator process is fully restarted next time
                         return
         except Exception as e:
-            writeException(True, str(e))
+            writeException(True, repr(e))
             return
         finally:
             sys.stderr = stderr

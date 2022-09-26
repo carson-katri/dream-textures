@@ -20,6 +20,13 @@ def check_for_updates():
 def new_version_available():
     return not latest_version == VERSION
 
+force_show_download = False
+def do_force_show_download():
+    global force_show_download
+    force_show_download = True
+def is_force_show_download():
+    return force_show_download
+
 class OpenLatestVersion(bpy.types.Operator):
     bl_idname = "stable_diffusion.open_latest_version"
     bl_label = f"Update Available..."

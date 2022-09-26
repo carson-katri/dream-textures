@@ -191,6 +191,26 @@ def main():
             writeUInt(4,step)
         stdout.flush()
 
+    def preload_models():
+        import warnings
+        import transformers
+        transformers.logging.set_verbosity_error()
+
+        writeInfo("Preloading BERT tokenizer")
+        transformers.BertTokenizerFast.from_pretrained('bert-base-uncased')
+
+        writeInfo("Preloading `kornia` requirements")
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=DeprecationWarning)
+            import kornia
+
+        writeInfo("Preloading CLIP model")
+        clip_version = 'openai/clip-vit-large-patch14'
+        transformers.CLIPTokenizer.from_pretrained(clip_version)
+        transformers.CLIPTextModel.from_pretrained(clip_version)
+    
+    preload_models()
+
     generator = None
     while True:
         json_len = int.from_bytes(stdin.read(8),sys.byteorder,signed=False)

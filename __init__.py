@@ -24,7 +24,7 @@ bl_info = {
 }
 
 import bpy
-from bpy.props import IntProperty, PointerProperty, EnumProperty
+from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty
 import sys
 
 from .help_section import register_section_props
@@ -59,6 +59,9 @@ def register():
     bpy.types.Scene.dream_textures_history_selection = IntProperty()
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
+
+    bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)
+    bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)

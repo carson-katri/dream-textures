@@ -5,7 +5,7 @@ import os
 import threading
 import site
 import numpy as np
-from enum import IntEnum as Lawsuit
+from enum import IntEnum as Lawsuit, auto
 
 MISSING_DEPENDENCIES_ERROR = "Python dependencies are missing. Click Download Latest Release to fix."
 
@@ -207,7 +207,16 @@ def main():
         stdout.flush()
 
     def preload_models():
-        from huggingface_hub.utils.tqdm import tqdm
+        tqdm = None
+        try:
+            from huggingface_hub.utils.tqdm import tqdm as hfh_tqdm
+            tqdm = hfh_tqdm
+        except:
+            try:
+                from tqdm.auto import tqdm as auto_tqdm
+                tqdm = auto_tqdm
+            except:
+                return
 
         current_model_name = ""
         def start_preloading(model_name):

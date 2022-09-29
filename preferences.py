@@ -86,11 +86,12 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     def draw(self, context):
         layout = self.layout
 
-        if not os.path.exists(absolute_path("stable_diffusion") or os.listdir(absolute_path("stable_diffusion")) < 5):
+        if not os.path.exists(absolute_path("stable_diffusion")) or len(os.listdir(absolute_path("stable_diffusion"))) < 5:
             missing_sd_box = layout.box()
             missing_sd_box.label(text="Stable diffusion is missing.", icon="ERROR")
             missing_sd_box.label(text="You've likely downloaded source instead of release by accident.")
             missing_sd_box.operator(OpenLatestVersion.bl_idname, text="Download Latest Release")
+            return
 
         weights_installed = os.path.exists(WEIGHTS_PATH)
 

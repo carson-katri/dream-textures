@@ -33,7 +33,7 @@ from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
-from .operators.dream_texture import kill_generator
+from .operators.dream_texture import DreamTexture, kill_generator
 from .property_groups.dream_prompt import DreamPrompt
 
 requirements_path_items = (
@@ -43,7 +43,20 @@ requirements_path_items = (
     ('stable_diffusion/requirements-lin-AMD.txt', 'Linux (AMD)', 'Linux with AMD GPU'),
 )
 
+def childFromPath(parent, path):
+    for child in path:
+        if hasattr(parent, child):
+            parent = getattr(parent, child)
+        else:
+            return None
+    return parent
+
 def register():
+    if childFromPath(bpy.ops, DreamTexture.bl_idname.split(".")):
+        raise RuntimeError("Another instance of Dream Textures was still running during installation.\nPlease uninstall all instances of Dream Textures, then restart blender and try again.")
+        # could use addon_utils to disable the previous one but it likely installed to the same folder and may cause other issues
+        # best to have the previous completely removed before installing the next
+
     bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
     
     register_section_props()

@@ -5,9 +5,11 @@ import sys
 import webbrowser
 from shutil import which
 
+
 from .help_section import help_section
-from .absolute_path import WEIGHTS_PATH
+from .absolute_path import WEIGHTS_PATH, absolute_path
 from .operators.install_dependencies import InstallDependencies
+from .operators.open_latest_version import OpenLatestVersion
 from .property_groups.dream_prompt import DreamPrompt
 
 class OpenHuggingFace(bpy.types.Operator):
@@ -83,6 +85,12 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
     def draw(self, context):
         layout = self.layout
+
+        if not os.path.exists(absolute_path("stable_diffusion") or os.listdir(absolute_path("stable_diffusion")) < 5):
+            missing_sd_box = layout.box()
+            missing_sd_box.label(text="Stable diffusion is missing.", icon="ERROR")
+            missing_sd_box.label(text="You've likely downloaded source instead of release by accident.")
+            missing_sd_box.operator(OpenLatestVersion.bl_idname, text="Download Latest Release")
 
         weights_installed = os.path.exists(WEIGHTS_PATH)
 

@@ -1,4 +1,5 @@
 from importlib.resources import path
+import sys
 import bpy
 import os
 import math
@@ -64,12 +65,14 @@ class DreamTexture(bpy.types.Operator):
         def info(msg=""):
             scene.dream_textures_info = msg
         
-        def handle_exception(fatal, err):
+        def handle_exception(fatal, msg, trace):
             info() # clear variable
             if fatal:
                 kill_generator()
-            self.report({'ERROR'},err)
-            if err == MISSING_DEPENDENCIES_ERROR:
+            self.report({'ERROR'},msg)
+            if trace:
+                print(trace, file=sys.stderr)
+            if msg == MISSING_DEPENDENCIES_ERROR:
                 from .open_latest_version import do_force_show_download
                 do_force_show_download()
 

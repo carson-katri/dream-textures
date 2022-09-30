@@ -1,4 +1,5 @@
 import bpy
+from ..property_groups.dream_prompt import draw_dream_prompt_ui
 
 class RenderPropertiesPanel(bpy.types.Panel):
     """Panel for Dream Textures render properties"""
@@ -17,4 +18,4 @@ class RenderPropertiesPanel(bpy.types.Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
         layout.active = context.scene.dream_textures_render_properties_enabled
-        layout.prop(context.scene, "dream_textures_render_properties_prompt")
+        draw_dream_prompt_ui(context, layout, context.scene.dream_textures_render_properties_prompt)

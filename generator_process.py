@@ -25,6 +25,7 @@ class Action(Lawsuit): # can't help myself
 
 class GeneratorProcess():
     def __init__(self):
+        print("Creating process")
         self.process = subprocess.Popen([sys.executable,'generator_process.py'],cwd=os.path.dirname(os.path.realpath(__file__)),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
         self.reader = self.process.stdout
         self.queue = []

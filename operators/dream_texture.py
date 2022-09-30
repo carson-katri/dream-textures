@@ -1,3 +1,4 @@
+from email.mime import image
 from importlib.resources import path
 import bpy
 import os
@@ -15,7 +16,7 @@ import tempfile
 # A shared `Generate` instance.
 # This allows the slow model loading process to happen once,
 # and re-use the model on subsequent calls.
-generator = None
+generator: GeneratorProcess | None = None
 generator_advance = None
 last_data_block = None
 timer = None
@@ -23,6 +24,86 @@ timer = None
 class DreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture"
     bl_label = "Dream Texture"
+    bl_description = "Generate a texture with AI"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(cls, context):
+        global timer
+        return timer is None
+    
+    def execute(self, context):
+        history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
+        for prop in context.scene.dream_textures_prompt.__annotations__.keys():
+            if hasattr(history_entry, prop):
+                setattr(history_entry, prop, getattr(context.scene.dream_textures_prompt, prop))
+
+        def bpy_image(name, width, height, pixels):
+            image = bpy.data.images.new(name, width=width, height=height)
+            image.pixels[:] = pixels
+            image.pack()
+            return image
+
+        node_tree = context.material.node_tree if hasattr(context, 'material') else None
+        screen = context.screen
+        scene = context.scene
+
+        def image_writer(seed, width, height, pixels, upscaled=False):
+            global last_data_block
+            # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
+            if not upscaled:
+                if last_data_block is not None:
+                    bpy.data.images.remove(last_data_block)
+                    last_data_block = None
+                if generator is None or generator.process.poll() or width == 0 or height == 0:
+                    return # process was closed
+                image = bpy_image(f"{seed}", width, height, pixels)
+                if node_tree is not None:
+                    nodes = node_tree.nodes
+                    texture_node = nodes.new("ShaderNodeTexImage")
+                    texture_node.image = image
+                    nodes.active = texture_node
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        area.spaces.active.image = image
+                scene.dream_textures_progress = 0
+                scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
+                history_entry.seed = str(seed)
+                history_entry.random_seed = False
+        
+        def view_step(step, width=None, height=None, pixels=None):
+            if pixels is None:
+                return # show steps disabled
+            global last_data_block
+            for area in screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, pixels)
+                    area.spaces.active.image = step_image
+                    if last_data_block is not None:
+                        bpy.data.images.remove(last_data_block)
+                    last_data_block = step_image
+                    return # Only perform this on the first image editor found.
+        dream_texture(context.scene.dream_textures_prompt, view_step, image_writer)
+        return {"FINISHED"}
+
+headless_prompt = None
+headless_step_callback = None
+headless_image_callback = None
+headless_init_img = None
+def dream_texture(prompt, step_callback, image_callback, init_img=None):
+    global headless_prompt
+    headless_prompt = prompt
+    global headless_step_callback
+    headless_step_callback = step_callback
+    global headless_image_callback
+    headless_image_callback = image_callback
+    global headless_init_img
+    headless_init_img = init_img
+    bpy.ops.shade.dream_texture_headless()
+
+class HeadlessDreamTexture(bpy.types.Operator):
+    bl_idname = "shade.dream_texture_headless"
+    bl_label = "Headless Dream Texture"
     bl_description = "Generate a texture with AI"
     bl_options = {'REGISTER'}
 
@@ -52,12 +133,7 @@ class DreamTexture(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
-        for prop in context.scene.dream_textures_prompt.__annotations__.keys():
-            if hasattr(history_entry, prop):
-                setattr(history_entry, prop, getattr(context.scene.dream_textures_prompt, prop))
-
-        node_tree = context.material.node_tree if hasattr(context, 'material') else None
+        global headless_prompt
         screen = context.screen
         scene = context.scene
 
@@ -81,60 +157,16 @@ class DreamTexture(bpy.types.Operator):
                         region.tag_redraw()
             return None
 
-        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=context.scene.dream_textures_prompt.steps + 1, update=step_progress_update)
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=headless_prompt.steps + 1, update=step_progress_update)
         bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info", update=step_progress_update)
 
         global generator
         if generator is None:
             info("Initializing Process")
-            generator = GeneratorProcess()
+            print("initializing process")
+            create_generator()
         else:
             info("Waiting For Process")
-
-        def bpy_image(name, width, height, pixels):
-            image = bpy.data.images.new(name, width=width, height=height)
-            image.pixels[:] = pixels
-            image.pack()
-            return image
-
-        def image_writer(seed, width, height, pixels, upscaled=False):
-            info() # clear variable
-            global last_data_block
-            # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
-            if not upscaled:
-                if last_data_block is not None:
-                    bpy.data.images.remove(last_data_block)
-                    last_data_block = None
-                if generator is None or generator.process.poll() or width == 0 or height == 0:
-                    return # process was closed
-                image = bpy_image(f"{seed}", width, height, pixels)
-                if node_tree is not None:
-                    nodes = node_tree.nodes
-                    texture_node = nodes.new("ShaderNodeTexImage")
-                    texture_node.image = image
-                    nodes.active = texture_node
-                for area in screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
-                        area.spaces.active.image = image
-                scene.dream_textures_progress = 0
-                scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
-                history_entry.seed = str(seed)
-                history_entry.random_seed = False
-        
-        def view_step(step, width=None, height=None, pixels=None):
-            info() # clear variable
-            scene.dream_textures_progress = step + 1
-            if pixels is None:
-                return # show steps disabled
-            global last_data_block
-            for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, pixels)
-                    area.spaces.active.image = step_image
-                    if last_data_block is not None:
-                        bpy.data.images.remove(last_data_block)
-                    last_data_block = step_image
-                    return # Only perform this on the first image editor found.
 
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
@@ -156,8 +188,9 @@ class DreamTexture(bpy.types.Operator):
 
             return path
 
-        init_img = scene.init_img if scene.dream_textures_prompt.use_init_img else None
-        if scene.dream_textures_prompt.use_inpainting:
+        global headless_init_img
+        init_img = headless_init_img or (scene.init_img if headless_prompt.use_init_img else None)
+        if headless_prompt.use_inpainting:
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     if area.spaces.active.image is not None:
@@ -166,17 +199,28 @@ class DreamTexture(bpy.types.Operator):
         if init_img is not None:
             init_img_path = save_temp_image(init_img)
 
-        args = {key: getattr(scene.dream_textures_prompt,key) for key in DreamPrompt.__annotations__}
-        args['prompt'] = context.scene.dream_textures_prompt.generate_prompt()
-        args['seed'] = scene.dream_textures_prompt.get_seed()
+        args = {key: getattr(headless_prompt,key) for key in DreamPrompt.__annotations__}
+        args['prompt'] = headless_prompt.generate_prompt()
+        args['seed'] = headless_prompt.get_seed()
         args['init_img'] = init_img_path
+
+        def step_callback(step, width=None, height=None, pixels=None):
+            global headless_step_callback
+            info() # clear variable
+            scene.dream_textures_progress = step + 1
+            headless_step_callback(step, width, height, pixels)
+
+        def image_callback(seed, width, height, pixels, upscaled=False):
+            global headless_image_callback
+            info() # clear variable
+            headless_image_callback(seed, width, height, pixels, upscaled)
 
         global generator_advance
         generator_advance = generator.prompt2image(args,
             # a function or method that will be called each step
-            step_callback=view_step,
+            step_callback=step_callback,
             # a function or method that will be called each time an image is generated
-            image_callback=image_writer,
+            image_callback=image_callback,
             # a function or method that will recieve messages
             info_callback=info,
             exception_callback=handle_exception
@@ -190,6 +234,14 @@ def remove_timer(context):
     if timer:
         context.window_manager.event_timer_remove(timer)
         timer = None
+
+def get_generator() -> GeneratorProcess | None:
+    global generator
+    return generator
+
+def create_generator():
+    global generator
+    generator = GeneratorProcess()
 
 def kill_generator(context=bpy.context):
     global generator

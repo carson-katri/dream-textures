@@ -1,5 +1,6 @@
 import bpy
 from bpy.types import Panel
+from ..property_groups.dream_prompt import draw_dream_prompt_ui
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..operators.dream_texture import DreamTexture, ReleaseGenerator
@@ -20,61 +21,7 @@ def draw_panel(self, context):
     elif new_version_available():
         layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
 
-    prompt_box = layout.box()
-    prompt_box_heading = prompt_box.row()
-    prompt_box_heading.label(text="Prompt")
-    prompt_box_heading.prop(scene.dream_textures_prompt, "prompt_structure")
-    structure = next(x for x in prompt_structures if x.id == scene.dream_textures_prompt.prompt_structure)
-    for segment in structure.structure:
-        segment_row = prompt_box.row()
-        enum_prop = 'prompt_structure_token_' + segment.id + '_enum'
-        is_custom = getattr(scene.dream_textures_prompt, enum_prop) == 'custom'
-        if is_custom:
-            segment_row.prop(scene.dream_textures_prompt, 'prompt_structure_token_' + segment.id)
-        segment_row.prop(scene.dream_textures_prompt, enum_prop, icon_only=is_custom)
-    
-    size_box = layout.box()
-    size_box.label(text="Configuration")
-    size_box.prop(scene.dream_textures_prompt, "width")
-    size_box.prop(scene.dream_textures_prompt, "height")
-    size_box.prop(scene.dream_textures_prompt, "seamless")
-    
-    if not scene.dream_textures_prompt.use_init_img:
-        for area in context.screen.areas:
-            if area.type == 'IMAGE_EDITOR':
-                if area.spaces.active.image is not None:
-                    inpainting_box = layout.box()
-                    inpainting_heading = inpainting_box.row()
-                    inpainting_heading.prop(scene.dream_textures_prompt, "use_inpainting")
-                    inpainting_heading.label(text="Inpaint Open Image")
-                    break
-
-    if not scene.dream_textures_prompt.use_inpainting or area.spaces.active.image is None:
-        init_img_box = layout.box()
-        init_img_heading = init_img_box.row()
-        init_img_heading.prop(scene.dream_textures_prompt, "use_init_img")
-        init_img_heading.label(text="Init Image")
-        if scene.dream_textures_prompt.use_init_img:
-            init_img_box.template_ID(context.scene, "init_img", open="image.open")
-            init_img_box.prop(scene.dream_textures_prompt, "strength")
-            init_img_box.prop(scene.dream_textures_prompt, "fit")
-
-    advanced_box = layout.box()
-    advanced_box_heading = advanced_box.row()
-    advanced_box_heading.prop(scene.dream_textures_prompt, "show_advanced", icon="DOWNARROW_HLT" if scene.dream_textures_prompt.show_advanced else "RIGHTARROW_THIN", emboss=False, icon_only=True)
-    advanced_box_heading.label(text="Advanced Configuration")
-    if scene.dream_textures_prompt.show_advanced:
-        if sys.platform not in {'darwin'}:
-            advanced_box.prop(scene.dream_textures_prompt, "full_precision")
-        advanced_box.prop(scene.dream_textures_prompt, "random_seed")
-        seed_row = advanced_box.row()
-        seed_row.prop(scene.dream_textures_prompt, "seed")
-        seed_row.enabled = not scene.dream_textures_prompt.random_seed
-        # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
-        advanced_box.prop(scene.dream_textures_prompt, "steps")
-        advanced_box.prop(scene.dream_textures_prompt, "cfg_scale")
-        advanced_box.prop(scene.dream_textures_prompt, "sampler")
-        advanced_box.prop(scene.dream_textures_prompt, "show_steps")
+    draw_dream_prompt_ui(context, layout, scene.dream_textures_prompt)
     
     row = layout.row()
     row.scale_y = 1.5

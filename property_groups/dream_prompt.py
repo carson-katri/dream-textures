@@ -109,3 +109,60 @@ def get_seed(self):
 DreamPrompt.generate_prompt = generate_prompt
 DreamPrompt.get_prompt_subject = get_prompt_subject
 DreamPrompt.get_seed = get_seed
+
+def draw_dream_prompt_ui(context, layout, dream_prompt):
+    prompt_box = layout.box()
+    prompt_box_heading = prompt_box.row()
+    prompt_box_heading.label(text="Prompt")
+    prompt_box_heading.prop(dream_prompt, "prompt_structure")
+    structure = next(x for x in prompt_structures if x.id == dream_prompt.prompt_structure)
+    for segment in structure.structure:
+        segment_row = prompt_box.row()
+        enum_prop = 'prompt_structure_token_' + segment.id + '_enum'
+        is_custom = getattr(dream_prompt, enum_prop) == 'custom'
+        if is_custom:
+            segment_row.prop(dream_prompt, 'prompt_structure_token_' + segment.id)
+        segment_row.prop(dream_prompt, enum_prop, icon_only=is_custom)
+    
+    size_box = layout.box()
+    size_box.label(text="Configuration")
+    size_box.prop(dream_prompt, "width")
+    size_box.prop(dream_prompt, "height")
+    size_box.prop(dream_prompt, "seamless")
+    
+    if not dream_prompt.use_init_img:
+        for area in context.screen.areas:
+            if area.type == 'IMAGE_EDITOR':
+                if area.spaces.active.image is not None:
+                    inpainting_box = layout.box()
+                    inpainting_heading = inpainting_box.row()
+                    inpainting_heading.prop(dream_prompt, "use_inpainting")
+                    inpainting_heading.label(text="Inpaint Open Image")
+                    break
+
+    if not dream_prompt.use_inpainting or area.spaces.active.image is None:
+        init_img_box = layout.box()
+        init_img_heading = init_img_box.row()
+        init_img_heading.prop(dream_prompt, "use_init_img")
+        init_img_heading.label(text="Init Image")
+        if dream_prompt.use_init_img:
+            init_img_box.template_ID(context.scene, "init_img", open="image.open")
+            init_img_box.prop(dream_prompt, "strength")
+            init_img_box.prop(dream_prompt, "fit")
+
+    advanced_box = layout.box()
+    advanced_box_heading = advanced_box.row()
+    advanced_box_heading.prop(dream_prompt, "show_advanced", icon="DOWNARROW_HLT" if dream_prompt.show_advanced else "RIGHTARROW_THIN", emboss=False, icon_only=True)
+    advanced_box_heading.label(text="Advanced Configuration")
+    if dream_prompt.show_advanced:
+        if sys.platform not in {'darwin'}:
+            advanced_box.prop(dream_prompt, "full_precision")
+        advanced_box.prop(dream_prompt, "random_seed")
+        seed_row = advanced_box.row()
+        seed_row.prop(dream_prompt, "seed")
+        seed_row.enabled = not dream_prompt.random_seed
+        # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
+        advanced_box.prop(dream_prompt, "steps")
+        advanced_box.prop(dream_prompt, "cfg_scale")
+        advanced_box.prop(dream_prompt, "sampler")
+        advanced_box.prop(dream_prompt, "show_steps")

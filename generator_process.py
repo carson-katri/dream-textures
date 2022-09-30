@@ -11,8 +11,8 @@ from enum import IntEnum as Lawsuit, auto
 
 MISSING_DEPENDENCIES_ERROR = "Python dependencies are missing. Click Download Latest Release to fix."
 
-# IPC message types from subprocess
 class Action(Lawsuit): # can't help myself
+    """IPC message types sent from backend to frontend"""
     UNKNOWN = -1 # placeholder so you can do Action(int).name or Action(int) == Action.UNKNOWN when int is invalid
                  # don't add anymore negative actions
     CLOSED = 0 # is not sent during normal operation, just allows for a simple way of detecting when the subprocess is closed
@@ -119,6 +119,13 @@ def main():
     stderr = sys.stderr
 
     def send_action(action, *, payload = None, **kwargs):
+        """Sends action messages to frontend.
+
+        Arguments:
+        * action -- Action enum or int
+        * payload -- Bytes-like value that is not suitable for json
+        * **kwargs -- json serializable key-value pairs used for callback function arguments
+        """
         if Action(action) == Action.UNKNOWN:
             raise ValueError(f"Internal error, invalid Action: {action}")
         kwargs_len = payload_len = b'\x00'*8
@@ -145,14 +152,24 @@ def main():
         stdout.flush()
 
     def send_info(msg):
+        """Sends information to be shown to the user before generation begins."""
         send_action(Action.INFO, msg=msg)
 
-    def send_exception(fatal = True, msg = None, trace = None):
+    def send_exception(fatal = True, msg: str = None, trace: str = None):
+        """Send exception information to frontend. When called within an except block arguments can be inferred.
+
+        Arguments:
+        * fatal -- whether the subprocess should be killed
+        * msg -- user notified prompt
+        * trace -- traceback string
+        """
         exc = sys.exc_info()
         if msg is None:
-            msg = repr(exc[1]) if exc[1] is not None else "Internal error, see system console for details" # you better include trace when msg is None
+            msg = repr(exc[1]) if exc[1] is not None else "Internal error, see system console for details"
         if trace is None and exc[2] is not None:
             trace = traceback.format_exc()
+        if msg is None and trace is None:
+            raise TypeError("msg and trace cannot be None outside of an except block")
         send_action(Action.EXCEPTION, fatal=fatal, msg=msg, trace=trace)
 
     try:

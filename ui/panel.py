@@ -49,7 +49,8 @@ def draw_panel(self, context):
                     inpainting_heading.label(text="Inpaint Open Image")
                     break
 
-    if not scene.dream_textures_prompt.use_inpainting or area.spaces.active.image is None:
+    if not scene.dream_textures_prompt.use_inpainting or \
+        (hasattr(area.spaces.active,"image") and area.spaces.active.image is None):
         init_img_box = layout.box()
         init_img_heading = init_img_box.row()
         init_img_heading.prop(scene.dream_textures_prompt, "use_init_img")

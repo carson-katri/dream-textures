@@ -14,7 +14,7 @@ class SCENE_UL_HistoryList(bpy.types.UIList):
                 layout.label(text=item.get_prompt_subject(), translate=False, icon_value=icon)
                 layout.label(text=f"{item.width}x{item.height}", translate=False)
                 layout.label(text=f"{item.steps} steps", translate=False)
-                layout.label(text=next(x for x in sampler_options if x[0] == item.sampler)[1], translate=False)
+                layout.label(text=next(x for x in sampler_options if x[0] == item.sampler_name)[1], translate=False)
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)

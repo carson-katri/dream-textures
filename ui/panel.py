@@ -74,7 +74,7 @@ def draw_panel(self, context):
         # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
         advanced_box.prop(scene.dream_textures_prompt, "steps")
         advanced_box.prop(scene.dream_textures_prompt, "cfg_scale")
-        advanced_box.prop(scene.dream_textures_prompt, "sampler")
+        advanced_box.prop(scene.dream_textures_prompt, "sampler_name")
         advanced_box.prop(scene.dream_textures_prompt, "show_steps")
     
     row = layout.row()

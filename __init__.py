@@ -33,7 +33,7 @@ from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
-from .operators.dream_texture import kill_generator
+from .operators.dream_texture import DreamTexture, kill_generator
 from .property_groups.dream_prompt import DreamPrompt
 
 requirements_path_items = (
@@ -44,6 +44,13 @@ requirements_path_items = (
 )
 
 def register():
+    dt_op = bpy.ops
+    for name in DreamTexture.bl_idname.split("."):
+        dt_op = getattr(dt_op, name)
+    if hasattr(bpy.types, dt_op.idname()): # objects under bpy.ops are created on the fly, have to check that it actually exists a little differently
+        raise RuntimeError("Another instance of Dream Textures is already running.")
+    
+
     bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
     
     register_section_props()

@@ -23,14 +23,15 @@ bl_info = {
     "category": "Paint"
 }
 
-from time import time
 import bpy
 from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty
 import sys
 
 import cycles
 import numpy as np
-import gpu
+import threading
+import functools
+from time import time
 
 from .handlers.render_post import render_post_handler
 
@@ -53,6 +54,7 @@ requirements_path_items = (
 
 update_render_passes_original = cycles.CyclesRender.update_render_passes
 render_original = cycles.CyclesRender.render
+del_original = cycles.CyclesRender.__del__
 
 def register():
     bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
@@ -93,6 +95,8 @@ def register():
     def render_decorator(original):
         def render(self, depsgraph):
             scene = depsgraph.scene if hasattr(depsgraph, "scene") else depsgraph
+            if not scene.dream_textures_render_properties_enabled:
+                return original(self, depsgraph)
             result = original(self, depsgraph)
             try:
                 # TODO: Create the render result from scratch
@@ -113,24 +117,23 @@ def register():
                             if pass_i.name == original_render_pass.name:
                                 render_pass = pass_i
                         if render_pass.name == "Dream Textures":
-                            print("Generating dream textures pass")
-                            def image_callback(seed, width, height, pixels, upscaled=False):
-                                print("Image Callback")
+                            self.update_stats("Dream Textures", "Starting")
+                            def image_callback(event, seed, width, height, pixels, upscaled=False):
+                                self.update_stats("Dream Textures", "Pushing to render pass")
                                 # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
                                 if not upscaled:
                                     reshaped = pixels.reshape((width * height, 4))
                                     render_pass.rect.foreach_set(reshaped)
-                                    print("Updated render pass")
-                                    get_generator().process.terminate()
+                                    event.set()
+                                    # kill_generator() # Cleanup to avoid memory leak
                             
+                            step_count = scene.dream_textures_render_properties_prompt.steps
                             def step_callback(step, width=None, height=None, pixels=None):
-                                print(step)
+                                self.update_stats("Dream Textures", f"Step {step}/{step_count}")
+                                self.update_progress(step / step_count)
                                 return
                             
-                            scale = scene.render.resolution_percentage / 100.0
-                            size_x = int(scene.render.resolution_x * scale)
-                            size_y = int(scene.render.resolution_y * scale)
-                            
+                            self.update_stats("Dream Textures", "Creating temporary image")
                             combined_pass_image = bpy.data.images.new("dream_textures_post_processing_temp", width=size_x, height=size_y)
                             
                             rect = layer.passes["Combined"].rect
@@ -139,104 +142,31 @@ def register():
                             rect.foreach_get(combined_pixels)
                             combined_pass_image.pixels[:] = combined_pixels.ravel()
 
-                            print("Render...")
-                            if get_generator() is None:
-                                create_generator()
+                            self.update_stats("Dream Textures", "Starting...")
+                            event = threading.Event()
                             def do_dream_texture_pass():
-                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, image_callback, combined_pass_image)
+                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, event), combined_pass_image)
                             bpy.app.timers.register(do_dream_texture_pass)
-                            # get_generator().process.communicate()
-                            print("waiting for process")
-                            exit_code = get_generator().process.wait()
-                            print(exit_code)
-                            # print("waiting for thread")
-                            # get_generator().thread.join()
-                            # print("Thread finished")
-
-                            # from .absolute_path import absolute_path
-                            # import os
-                            # import site
-                            # # Support Apple Silicon GPUs as much as possible.
-                            # os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-                            # sys.path.append(absolute_path("stable_diffusion/"))
-                            # sys.path.append(absolute_path("stable_diffusion/src/clip"))
-                            # sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
-                            # sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
-
-                            # site.addsitedir(absolute_path(".python_dependencies"))
-                            # print("Added package dirs")
-                            # import pkg_resources
-                            # pkg_resources._initialize_master_working_set()
-                            # print("Reloaded working set")
-
-                            # from stable_diffusion.ldm.generate import Generate
-                            # print("Import generate")
-                            # from omegaconf import OmegaConf
-                            # print("Import omegaconf")
-                            # from PIL import ImageOps
-                            # print("Import PIL.ImageOps")
-
-                            # models_config  = absolute_path('stable_diffusion/configs/models.yaml')
-                            # model   = 'stable-diffusion-1.4'
-
-                            # models  = OmegaConf.load(models_config)
-                            # config  = absolute_path('stable_diffusion/' + models[model].config)
-                            # weights = absolute_path('stable_diffusion/' + models[model].weights)
-
-                            # byte_to_normalized = 1.0 / 255.0
-                            # def write_pixels(image):
-                            #     pixels = (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).reshape((image.width * image.height, 4))
-                            #     render_pass.rect.foreach_set(pixels)
-                            # def image_writer(image, seed, upscaled=False):
-                            #     # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
-                            #     if not upscaled:
-                            #         write_pixels(image)
-                            
-                            # def view_step(samples, step):
-                            #     print(step)
-
-                            # def save_init_img():
-                            #     import tempfile
-                            #     from PIL import Image
-                            #     path = path if path is not None else tempfile.NamedTemporaryFile().name
-                                
-                            #     image = Image.fromarray(combined_pixels.ravel())
-                            #     image.save(path, 'PNG')
-                            #     return path
-                            
-                            # print("Loading Model")
-                            # generator = Generate(
-                            #     conf=models_config,
-                            #     model=model,
-                            #     # These args are deprecated, but we need them to specify an absolute path to the weights.
-                            #     weights=weights,
-                            #     config=config,
-                            #     full_precision=args['full_precision']
-                            # )
-                            # generator.load_model()
-
-                            # args = {key: getattr(scene.dream_textures_render_properties_prompt,key) for key in DreamPrompt.__annotations__}
-                            # args['prompt'] = scene.dream_textures_render_properties_prompt.generate_prompt()
-                            # args['seed'] = scene.dream_textures_render_properties_prompt.get_seed()
-                            # args['use_init_img'] = True
-                            # args['init_img'] = save_init_img()
-                            # args['show_steps'] = False
-
-                            # generator.prompt2image(
-                            #     # a function or method that will be called each step
-                            #     step_callback=view_step,
-                            #     # a function or method that will be called each time an image is generated
-                            #     image_callback=image_writer,
-                            #     **args
-                            # )
+                            event.wait()
+                            # bpy.data.images.remove(combined_pass_image)
+                            self.update_stats("Dream Textures", "Finished")
                         else:
-                            render_pass.rect[:] = original_render_pass.rect
+                            pixels = np.empty((size_x * size_y, 4), dtype=np.float32)
+                            original_render_pass.rect.foreach_get(pixels)
+                            render_pass.rect[:] = pixels
                 self.end_result(render_result)
             except Exception as e:
                 print(e)
             return result
         return render
     cycles.CyclesRender.render = render_decorator(cycles.CyclesRender.render)
+    # def del_decorator(original):
+    #     def del_patch(self):
+    #         result = original(self)
+    #         kill_generator()
+    #         return result
+    #     return del_patch
+    # cycles.CyclesRender.__del__ = del_decorator(cycles.CyclesRender.__del__)
 
 def unregister():
     try:
@@ -256,6 +186,8 @@ def unregister():
     cycles.CyclesRender.update_render_passes = update_render_passes_original
     global render_original
     cycles.CyclesRender.render = render_original
+    # global del_original
+    # cycles.CyclesRender.__del__ = del_original
 
     kill_generator()
 

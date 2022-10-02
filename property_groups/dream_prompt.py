@@ -42,7 +42,7 @@ attributes = {
     "iterations": IntProperty(name="Iterations", default=1, min=1, description="How many images to generate"),
     "steps": IntProperty(name="Steps", default=25, min=1),
     "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, description="How strongly the prompt influences the image"),
-    "sampler": EnumProperty(name="Sampler", items=sampler_options, default=3),
+    "sampler_name": EnumProperty(name="Sampler", items=sampler_options, default=3),
     "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=True),
 
     # Init Image

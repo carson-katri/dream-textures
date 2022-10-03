@@ -5,9 +5,12 @@ from ..prompt_engineering import *
 from ..operators.dream_texture import DreamTexture, ReleaseGenerator
 from ..operators.view_history import SCENE_UL_HistoryList, RecallHistoryEntry
 from ..operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
+from ..operators.upscale import upscale_options, Upscale
 from ..help_section import help_section
 from ..preferences import StableDiffusionPreferences
+from ..absolute_path import REAL_ESRGAN_WEIGHTS_PATH
 import sys
+import os
 
 SPACE_TYPES = {'IMAGE_EDITOR', 'NODE_EDITOR'}
 
@@ -164,3 +167,64 @@ def troubleshooting_panels():
                 help_section(self.layout, context)
         TroubleshootingPanel.__name__ = f"DREAM_PT_dream_troubleshooting_panel_{space_type}"
         yield TroubleshootingPanel
+
+import webbrowser
+
+class OpenRealESRGANDownload(bpy.types.Operator):
+    bl_idname = "stable_diffusion.open_realesrgan_download"
+    bl_label = "Download Weights from GitHub"
+    bl_description = ("Opens to the latest release of Real-ESRGAN, where the weights can be downloaded.")
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        webbrowser.open("https://github.com/xinntao/Real-ESRGAN/releases/tag/v0.3.0")
+        return {"FINISHED"}
+
+class OpenRealESRGANWeightsDirectory(bpy.types.Operator):
+    bl_idname = "stable_diffusion.open_realesrgan_weights_directory"
+    bl_label = "Open Target Directory"
+    bl_description = ("Opens the directory that should contain the 'realesr-general-x4v3.pth' file")
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        path = os.path.dirname(REAL_ESRGAN_WEIGHTS_PATH)
+        if not os.path.exists(path):
+            os.mkdir(path)
+        webbrowser.open(f"file:///{os.path.realpath(path)}")
+        
+        return {"FINISHED"}
+
+def upscaling_panels():
+    for space_type in SPACE_TYPES:
+        class UpscalingPanel(Panel):
+            """Panel for AI Upscaling"""
+            bl_label = "AI Upscaling"
+            bl_category = "Dream"
+            bl_idname = f"DREAM_PT_dream_upscaling_panel_{space_type}"
+            bl_space_type = space_type
+            bl_region_type = 'UI'
+            bl_options = {'DEFAULT_CLOSED'}
+
+            @classmethod
+            def poll(self, context):
+                if self.bl_space_type == 'NODE_EDITOR':
+                    return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
+                else:
+                    return True
+
+            def draw(self, context):
+                layout = self.layout
+                if not os.path.exists(REAL_ESRGAN_WEIGHTS_PATH):
+                    layout.label(text="Real-ESRGAN model weights not installed.")
+                    layout.label(text="1. Download the file 'realesr-general-x4v3.pth' from GitHub")
+                    layout.operator(OpenRealESRGANDownload.bl_idname, icon="URL")
+                    layout.label(text="2. Place it in the weights folder with the name 'realesr-general-x4v3.pth'")
+                    layout.operator(OpenRealESRGANWeightsDirectory.bl_idname, icon="FOLDER_REDIRECT")
+                layout = layout.column()
+                layout.enabled = os.path.exists(REAL_ESRGAN_WEIGHTS_PATH)
+                layout.prop(context.scene, "dream_textures_upscale_target_size")
+                layout.prop(context.scene, "dream_textures_upscale_strength")
+                layout.operator(Upscale.bl_idname)
+        
+        UpscalingPanel.__name__ = f"DREAM_PT_dream_troubleshooting_panel_{space_type}"
+        yield UpscalingPanel

@@ -13,10 +13,6 @@ from ..property_groups.dream_prompt import DreamPrompt
 
 import tempfile
 
-# A shared `Generate` instance.
-# This allows the slow model loading process to happen once,
-# and re-use the model on subsequent calls.
-generator = None
 generator_advance = None
 last_data_block = None
 timer = None
@@ -87,12 +83,8 @@ class DreamTexture(bpy.types.Operator):
         bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=context.scene.dream_textures_prompt.steps + 1, update=step_progress_update)
         bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info", update=step_progress_update)
 
-        global generator
-        if generator is None:
-            info("Initializing Process")
-            generator = GeneratorProcess()
-        else:
-            info("Waiting For Process")
+        info("Waiting For Process")
+        generator = GeneratorProcess.shared()
 
         def bpy_image(name, width, height, pixels):
             image = bpy.data.images.new(name, width=width, height=height)
@@ -195,10 +187,7 @@ def remove_timer(context):
         timer = None
 
 def kill_generator(context=bpy.context):
-    global generator
-    if generator:
-        generator.kill()
-    generator = None
+    GeneratorProcess.kill_shared()
     remove_timer(context)
     bpy.context.scene.dream_textures_progress = 0
     bpy.context.scene.dream_textures_info = ""

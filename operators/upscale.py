@@ -1,5 +1,8 @@
 import bpy
 import tempfile
+from multiprocessing.shared_memory import SharedMemory
+import numpy as np
+import sys
 from ..generator_process import GeneratorProcess
 
 upscale_options = [
@@ -18,7 +21,7 @@ def remove_timer(context):
 
 class Upscale(bpy.types.Operator):
     bl_idname = "shade.dream_textures_upscale"
-    bl_label = f"Upscale"
+    bl_label = "Upscale"
     bl_description = ("Upscale with Real-ESRGAN")
     bl_options = {"REGISTER"}
 
@@ -41,6 +44,8 @@ class Upscale(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
+        scene = context.scene
+
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
 
@@ -62,36 +67,44 @@ class Upscale(bpy.types.Operator):
             return path
 
         input_image = None
+        input_image_path = None
         for area in context.screen.areas:
             if area.type == 'IMAGE_EDITOR':
                 if area.spaces.active.image is not None:
-                    input_image = save_temp_image(area.spaces.active.image)
+                    input_image = area.spaces.active.image
+                    input_image_path = save_temp_image(input_image)
         
         if input_image is None:
             self.report({"ERROR"}, "No open image in the Image Editor space")
             return {"FINISHED"}
 
-        def image_callback(output_path):
-            print("Received image callback")
-            print(output_path)
-            image = bpy.data.images.load(output_path)
-            print("Saved")
+        def bpy_image(name, width, height, pixels):
+            image = bpy.data.images.new(name, width=width, height=height)
+            image.pixels[:] = pixels
             image.pack()
-            print("Packed")
+            return image
+
+        def image_callback(shared_memory_name, seed, width, height):
+            scene.dream_textures_info = ""
+            shared_memory = SharedMemory(shared_memory_name)
+            bpy_image(seed + ' (Upscaled)', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+            shared_memory.close()
 
         def info_callback(msg=""):
-            print("Info", msg)
+            scene.dream_textures_info = msg
         def exception_callback(fatal, msg, trace):
-            print("Exception Callback", fatal, msg, trace)
+            scene.dream_textures_info = ""
+            self.report({'ERROR'}, msg)
+            if trace:
+                print(trace, file=sys.stderr)
 
         generator = GeneratorProcess.shared()
 
         args = {
-            'input': input_image,
-            'level': int(context.scene.dream_textures_upscale_target_size),
-            'strength': float(context.scene.dream_textures_upscale_strength),
+            'input': input_image_path,
+            'name': input_image.name,
+            'outscale': int(context.scene.dream_textures_upscale_outscale),
         }
-        print("Running", args)
         global generator_advance
         generator_advance = generator.upscale(args, image_callback, info_callback, exception_callback)
         context.window_manager.modal_handler_add(self)

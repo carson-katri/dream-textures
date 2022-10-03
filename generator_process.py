@@ -9,6 +9,7 @@ import traceback
 import numpy as np
 from enum import IntEnum
 import tempfile
+from multiprocessing.shared_memory import SharedMemory
 
 MISSING_DEPENDENCIES_ERROR = "Python dependencies are missing. Click Download Latest Release to fix."
 
@@ -22,7 +23,6 @@ class Action(IntEnum):
     STEP_IMAGE = 3
     STEP_NO_SHOW = 4
     EXCEPTION = 5
-    IMAGE_PATH = 6 # An image result that returns a path to a saved image instead of bytes
 
     @classmethod
     def _missing_(cls, value):
@@ -114,7 +114,7 @@ class GeneratorProcess():
         queue = self.queue
         callbacks = {
             Action.INFO: info_callback,
-            Action.IMAGE_PATH: image_callback,
+            Action.IMAGE: image_callback,
             Action.EXCEPTION: exception_callback
         }
 
@@ -124,7 +124,7 @@ class GeneratorProcess():
             tup = queue.pop()
             action = tup[0]
             callbacks[action](**tup[1])
-            if action == Action.IMAGE_PATH:
+            if action == Action.IMAGE:
                 break
             elif action == Action.EXCEPTION:
                 return
@@ -149,18 +149,7 @@ class GeneratorProcess():
             kwargs = {} if kwargs_len == 0 else json.loads(reader.read(kwargs_len))
             payload_len = readUInt(8)
 
-            if action in [Action.INFO, Action.STEP_NO_SHOW, Action.IMAGE_PATH]:
-                queue.append((action, kwargs))
-            elif action in [Action.IMAGE, Action.STEP_IMAGE]:
-                expected_len = kwargs['width']*kwargs['height']*16
-                if payload_len != expected_len:
-                    queue_exception_msg(f"Internal error, received image payload of {payload_len} bytes, expected {expected_len} bytes for {kwargs['width']}x{kwargs['height']} image")
-                    return
-                if expected_len > len(image_buffer):
-                    image_buffer = bytearray(expected_len)
-                m = memoryview(image_buffer)[:expected_len]
-                reader.readinto(m)
-                kwargs['pixels'] = np.frombuffer(m,dtype=np.float32)
+            if action in [Action.INFO, Action.STEP_NO_SHOW, Action.IMAGE, Action.STEP_IMAGE]:
                 queue.append((action, kwargs))
             elif action == Action.EXCEPTION:
                 queue.append((action, kwargs))
@@ -171,6 +160,8 @@ class GeneratorProcess():
                 return
 
 def main():
+    shared_memory: SharedMemory | None = None
+
     stdin = sys.stdin.buffer
     stdout = sys.stdout.buffer
     sys.stdout = open(os.devnull, 'w') # prevent stable diffusion logs from breaking ipc
@@ -271,9 +262,17 @@ def main():
         return (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).tobytes()
 
     def image_writer(image, seed, upscaled=False, first_seed=None):
-        # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
+        nonlocal shared_memory
+        # Only use the non-upscaled texture, as upscaling is a separate step in this addon.
         if not upscaled:
-            send_action(Action.IMAGE, payload=image_to_bytes(image), seed=seed, width=image.width, height=image.height)
+            image_bytes = image_to_bytes(image)
+            image_bytes_len = len(image_bytes)
+            if shared_memory is None or shared_memory.size != image_bytes_len:
+                if shared_memory is not None:
+                    shared_memory.close()
+                shared_memory = SharedMemory(create=True, size=image_bytes_len)
+            shared_memory.buf[:] = image_bytes
+            send_action(Action.IMAGE, shared_memory_name=shared_memory.name, seed=seed, width=image.width, height=image.height)
     
     step = 0
     def view_step(samples):
@@ -424,14 +423,12 @@ def main():
                     half=False,
                     gpu_id=None
                 )
-                send_info("Enhancing")
-                output, _ = upsampler.enhance(image, outscale=4)
-                send_info("Upscaled")
+                send_info("Enhancing Input")
+                output, _ = upsampler.enhance(image, outscale=args['outscale'])
+                send_info("Converting Result")
                 output = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
                 output = Image.fromarray(output)
-                output_path = tempfile.NamedTemporaryFile().name
-                output.save(output_path, format="png")
-                send_action(Action.IMAGE_PATH, output_path=output_path)
+                image_writer(output, args['name'])
             except:
                 send_exception()
                 return

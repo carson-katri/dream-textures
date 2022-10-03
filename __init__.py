@@ -68,8 +68,7 @@ def register():
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 
-    bpy.types.Scene.dream_textures_upscale_target_size = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
-    bpy.types.Scene.dream_textures_upscale_strength = bpy.props.FloatProperty(name="Strength", default=1, min=0, max=1)
+    bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)

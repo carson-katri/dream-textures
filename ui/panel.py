@@ -222,9 +222,11 @@ def upscaling_panels():
                     layout.operator(OpenRealESRGANWeightsDirectory.bl_idname, icon="FOLDER_REDIRECT")
                 layout = layout.column()
                 layout.enabled = os.path.exists(REAL_ESRGAN_WEIGHTS_PATH)
-                layout.prop(context.scene, "dream_textures_upscale_target_size")
-                layout.prop(context.scene, "dream_textures_upscale_strength")
-                layout.operator(Upscale.bl_idname)
+                layout.prop(context.scene, "dream_textures_upscale_outscale")
+                if context.scene.dream_textures_info != "":
+                    layout.label(text=context.scene.dream_textures_info, icon="INFO")
+                else:
+                    layout.operator(Upscale.bl_idname, icon="FULLSCREEN_ENTER")
         
         UpscalingPanel.__name__ = f"DREAM_PT_dream_troubleshooting_panel_{space_type}"
         yield UpscalingPanel

@@ -14,6 +14,13 @@ sampler_options = [
     ("k_heun", "KHEUN", "", 8),
 ]
 
+precision_options = [
+    ('auto', 'Automatic', "", 1),
+    ('float32', 'Full Precision (float32)', "", 2),
+    ('autocast', 'Autocast', "", 3),
+    ('float16', 'Half Precision (float16)', "", 4),
+]
+
 def seed_clamp(self, ctx):
     # clamp seed right after input to make it clear what the limits are
     try:
@@ -38,17 +45,17 @@ attributes = {
     "show_advanced": BoolProperty(name="", default=False),
     "random_seed": BoolProperty(name="Random Seed", default=True, description="Randomly pick a seed"),
     "seed": StringProperty(name="Seed", default="0", description="Manually pick a seed", update=seed_clamp),
-    "full_precision": BoolProperty(name="Full Precision", default=True if sys.platform == 'darwin' else False, description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
+    "precision": EnumProperty(name="Precision", items=precision_options, default='auto', description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
     "iterations": IntProperty(name="Iterations", default=1, min=1, description="How many images to generate"),
     "steps": IntProperty(name="Steps", default=25, min=1),
-    "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, description="How strongly the prompt influences the image"),
-    "sampler": EnumProperty(name="Sampler", items=sampler_options, default=3),
+    "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, soft_min=1.01, description="How strongly the prompt influences the image"),
+    "sampler_name": EnumProperty(name="Sampler", items=sampler_options, default=3),
     "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=True),
 
     # Init Image
-    "use_init_img": BoolProperty(name="", default=False),
-    "use_inpainting": BoolProperty(name="", default=False),
-    "strength": FloatProperty(name="Strength", default=0.75, min=0, max=1),
+    "use_init_img": BoolProperty(name="Use Init Image", default=False),
+    "use_inpainting": BoolProperty(name="Use Inpainting", default=False),
+    "strength": FloatProperty(name="Strength", default=0.75, min=0, max=1, soft_min=0.01, soft_max=0.99),
     "fit": BoolProperty(name="Fit to width/height", default=True),
 }
 
@@ -106,63 +113,13 @@ def get_seed(self):
             h = ~h
         return (h & 0xFFFFFFFF) ^ (h >> 32) # 64 bit hash down to 32 bits
 
+def generate_args(self):
+    args = { key: getattr(self, key) for key in DreamPrompt.__annotations__ }
+    args['prompt'] = self.generate_prompt()
+    args['seed'] = self.get_seed()
+    return args
+
 DreamPrompt.generate_prompt = generate_prompt
 DreamPrompt.get_prompt_subject = get_prompt_subject
 DreamPrompt.get_seed = get_seed
-
-def draw_dream_prompt_ui(context, layout, dream_prompt):
-    prompt_box = layout.box()
-    prompt_box_heading = prompt_box.row()
-    prompt_box_heading.label(text="Prompt")
-    prompt_box_heading.prop(dream_prompt, "prompt_structure")
-    structure = next(x for x in prompt_structures if x.id == dream_prompt.prompt_structure)
-    for segment in structure.structure:
-        segment_row = prompt_box.row()
-        enum_prop = 'prompt_structure_token_' + segment.id + '_enum'
-        is_custom = getattr(dream_prompt, enum_prop) == 'custom'
-        if is_custom:
-            segment_row.prop(dream_prompt, 'prompt_structure_token_' + segment.id)
-        segment_row.prop(dream_prompt, enum_prop, icon_only=is_custom)
-    
-    size_box = layout.box()
-    size_box.label(text="Configuration")
-    size_box.prop(dream_prompt, "width")
-    size_box.prop(dream_prompt, "height")
-    size_box.prop(dream_prompt, "seamless")
-    
-    if not dream_prompt.use_init_img:
-        for area in context.screen.areas:
-            if area.type == 'IMAGE_EDITOR':
-                if area.spaces.active.image is not None:
-                    inpainting_box = layout.box()
-                    inpainting_heading = inpainting_box.row()
-                    inpainting_heading.prop(dream_prompt, "use_inpainting")
-                    inpainting_heading.label(text="Inpaint Open Image")
-                    break
-
-    if not dream_prompt.use_inpainting or area.spaces.active.image is None:
-        init_img_box = layout.box()
-        init_img_heading = init_img_box.row()
-        init_img_heading.prop(dream_prompt, "use_init_img")
-        init_img_heading.label(text="Init Image")
-        if dream_prompt.use_init_img:
-            init_img_box.template_ID(context.scene, "init_img", open="image.open")
-            init_img_box.prop(dream_prompt, "strength")
-            init_img_box.prop(dream_prompt, "fit")
-
-    advanced_box = layout.box()
-    advanced_box_heading = advanced_box.row()
-    advanced_box_heading.prop(dream_prompt, "show_advanced", icon="DOWNARROW_HLT" if dream_prompt.show_advanced else "RIGHTARROW_THIN", emboss=False, icon_only=True)
-    advanced_box_heading.label(text="Advanced Configuration")
-    if dream_prompt.show_advanced:
-        if sys.platform not in {'darwin'}:
-            advanced_box.prop(dream_prompt, "full_precision")
-        advanced_box.prop(dream_prompt, "random_seed")
-        seed_row = advanced_box.row()
-        seed_row.prop(dream_prompt, "seed")
-        seed_row.enabled = not dream_prompt.random_seed
-        # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
-        advanced_box.prop(dream_prompt, "steps")
-        advanced_box.prop(dream_prompt, "cfg_scale")
-        advanced_box.prop(dream_prompt, "sampler")
-        advanced_box.prop(dream_prompt, "show_steps")
+DreamPrompt.generate_args = generate_args

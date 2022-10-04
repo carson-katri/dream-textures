@@ -1,5 +1,5 @@
 import bpy
-from ..property_groups.dream_prompt import draw_dream_prompt_ui
+from ...property_groups.dream_prompt import draw_dream_prompt_ui
 
 class RenderPropertiesPanel(bpy.types.Panel):
     """Panel for Dream Textures render properties"""

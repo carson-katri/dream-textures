@@ -1,13 +1,13 @@
 import bpy
 from bpy.props import CollectionProperty
+from bpy_extras.io_utils import ImportHelper
 import os
-import sys
 import webbrowser
-from shutil import which
+import shutil
 
-from .help_section import help_section
-from .absolute_path import WEIGHTS_PATH
+from .absolute_path import WEIGHTS_PATH, absolute_path
 from .operators.install_dependencies import InstallDependencies
+from .operators.open_latest_version import OpenLatestVersion
 from .property_groups.dream_prompt import DreamPrompt
 
 class OpenHuggingFace(bpy.types.Operator):
@@ -30,17 +30,26 @@ class OpenGitDownloads(bpy.types.Operator):
         webbrowser.open("https://git-scm.com/downloads")
         return {"FINISHED"}
 
-class OpenWeightsDirectory(bpy.types.Operator):
+class OpenWeightsDirectory(bpy.types.Operator, ImportHelper):
     bl_idname = "stable_diffusion.open_weights_directory"
-    bl_label = "Open Target Directory"
-    bl_description = ("Opens the directory that should contain the 'model.ckpt' file")
-    bl_options = {"REGISTER", "INTERNAL"}
+    bl_label = "Import Model Weights"
+    filename_ext = ".ckpt"
+    filter_glob: bpy.props.StringProperty(
+        default="*.ckpt",
+        options={'HIDDEN'},
+        maxlen=255,
+    )
 
     def execute(self, context):
         path = os.path.dirname(WEIGHTS_PATH)
-        if not os.path.exists(path):
-            os.mkdir(path)
-        webbrowser.open(f"file:///{os.path.realpath(path)}")
+        # if not os.path.exists(path):
+        #     os.mkdir(path)
+        # webbrowser.open(f"file:///{os.path.realpath(path)}")
+        _, extension = os.path.splitext(self.filepath)
+        if extension != '.ckpt':
+            self.report({"ERROR"}, "Select a valid stable diffusion '.ckpt' file.")
+            return {"FINISHED"}
+        shutil.copy(self.filepath, WEIGHTS_PATH)
         
         return {"FINISHED"}
 
@@ -86,10 +95,19 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
         weights_installed = os.path.exists(WEIGHTS_PATH)
 
-        if weights_installed:
-            layout.label(text="Addon setup complete", icon="CHECKMARK")
-        else:
+        if not weights_installed:
             layout.label(text="Complete the following steps to finish setting up the addon:")
+
+        if not os.path.exists(absolute_path("stable_diffusion")) or len(os.listdir(absolute_path("stable_diffusion"))) < 5:
+            missing_sd_box = layout.box()
+            missing_sd_box.label(text="Stable diffusion is missing.", icon="ERROR")
+            missing_sd_box.label(text="You've likely downloaded source instead of release by accident.")
+            missing_sd_box.operator(OpenLatestVersion.bl_idname, text="Download Latest Release")
+            return
+        else:
+            dependencies_box = layout.box()
+            dependencies_box.label(text="Dependencies Located", icon="CHECKMARK")
+            dependencies_box.label(text="All dependencies (except for model weights) are included in the release.")
 
         model_weights_box = layout.box()
         model_weights_box.label(text="Setup Model Weights", icon="SETTINGS")
@@ -100,17 +118,21 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             model_weights_box.label(text="Follow the steps below to download and install them.")
             model_weights_box.label(text="1. Download the file 'sd-v1-4.ckpt'")
             model_weights_box.operator(OpenHuggingFace.bl_idname, icon="URL")
-            model_weights_box.label(text="2. Place the checkpoint file in the addon folder with the name 'model.ckpt'")
-            warning_box = model_weights_box.box()
-            warning_box.label(text="Make sure the file is renamed to 'model.ckpt', not 'sd-v1-4.ckpt'", icon="ERROR")
-            model_weights_box.operator(OpenWeightsDirectory.bl_idname, icon="FOLDER_REDIRECT")
-        
-        troubleshooting_box = layout.box()
-        troubleshooting_box.label(text="Troubleshooting", icon="ERROR")
-        help_section(troubleshooting_box, context)
+            model_weights_box.label(text="2. Select the downloaded weights to install.")
+            model_weights_box.operator(OpenWeightsDirectory.bl_idname, text="Import Model Weights", icon="IMPORT")
+
+        if weights_installed:
+            complete_box = layout.box()
+            complete_box.label(text="Addon Setup Complete", icon="CHECKMARK")
+            complete_box.label(text="To locate the interface:")
+            complete_box.label(text="1. Open an Image Editor or Shader Editor space")
+            complete_box.label(text="2. Enable 'View' > 'Sidebar'")
+            complete_box.label(text="3. Select the 'Dream' tab")
 
         if context.preferences.view.show_developer_ui: # If 'Developer Extras' is enabled, show addon development tools
             developer_box = layout.box()
             developer_box.label(text="Development Tools", icon="CONSOLE")
+            developer_box.label(text="This section is for addon development only. You are seeing this because you have 'Developer Extras' enabled.")
+            developer_box.label(text="Do not use any operators in this section unless you are setting up a development environment.")
             developer_box.prop(context.scene, 'dream_textures_requirements_path')
             developer_box.operator(InstallDependencies.bl_idname, icon="CONSOLE")

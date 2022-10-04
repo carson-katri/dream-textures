@@ -1,8 +1,8 @@
-from email.mime import image
-from importlib.resources import path
+import sys
 import bpy
 import os
-import math
+import numpy as np
+from multiprocessing.shared_memory import SharedMemory
 
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
@@ -13,10 +13,6 @@ from ..property_groups.dream_prompt import DreamPrompt
 
 import tempfile
 
-# A shared `Generate` instance.
-# This allows the slow model loading process to happen once,
-# and re-use the model on subsequent calls.
-generator: GeneratorProcess | None = None
 generator_advance = None
 last_data_block = None
 timer = None
@@ -140,15 +136,16 @@ class HeadlessDreamTexture(bpy.types.Operator):
         def info(msg=""):
             scene.dream_textures_info = msg
         
-        def handle_exception(fatal, err):
+        def handle_exception(fatal, msg, trace):
             info() # clear variable
             if fatal:
                 kill_generator()
-            self.report({'ERROR'},err)
-            if err == MISSING_DEPENDENCIES_ERROR:
+            self.report({'ERROR'},msg)
+            if trace:
+                print(trace, file=sys.stderr)
+            if msg == MISSING_DEPENDENCIES_ERROR:
                 from .open_latest_version import do_force_show_download
                 do_force_show_download()
-
 
         def step_progress_update(self, context):
             if hasattr(context.area, "regions"):
@@ -160,13 +157,57 @@ class HeadlessDreamTexture(bpy.types.Operator):
         bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=headless_prompt.steps + 1, update=step_progress_update)
         bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info", update=step_progress_update)
 
-        global generator
-        if generator is None:
-            info("Initializing Process")
-            print("initializing process")
-            create_generator()
-        else:
-            info("Waiting For Process")
+        info("Waiting For Process")
+        generator = GeneratorProcess.shared()
+
+        def bpy_image(name, width, height, pixels):
+            image = bpy.data.images.new(name, width=width, height=height)
+            image.pixels[:] = pixels
+            image.pack()
+            return image
+
+        def image_writer(shared_memory_name, seed, width, height, upscaled=False):
+            info() # clear variable
+            global last_data_block
+            # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
+            if not upscaled:
+                if last_data_block is not None:
+                    bpy.data.images.remove(last_data_block)
+                    last_data_block = None
+                if generator is None or generator.process.poll() or width == 0 or height == 0:
+                    return # process was closed
+                shared_memory = SharedMemory(shared_memory_name)
+                image = bpy_image(f"{seed}", width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+                shared_memory.close()
+                if node_tree is not None:
+                    nodes = node_tree.nodes
+                    texture_node = nodes.new("ShaderNodeTexImage")
+                    texture_node.image = image
+                    nodes.active = texture_node
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        area.spaces.active.image = image
+                scene.dream_textures_progress = 0
+                scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
+                history_entry.seed = str(seed)
+                history_entry.random_seed = False
+        
+        def view_step(step, width=None, height=None, shared_memory_name=None):
+            info() # clear variable
+            scene.dream_textures_progress = step + 1
+            if shared_memory_name is None:
+                return # show steps disabled
+            global last_data_block
+            for area in screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    shared_memory = SharedMemory(shared_memory_name)
+                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+                    shared_memory.close()
+                    area.spaces.active.image = step_image
+                    if last_data_block is not None:
+                        bpy.data.images.remove(last_data_block)
+                    last_data_block = step_image
+                    return # Only perform this on the first image editor found.
 
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
@@ -199,9 +240,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
         if init_img is not None:
             init_img_path = save_temp_image(init_img)
 
-        args = {key: getattr(headless_prompt,key) for key in DreamPrompt.__annotations__}
-        args['prompt'] = headless_prompt.generate_prompt()
-        args['seed'] = headless_prompt.get_seed()
+        args = scene.dream_textures_prompt.generate_args()
         args['init_img'] = init_img_path
 
         def step_callback(step, width=None, height=None, pixels=None):
@@ -244,10 +283,7 @@ def create_generator():
     generator = GeneratorProcess()
 
 def kill_generator(context=bpy.context):
-    global generator
-    if generator:
-        generator.kill()
-    generator = None
+    GeneratorProcess.kill_shared()
     remove_timer(context)
     bpy.context.scene.dream_textures_progress = 0
     bpy.context.scene.dream_textures_info = ""

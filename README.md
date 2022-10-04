@@ -9,13 +9,11 @@
 * Run the models on your machine to iterate without slowdowns from a service
 
 ## Installation
-1. Download the [latest version](https://github.com/carson-katri/dream-textures/releases/tag/0.0.5) from the Releases tab.
-2. Install the addon in Blender's preferences window.
-3. Follow the steps in the 'Dream Textures' preferences window to download the model weights.
-   - _*Note for Windows users*_ - If you get an error when installing dependencies that looks similar to the one described [here](https://github.com/carson-katri/dream-textures/issues/13), your dependency file paths might be too long (can't be longer than 256 characters). You can solve it by telling Windows to allow long file paths in the registry:
-     1. Open up the Window registry (Start > Run > `regedit`)
-     2. Navigate to `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem`
-     3. Set `LongPathsEnabled` to `1`
+Download the [latest release](https://github.com/carson-katri/dream-textures/releases/tag/0.0.6) and follow the instructions there to get up and running.
+
+> On macOS, it is possible you will run into a quarantine issue with the dependencies. To work around this, run the following command in the app `Terminal`: `xattr -r -d com.apple.quarantine ~/Library/Application\ Support/Blender/3.3/scripts/addons/dream_textures/.python_dependencies`. This will allow the PyTorch `.dylib`s and `.so`s to load without having to manually allow each one in System Preferences.
+
+## Usage
 
 | Enter a prompt | Generate a unique texture in a few seconds |
 | -------------- | ------------------------------------------ |
@@ -26,19 +24,17 @@
 | ------------------------ | ---------------------------- |
 | ![](readme_assets/marble.jpg) | ![](readme_assets/marble_brick_wall_texture.png) |
 
-> On Windows, you will need to run Blender as an administrator for the installation to complete successfully.
-
-## Usage
 Dream Textures provides most of the configuration options available when using Stable Diffusion directly.
 
-1. Open the Shader editor
-2. Select the 'Dream Textures' menu in the far right, and choose the 'Dream Texture' operation.
+1. Open the Shader or Image editor
+2. Select the 'Dream Textures' tab in the side panel. You may need to press 'N' to open this panel.
 3. Enter a prompt. There are some presets you can use to automatically fine tune your result:
     1. *Texture* - simply adds the word *texture* to the end of your prompt to help the model create a texture.
     2. *Photography* - provides many options for specifying a photorealistic result.
-    3. *Custom* - passes the prompt directly to SD with no additional keywords.
-4. Click 'OK'. Wait a moment for the model to load. After the model loads, the generation runs asynchronously, so you Blender shouldn't completely freeze up.
-5. If you have an Image Viewer open, the current progress of the model will appear there with the current step # as the image name (for example, *Step 1/25*).
+    3. *Concept Art* - create environments, characters, and more
+    4. *Custom* - passes the prompt directly to SD with no additional keywords.
+4. Click 'Generate'. The generation runs asynchronously, so Blender won't completely freeze up.
+5. If you have an Image Editor open, the current progress of the model will appear there with the current step # as the image name (for example, *Step 1/25*).
 6. After the image finishes generating, a new Image Texture node will be added to the open shader editor. The image is packed, so you may want to export it to a separate file.
 
 > The name of the generated image is the random seed used to create it. If you want to use the same seed, copy the name of the image into the 'Seed' parameter under the 'Advanced' section.

@@ -28,22 +28,18 @@ from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty
 import sys
 
 import cycles
-import numpy as np
 import threading
 import functools
-from time import time
-
-from .handlers.render_post import render_post_handler
-
-from .help_section import register_section_props
+import numpy as np
 
 from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
-from .operators.dream_texture import dream_texture, kill_generator, create_generator, get_generator
-from .generator_process import GeneratorProcess
+from .operators.dream_texture import DreamTexture, kill_generator, dream_texture
 from .property_groups.dream_prompt import DreamPrompt
+from .operators.upscale import upscale_options
+from .preferences import StableDiffusionPreferences
 
 requirements_path_items = (
     # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
@@ -57,9 +53,14 @@ render_original = cycles.CyclesRender.render
 del_original = cycles.CyclesRender.__del__
 
 def register():
-    bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
+    dt_op = bpy.ops
+    for name in DreamTexture.bl_idname.split("."):
+        dt_op = getattr(dt_op, name)
+    if hasattr(bpy.types, dt_op.idname()): # objects under bpy.ops are created on the fly, have to check that it actually exists a little differently
+        raise RuntimeError("Another instance of Dream Textures is already running.")
     
-    register_section_props()
+
+    bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
 
     for cls in PREFERENCE_CLASSES:
         bpy.utils.register_class(cls)
@@ -69,14 +70,19 @@ def register():
     bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
     bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
-    bpy.types.Scene.dream_textures_history_selection = IntProperty()
+    def update_selection_preview(self, context):
+        history = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
+        if context.scene.dream_textures_history_selection > 0 and context.scene.dream_textures_history_selection < len(history):
+            context.scene.dream_textures_history_selection_preview = history[context.scene.dream_textures_history_selection].generate_prompt()
+    bpy.types.Scene.dream_textures_history_selection = IntProperty(update=update_selection_preview)
+    bpy.types.Scene.dream_textures_history_selection_preview = bpy.props.StringProperty(name="", default="", update=update_selection_preview)
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 
     bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)
     bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
-
-    bpy.app.handlers.render_post.append(render_post_handler)
+    bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
+    bpy.types.Scene.dream_textures_upscale_full_precision = bpy.props.BoolProperty(name="Full Precision", default=True)
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)
@@ -169,11 +175,6 @@ def register():
     # cycles.CyclesRender.__del__ = del_decorator(cycles.CyclesRender.__del__)
 
 def unregister():
-    try:
-        bpy.app.handlers.render_post.remove(render_post_handler)
-    except:
-        pass
-    
     for cls in PREFERENCE_CLASSES:
         bpy.utils.unregister_class(cls)
 

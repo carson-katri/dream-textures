@@ -117,7 +117,6 @@ def generate_args(self):
     args = { key: getattr(self, key) for key in DreamPrompt.__annotations__ }
     args['prompt'] = self.generate_prompt()
     args['seed'] = self.get_seed()
-    print(args)
     return args
 
 DreamPrompt.generate_prompt = generate_prompt

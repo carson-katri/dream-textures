@@ -89,7 +89,9 @@ class ExportHistorySelection(bpy.types.Operator, ExportHelper):
             self.report({"ERROR"}, "No valid selection to export.")
             return {"FINISHED"}
         with open(self.filepath, 'w', encoding='utf-8') as target:
-            json.dump(selection.generate_args(), target, indent=4)
+            args = selection.generate_args()
+            args['seed'] = selection.seed
+            json.dump(args, target, indent=4)
 
         return {"FINISHED"}
 

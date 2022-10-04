@@ -53,8 +53,8 @@ attributes = {
     "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=True),
 
     # Init Image
-    "use_init_img": BoolProperty(name="", default=False),
-    "use_inpainting": BoolProperty(name="", default=False),
+    "use_init_img": BoolProperty(name="Use Init Image", default=False),
+    "use_inpainting": BoolProperty(name="Use Inpainting", default=False),
     "strength": FloatProperty(name="Strength", default=0.75, min=0, max=1),
     "fit": BoolProperty(name="Fit to width/height", default=True),
 }

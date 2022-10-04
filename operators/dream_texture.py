@@ -119,7 +119,6 @@ class DreamTexture(bpy.types.Operator):
         
         def view_step(step, width=None, height=None, shared_memory_name=None):
             info() # clear variable
-            print(step)
             scene.dream_textures_progress = step + 1
             if shared_memory_name is None:
                 return # show steps disabled

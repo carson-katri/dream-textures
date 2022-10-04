@@ -44,7 +44,8 @@ class Intent(IntEnum):
 _shared_instance = None
 class GeneratorProcess():
     def __init__(self):
-        self.process = subprocess.Popen([sys.executable,'generator_process.py'],cwd=os.path.dirname(os.path.realpath(__file__)),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
+        import bpy
+        self.process = subprocess.Popen([sys.executable,'generator_process.py',bpy.app.binary_path],cwd=os.path.dirname(os.path.realpath(__file__)),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
         self.reader = self.process.stdout
         self.queue = []
         self.args = None
@@ -221,6 +222,10 @@ def main():
         send_action(Action.EXCEPTION, fatal=fatal, msg=msg, trace=trace)
 
     try:
+        if sys.platform == 'win32':
+            from ctypes import WinDLL
+            WinDLL(os.path.join(os.path.dirname(sys.argv[1]),"python3.dll")) # fix for ImportError: DLL load failed while importing cv2: The specified module could not be found.
+
         from absolute_path import absolute_path
         # Support Apple Silicon GPUs as much as possible.
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"

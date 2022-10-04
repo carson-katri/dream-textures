@@ -48,14 +48,14 @@ attributes = {
     "precision": EnumProperty(name="Precision", items=precision_options, default='auto', description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
     "iterations": IntProperty(name="Iterations", default=1, min=1, description="How many images to generate"),
     "steps": IntProperty(name="Steps", default=25, min=1),
-    "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, description="How strongly the prompt influences the image"),
+    "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, soft_min=1.01, description="How strongly the prompt influences the image"),
     "sampler_name": EnumProperty(name="Sampler", items=sampler_options, default=3),
     "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=True),
 
     # Init Image
     "use_init_img": BoolProperty(name="Use Init Image", default=False),
     "use_inpainting": BoolProperty(name="Use Inpainting", default=False),
-    "strength": FloatProperty(name="Strength", default=0.75, min=0, max=1),
+    "strength": FloatProperty(name="Strength", default=0.75, min=0, max=1, soft_min=0.01, soft_max=0.99),
     "fit": BoolProperty(name="Fit to width/height", default=True),
 }
 

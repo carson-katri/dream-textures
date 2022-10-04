@@ -138,7 +138,6 @@ class GeneratorProcess():
         def queue_exception_msg(msg):
             queue.append((Action.EXCEPTION, {'fatal': True, 'msg': msg, 'trace': None}))
 
-        image_buffer = bytearray(512*512*16)
         while not self.killed:
             action = readUInt(ACTION_BYTE_LENGTH)
             if action == Action.CLOSED:
@@ -261,25 +260,28 @@ def main():
     def image_to_bytes(image):
         return (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).tobytes()
 
-    def image_writer(image, seed, upscaled=False, first_seed=None):
+    def share_image_memory(image):
         nonlocal shared_memory
+        image_bytes = image_to_bytes(image)
+        image_bytes_len = len(image_bytes)
+        if shared_memory is None or shared_memory.size != image_bytes_len:
+            if shared_memory is not None:
+                shared_memory.close()
+            shared_memory = SharedMemory(create=True, size=image_bytes_len)
+        shared_memory.buf[:] = image_bytes
+        return shared_memory.name
+
+    def image_writer(image, seed, upscaled=False, first_seed=None):
         # Only use the non-upscaled texture, as upscaling is a separate step in this addon.
         if not upscaled:
-            image_bytes = image_to_bytes(image)
-            image_bytes_len = len(image_bytes)
-            if shared_memory is None or shared_memory.size != image_bytes_len:
-                if shared_memory is not None:
-                    shared_memory.close()
-                shared_memory = SharedMemory(create=True, size=image_bytes_len)
-            shared_memory.buf[:] = image_bytes
-            send_action(Action.IMAGE, shared_memory_name=shared_memory.name, seed=seed, width=image.width, height=image.height)
+            send_action(Action.IMAGE, shared_memory_name=share_image_memory(image), seed=seed, width=image.width, height=image.height)
     
     step = 0
     def view_step(samples):
         nonlocal step
         if args['show_steps']:
-            image = generator._sample_to_image(samples)
-            send_action(Action.STEP_IMAGE, payload=image_to_bytes(image), step=step, width=image.width, height=image.height)
+            image = generator.sample_to_image(samples)
+            send_action(Action.STEP_IMAGE, shared_memory_name=share_image_memory(image), step=step, width=image.width, height=image.height)
         else:
             send_action(Action.STEP_NO_SHOW, step=step)
         step += 1
@@ -348,7 +350,7 @@ def main():
                 return # stdin closed
             args = json.loads(stdin.read(json_len))
 
-            if generator is None or (generator.full_precision != args['full_precision'] and sys.platform != 'darwin'):
+            if generator is None or generator.precision != args['precision']:
                 send_info("Loading Model")
                 try:
                     generator = Generate(
@@ -357,7 +359,7 @@ def main():
                         # These args are deprecated, but we need them to specify an absolute path to the weights.
                         weights=weights,
                         config=config,
-                        full_precision=args['full_precision']
+                        precision=args['precision']
                     )
                     generator.free_gpu_mem = False # Not sure what this is for, and why it isn't a flag but read from Args()?
                     generator.load_model()
@@ -384,9 +386,9 @@ def main():
                         import re
                         low_ram = re.search(r"(Not enough memory, use lower resolution)( \(max approx. \d+x\d+\))",s,re.IGNORECASE)
                         if low_ram:
-                            send_exception(False, f"{low_ram[1]}{' or disable full precision' if args['full_precision'] else ''}{low_ram[2]}", s)
+                            send_exception(False, f"{low_ram[1]}{' or disable full precision' if args['precision'] == 'float32' else ''}{low_ram[2]}", s)
                         elif s.find("CUDA out of memory. Tried to allocate") != -1:
-                            send_exception(False, f"Not enough memory, use lower resolution{' or disable full precision' if args['full_precision'] else ''}", s)
+                            send_exception(False, f"Not enough memory, use lower resolution{' or disable full precision' if args['precision'] == 'float32' else ''}", s)
                         else:
                             send_exception(True, msg=None, trace=s) # consider all unknown exceptions to be fatal so the generator process is fully restarted next time
                             return

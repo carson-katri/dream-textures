@@ -1,8 +1,8 @@
-from importlib.resources import path
 import sys
 import bpy
 import os
-import math
+import numpy as np
+from multiprocessing.shared_memory import SharedMemory
 
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
@@ -92,7 +92,7 @@ class DreamTexture(bpy.types.Operator):
             image.pack()
             return image
 
-        def image_writer(seed, width, height, pixels, upscaled=False):
+        def image_writer(shared_memory_name, seed, width, height, upscaled=False):
             info() # clear variable
             global last_data_block
             # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
@@ -102,7 +102,9 @@ class DreamTexture(bpy.types.Operator):
                     last_data_block = None
                 if generator is None or generator.process.poll() or width == 0 or height == 0:
                     return # process was closed
-                image = bpy_image(f"{seed}", width, height, pixels)
+                shared_memory = SharedMemory(shared_memory_name)
+                image = bpy_image(f"{seed}", width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+                shared_memory.close()
                 if node_tree is not None:
                     nodes = node_tree.nodes
                     texture_node = nodes.new("ShaderNodeTexImage")
@@ -116,15 +118,17 @@ class DreamTexture(bpy.types.Operator):
                 history_entry.seed = str(seed)
                 history_entry.random_seed = False
         
-        def view_step(step, width=None, height=None, pixels=None):
+        def view_step(step, width=None, height=None, shared_memory_name=None):
             info() # clear variable
             scene.dream_textures_progress = step + 1
-            if pixels is None:
+            if shared_memory_name is None:
                 return # show steps disabled
             global last_data_block
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
-                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, pixels)
+                    shared_memory = SharedMemory(shared_memory_name)
+                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+                    shared_memory.close()
                     area.spaces.active.image = step_image
                     if last_data_block is not None:
                         bpy.data.images.remove(last_data_block)

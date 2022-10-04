@@ -68,8 +68,7 @@ def draw_panel(self, context):
     advanced_box_heading.prop(scene.dream_textures_prompt, "show_advanced", icon="DOWNARROW_HLT" if scene.dream_textures_prompt.show_advanced else "RIGHTARROW_THIN", emboss=False, icon_only=True)
     advanced_box_heading.label(text="Advanced Configuration")
     if scene.dream_textures_prompt.show_advanced:
-        if sys.platform not in {'darwin'}:
-            advanced_box.prop(scene.dream_textures_prompt, "full_precision")
+        advanced_box.prop(scene.dream_textures_prompt, "precision")
         advanced_box.prop(scene.dream_textures_prompt, "random_seed")
         seed_row = advanced_box.row()
         seed_row.prop(scene.dream_textures_prompt, "seed")

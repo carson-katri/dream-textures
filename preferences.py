@@ -1,12 +1,8 @@
 import bpy
 from bpy.props import CollectionProperty
 import os
-import sys
 import webbrowser
-from shutil import which
 
-
-from .help_section import help_section
 from .absolute_path import WEIGHTS_PATH, absolute_path
 from .operators.install_dependencies import InstallDependencies
 from .operators.open_latest_version import OpenLatestVersion
@@ -116,7 +112,6 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
         
         troubleshooting_box = layout.box()
         troubleshooting_box.label(text="Troubleshooting", icon="ERROR")
-        help_section(troubleshooting_box, context)
 
         if context.preferences.view.show_developer_ui: # If 'Developer Extras' is enabled, show addon development tools
             developer_box = layout.box()

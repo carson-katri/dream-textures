@@ -27,8 +27,6 @@ import bpy
 from bpy.props import IntProperty, PointerProperty, EnumProperty
 import sys
 
-from .help_section import register_section_props
-
 from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .classes import CLASSES, PREFERENCE_CLASSES
@@ -53,8 +51,6 @@ def register():
     
 
     bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
-    
-    register_section_props()
 
     for cls in PREFERENCE_CLASSES:
         bpy.utils.register_class(cls)

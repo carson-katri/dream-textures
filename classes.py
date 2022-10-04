@@ -5,7 +5,7 @@ from .operators.view_history import RecallHistoryEntry, SCENE_UL_HistoryList
 from .operators.inpaint_area_brush import InpaintAreaStroke
 from .operators.upscale import Upscale
 from .property_groups.dream_prompt import DreamPrompt
-from .ui.panels import dream_texture, history, troubleshooting, upscaling
+from .ui.panels import dream_texture, history, upscaling
 from .preferences import OpenGitDownloads, OpenHuggingFace, OpenWeightsDirectory, OpenRustInstaller, ValidateInstallation, StableDiffusionPreferences
 
 CLASSES = (
@@ -21,7 +21,6 @@ CLASSES = (
     *dream_texture.dream_texture_panels(),
     *upscaling.upscaling_panels(),
     *history.history_panels(),
-    *troubleshooting.troubleshooting_panels(),
 
     upscaling.OpenRealESRGANDownload,
     upscaling.OpenRealESRGANWeightsDirectory

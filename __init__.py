@@ -34,6 +34,7 @@ from .tools import TOOLS
 from .operators.dream_texture import DreamTexture, kill_generator
 from .property_groups.dream_prompt import DreamPrompt
 from .operators.upscale import upscale_options
+from .preferences import StableDiffusionPreferences
 
 requirements_path_items = (
     # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
@@ -60,7 +61,12 @@ def register():
     bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
     bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
-    bpy.types.Scene.dream_textures_history_selection = IntProperty()
+    def update_selection_preview(self, context):
+        history = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
+        if context.scene.dream_textures_history_selection > 0 and context.scene.dream_textures_history_selection < len(history):
+            context.scene.dream_textures_history_selection_preview = history[context.scene.dream_textures_history_selection].generate_prompt()
+    bpy.types.Scene.dream_textures_history_selection = IntProperty(update=update_selection_preview)
+    bpy.types.Scene.dream_textures_history_selection_preview = bpy.props.StringProperty(name="", default="", update=update_selection_preview)
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 

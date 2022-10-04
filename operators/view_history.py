@@ -20,7 +20,7 @@ class SCENE_UL_HistoryList(bpy.types.UIList):
             layout.label(text="", icon_value=icon)
 
 class RecallHistoryEntry(bpy.types.Operator):
-    bl_idname = "shade.dream_textures_recall_history"
+    bl_idname = "shade.dream_textures_history_recall"
     bl_label = "Recall Prompt"
     bl_description = "Open the Dream Textures dialog with the historical properties filled in"
     bl_options = {'REGISTER'}
@@ -34,5 +34,31 @@ class RecallHistoryEntry(bpy.types.Operator):
         for prop in selection.__annotations__.keys():
             if hasattr(context.scene.dream_textures_prompt, prop):
                 setattr(context.scene.dream_textures_prompt, prop, getattr(selection, prop))
+
+        return {"FINISHED"}
+
+class ClearHistory(bpy.types.Operator):
+    bl_idname = "shade.dream_textures_history_clear"
+    bl_label = "Clear History"
+    bl_description = "Removes all history entries"
+    bl_options = {'REGISTER'}
+    
+    def execute(self, context):
+        context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.clear()
+
+        return {"FINISHED"}
+
+class RemoveHistorySelection(bpy.types.Operator):
+    bl_idname = "shade.dream_textures_history_remove_selection"
+    bl_label = "Remove History Selection"
+    bl_description = "Removes the selected history entry"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(self, context):
+        return context.scene.dream_textures_history_selection is not None and context.scene.dream_textures_history_selection > 0
+    
+    def execute(self, context):
+        context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.remove(context.scene.dream_textures_history_selection)
 
         return {"FINISHED"}

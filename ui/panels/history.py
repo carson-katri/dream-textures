@@ -3,7 +3,7 @@ from bpy.types import Panel
 from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.dream_texture import DreamTexture, ReleaseGenerator
-from ...operators.view_history import RecallHistoryEntry
+from ...operators.view_history import RecallHistoryEntry, ClearHistory, RemoveHistorySelection
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...preferences import StableDiffusionPreferences
 from ..space_types import SPACE_TYPES
@@ -18,8 +18,6 @@ def history_panels():
             bl_space_type = space_type
             bl_region_type = 'UI'
 
-            selection: bpy.props.IntProperty(name="Selection")
-
             @classmethod
             def poll(self, context):
                 if self.bl_space_type == 'NODE_EDITOR':
@@ -28,12 +26,19 @@ def history_panels():
                     return True
 
             def draw(self, context):
-                if len(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history) < 1:
-                    header = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
+                history = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
+                if len(history) < 1:
+                    header = history.add()
                 else:
-                    header = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history[0]
+                    header = history[0]
                 header.prompt_structure_token_subject = "SCENE_UL_HistoryList_header"
                 self.layout.template_list("SCENE_UL_HistoryList", "", context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences, "history", context.scene, "dream_textures_history_selection")
+                
+                row = self.layout.row()
+                row.prop(context.scene, "dream_textures_history_selection_preview")
+                row.operator(RemoveHistorySelection.bl_idname, text="", icon="X")
+
                 self.layout.operator(RecallHistoryEntry.bl_idname)
+                self.layout.operator(ClearHistory.bl_idname)
         HistoryPanel.__name__ = f"DREAM_PT_dream_history_panel_{space_type}"
         yield HistoryPanel

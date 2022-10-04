@@ -3,6 +3,7 @@ from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.dream_texture import DreamTexture, ReleaseGenerator
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
+from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
 
 def dream_texture_panels():
@@ -28,6 +29,11 @@ def dream_texture_panels():
                     return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
                 else:
                     return True
+            
+            def draw_header_preset(self, context):
+                layout = self.layout
+                layout.operator(ImportPromptFile.bl_idname, text="", icon="IMPORT")
+                layout.separator()
 
             def draw(self, context):
                 layout = self.layout
@@ -47,12 +53,15 @@ def dream_texture_panels():
             bl_label = "Prompt"
             bl_parent_id = f"DREAM_PT_dream_panel_{space_type}"
 
+            def draw_header_preset(self, context):
+                layout = self.layout
+                layout.prop(context.scene.dream_textures_prompt, "prompt_structure", text="")
+
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
                 scene = context.scene
 
-                layout.prop(scene.dream_textures_prompt, "prompt_structure")
                 structure = next(x for x in prompt_structures if x.id == scene.dream_textures_prompt.prompt_structure)
                 for segment in structure.structure:
                     segment_row = layout.row()

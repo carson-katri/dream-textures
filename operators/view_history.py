@@ -1,4 +1,7 @@
 import bpy
+from bpy_extras.io_utils import ImportHelper, ExportHelper
+import json
+import os
 from ..property_groups.dream_prompt import sampler_options
 from ..preferences import StableDiffusionPreferences
     
@@ -60,5 +63,59 @@ class RemoveHistorySelection(bpy.types.Operator):
     
     def execute(self, context):
         context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.remove(context.scene.dream_textures_history_selection)
+
+        return {"FINISHED"}
+
+class ExportHistorySelection(bpy.types.Operator, ExportHelper):
+    bl_idname = "shade.dream_textures_history_export"
+    bl_label = "Export Prompt"
+    bl_description = "Exports the selected history entry to a JSON file"
+    
+    filename_ext = ".json"
+
+    filter_glob: bpy.props.StringProperty(
+        default="*.json",
+        options={'HIDDEN'},
+        maxlen=255,
+    )
+
+    @classmethod
+    def poll(self, context):
+        return context.scene.dream_textures_history_selection is not None and context.scene.dream_textures_history_selection > 0
+    
+    def execute(self, context):
+        selection = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history[context.scene.dream_textures_history_selection]
+        if selection is None:
+            self.report({"ERROR"}, "No valid selection to export.")
+            return {"FINISHED"}
+        with open(self.filepath, 'w', encoding='utf-8') as target:
+            json.dump(selection.generate_args(), target, indent=4)
+
+        return {"FINISHED"}
+
+class ImportPromptFile(bpy.types.Operator, ImportHelper):
+    bl_idname = "shade.dream_textures_import_prompt"
+    bl_label = "Import Prompt"
+    bl_description = "Imports a JSON file as a prompt"
+    
+    filename_ext = ".json"
+
+    filter_glob: bpy.props.StringProperty(
+        default="*.json",
+        options={'HIDDEN'},
+        maxlen=255,
+    )
+    
+    def execute(self, context):
+        _, extension = os.path.splitext(self.filepath)
+        if extension != ".json":
+            self.report({"ERROR"}, "Invalid prompt JSON file selected.")
+            return {"FINISHED"}
+        
+        with open(self.filepath, 'r', encoding='utf-8') as target:
+            args = json.load(target)
+            for key, value in args.items():
+                if hasattr(context.scene.dream_textures_prompt, key) and value is not None:
+                    setattr(context.scene.dream_textures_prompt, key, value)
 
         return {"FINISHED"}

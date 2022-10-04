@@ -113,6 +113,14 @@ def get_seed(self):
             h = ~h
         return (h & 0xFFFFFFFF) ^ (h >> 32) # 64 bit hash down to 32 bits
 
+def generate_args(self):
+    args = { key: getattr(self, key) for key in DreamPrompt.__annotations__ }
+    args['prompt'] = self.generate_prompt()
+    args['seed'] = self.get_seed()
+    print(args)
+    return args
+
 DreamPrompt.generate_prompt = generate_prompt
 DreamPrompt.get_prompt_subject = get_prompt_subject
 DreamPrompt.get_seed = get_seed
+DreamPrompt.generate_args = generate_args

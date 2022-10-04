@@ -3,7 +3,7 @@ from bpy.types import Panel
 from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.dream_texture import DreamTexture, ReleaseGenerator
-from ...operators.view_history import RecallHistoryEntry, ClearHistory, RemoveHistorySelection
+from ...operators.view_history import ExportHistorySelection, ImportPromptFile, RecallHistoryEntry, ClearHistory, RemoveHistorySelection
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...preferences import StableDiffusionPreferences
 from ..space_types import SPACE_TYPES
@@ -37,6 +37,7 @@ def history_panels():
                 row = self.layout.row()
                 row.prop(context.scene, "dream_textures_history_selection_preview")
                 row.operator(RemoveHistorySelection.bl_idname, text="", icon="X")
+                row.operator(ExportHistorySelection.bl_idname, text="", icon="EXPORT")
 
                 self.layout.operator(RecallHistoryEntry.bl_idname)
                 self.layout.operator(ClearHistory.bl_idname)

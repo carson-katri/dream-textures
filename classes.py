@@ -1,7 +1,7 @@
 from .operators.install_dependencies import InstallDependencies
 from .operators.open_latest_version import OpenLatestVersion
 from .operators.dream_texture import DreamTexture, ReleaseGenerator
-from .operators.view_history import SCENE_UL_HistoryList, RecallHistoryEntry, ClearHistory, RemoveHistorySelection
+from .operators.view_history import SCENE_UL_HistoryList, RecallHistoryEntry, ClearHistory, RemoveHistorySelection, ExportHistorySelection, ImportPromptFile
 from .operators.inpaint_area_brush import InpaintAreaStroke
 from .operators.upscale import Upscale
 from .property_groups.dream_prompt import DreamPrompt
@@ -16,6 +16,8 @@ CLASSES = (
     RecallHistoryEntry,
     ClearHistory,
     RemoveHistorySelection,
+    ExportHistorySelection,
+    ImportPromptFile,
     InpaintAreaStroke,
     Upscale,
     

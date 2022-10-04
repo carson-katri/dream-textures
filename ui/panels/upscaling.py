@@ -1,5 +1,6 @@
 import bpy
 from bpy.types import Panel
+from bpy_extras.io_utils import ImportHelper
 from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.upscale import Upscale
@@ -7,6 +8,7 @@ from ...absolute_path import REAL_ESRGAN_WEIGHTS_PATH
 from ..space_types import SPACE_TYPES
 import os
 import webbrowser
+import shutil
 
 class OpenRealESRGANDownload(bpy.types.Operator):
     bl_idname = "stable_diffusion.open_realesrgan_download"
@@ -18,17 +20,24 @@ class OpenRealESRGANDownload(bpy.types.Operator):
         webbrowser.open("https://github.com/xinntao/Real-ESRGAN/releases/tag/v0.3.0")
         return {"FINISHED"}
 
-class OpenRealESRGANWeightsDirectory(bpy.types.Operator):
+class OpenRealESRGANWeightsDirectory(bpy.types.Operator, ImportHelper):
     bl_idname = "stable_diffusion.open_realesrgan_weights_directory"
-    bl_label = "Open Target Directory"
+    bl_label = "Import Model Weights"
     bl_description = ("Opens the directory that should contain the 'realesr-general-x4v3.pth' file")
-    bl_options = {"REGISTER", "INTERNAL"}
+
+    filename_ext = ".pth"
+    filter_glob: bpy.props.StringProperty(
+        default="*.pth",
+        options={'HIDDEN'},
+        maxlen=255,
+    )
 
     def execute(self, context):
-        path = os.path.dirname(REAL_ESRGAN_WEIGHTS_PATH)
-        if not os.path.exists(path):
-            os.mkdir(path)
-        webbrowser.open(f"file:///{os.path.realpath(path)}")
+        _, extension = os.path.splitext(self.filepath)
+        if extension != '.pth':
+            self.report({"ERROR"}, "Select a valid Real-ESRGAN '.pth' file.")
+            return {"FINISHED"}
+        shutil.copy(self.filepath, REAL_ESRGAN_WEIGHTS_PATH)
         
         return {"FINISHED"}
 
@@ -57,8 +66,8 @@ def upscaling_panels():
                     layout.label(text="Real-ESRGAN model weights not installed.")
                     layout.label(text="1. Download the file 'realesr-general-x4v3.pth' from GitHub")
                     layout.operator(OpenRealESRGANDownload.bl_idname, icon="URL")
-                    layout.label(text="2. Place it in the weights folder with the name 'realesr-general-x4v3.pth'")
-                    layout.operator(OpenRealESRGANWeightsDirectory.bl_idname, icon="FOLDER_REDIRECT")
+                    layout.label(text="2. Select the downloaded weights to install.")
+                    layout.operator(OpenRealESRGANWeightsDirectory.bl_idname, icon="IMPORT")
                 layout = layout.column()
                 layout.enabled = os.path.exists(REAL_ESRGAN_WEIGHTS_PATH)
                 layout.prop(context.scene, "dream_textures_upscale_outscale")

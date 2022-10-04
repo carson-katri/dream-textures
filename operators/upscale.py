@@ -45,6 +45,9 @@ class Upscale(bpy.types.Operator):
 
     def execute(self, context):
         scene = context.scene
+        screen = context.screen
+        node_tree = context.material.node_tree if hasattr(context, 'material') else None
+        active_node = next((node for node in node_tree.nodes if node.select and node.bl_idname == 'ShaderNodeTexImage'), None)
 
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
@@ -68,14 +71,18 @@ class Upscale(bpy.types.Operator):
 
         input_image = None
         input_image_path = None
-        for area in context.screen.areas:
-            if area.type == 'IMAGE_EDITOR':
-                if area.spaces.active.image is not None:
-                    input_image = area.spaces.active.image
-                    input_image_path = save_temp_image(input_image)
+        if active_node is not None and active_node.image is not None:
+            input_image = active_node.image
+            input_image_path = save_temp_image(input_image)
+        else:
+            for area in context.screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    if area.spaces.active.image is not None:
+                        input_image = area.spaces.active.image
+                        input_image_path = save_temp_image(input_image)
         
         if input_image is None:
-            self.report({"ERROR"}, "No open image in the Image Editor space")
+            self.report({"ERROR"}, "No open image in the Image Editor space, or selected Image Texture node.")
             return {"FINISHED"}
 
         def bpy_image(name, width, height, pixels):
@@ -87,7 +94,12 @@ class Upscale(bpy.types.Operator):
         def image_callback(shared_memory_name, seed, width, height):
             scene.dream_textures_info = ""
             shared_memory = SharedMemory(shared_memory_name)
-            bpy_image(seed + ' (Upscaled)', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+            image = bpy_image(seed + ' (Upscaled)', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+            for area in context.screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    area.spaces.active.image = image
+            if active_node is not None:
+                active_node.image = image
             shared_memory.close()
 
         def info_callback(msg=""):

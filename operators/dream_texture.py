@@ -127,8 +127,8 @@ class DreamTexture(bpy.types.Operator):
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     shared_memory = SharedMemory(shared_memory_name)
-                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
                     shared_memory.close()
+                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
                     area.spaces.active.image = step_image
                     if last_data_block is not None:
                         bpy.data.images.remove(last_data_block)

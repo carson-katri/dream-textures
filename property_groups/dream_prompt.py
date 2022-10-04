@@ -14,6 +14,13 @@ sampler_options = [
     ("k_heun", "KHEUN", "", 8),
 ]
 
+precision_options = [
+    ('auto', 'Automatic', "", 1),
+    ('float32', 'Full Precision (float32)', "", 2),
+    ('autocast', 'Autocast', "", 3),
+    ('float16', 'Half Precision (float16)', "", 4),
+]
+
 def seed_clamp(self, ctx):
     # clamp seed right after input to make it clear what the limits are
     try:
@@ -38,7 +45,7 @@ attributes = {
     "show_advanced": BoolProperty(name="", default=False),
     "random_seed": BoolProperty(name="Random Seed", default=True, description="Randomly pick a seed"),
     "seed": StringProperty(name="Seed", default="0", description="Manually pick a seed", update=seed_clamp),
-    "full_precision": BoolProperty(name="Full Precision", default=True if sys.platform == 'darwin' else False, description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
+    "precision": EnumProperty(name="Precision", items=precision_options, default='auto', description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
     "iterations": IntProperty(name="Iterations", default=1, min=1, description="How many images to generate"),
     "steps": IntProperty(name="Steps", default=25, min=1),
     "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, description="How strongly the prompt influences the image"),

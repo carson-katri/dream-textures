@@ -35,6 +35,7 @@ from .classes import CLASSES, PREFERENCE_CLASSES
 from .tools import TOOLS
 from .operators.dream_texture import DreamTexture, kill_generator
 from .property_groups.dream_prompt import DreamPrompt
+from .operators.upscale import upscale_options
 
 requirements_path_items = (
     # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
@@ -66,6 +67,9 @@ def register():
     bpy.types.Scene.dream_textures_history_selection = IntProperty()
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
+
+    bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
+    bpy.types.Scene.dream_textures_upscale_full_precision = bpy.props.BoolProperty(name="Full Precision", default=True)
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)

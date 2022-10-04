@@ -9,3 +9,4 @@ def absolute_path(component):
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), component)
 
 WEIGHTS_PATH = absolute_path("stable_diffusion/models/ldm/stable-diffusion-v1/model.ckpt")
+REAL_ESRGAN_WEIGHTS_PATH = absolute_path("weights/realesrgan/realesr-general-x4v3.pth")

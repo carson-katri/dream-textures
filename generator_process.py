@@ -283,14 +283,14 @@ def main():
             send_action(Action.IMAGE, shared_memory_name=share_image_memory(image), seed=seed, width=image.width, height=image.height)
     
     step = 0
-    def view_step(samples):
+    def view_step(samples, i):
         nonlocal step
+        step = i
         if args['show_steps']:
             image = generator.sample_to_image(samples)
             send_action(Action.STEP_IMAGE, shared_memory_name=share_image_memory(image), step=step, width=image.width, height=image.height)
         else:
             send_action(Action.STEP_NO_SHOW, step=step)
-        step += 1
 
     def preload_models():
         tqdm = None

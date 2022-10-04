@@ -1,3 +1,4 @@
+import enum
 from bpy.types import Panel
 from ...pil_to_image import *
 from ...prompt_engineering import *
@@ -5,6 +6,7 @@ from ...operators.dream_texture import DreamTexture, ReleaseGenerator
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
+from ...property_groups.dream_prompt import DreamPrompt
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -69,7 +71,9 @@ def dream_texture_panels():
                     is_custom = getattr(scene.dream_textures_prompt, enum_prop) == 'custom'
                     if is_custom:
                         segment_row.prop(scene.dream_textures_prompt, 'prompt_structure_token_' + segment.id)
-                    segment_row.prop(scene.dream_textures_prompt, enum_prop, icon_only=is_custom)
+                    enum_cases = DreamPrompt.__annotations__[enum_prop].keywords['items']
+                    if len(enum_cases) != 1 or enum_cases[0][0] != 'custom':
+                        segment_row.prop(scene.dream_textures_prompt, enum_prop, icon_only=is_custom)
                 layout.prop(scene.dream_textures_prompt, "seamless")
         yield PromptPanel
     

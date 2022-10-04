@@ -69,6 +69,7 @@ def register():
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 
     bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
+    bpy.types.Scene.dream_textures_upscale_full_precision = bpy.props.BoolProperty(name="Full Precision", default=True)
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)

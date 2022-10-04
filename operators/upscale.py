@@ -47,7 +47,16 @@ class Upscale(bpy.types.Operator):
         scene = context.scene
         screen = context.screen
         node_tree = context.material.node_tree if hasattr(context, 'material') else None
-        active_node = next((node for node in node_tree.nodes if node.select and node.bl_idname == 'ShaderNodeTexImage'), None)
+        active_node = next((node for node in node_tree.nodes if node.select and node.bl_idname == 'ShaderNodeTexImage'), None) if node_tree is not None else None
+
+        def step_progress_update(self, context):
+            if hasattr(context.area, "regions"):
+                for region in context.area.regions:
+                    if region.type == "UI":
+                        region.tag_redraw()
+            return None
+
+        bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info", update=step_progress_update)
 
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
@@ -116,6 +125,7 @@ class Upscale(bpy.types.Operator):
             'input': input_image_path,
             'name': input_image.name,
             'outscale': int(context.scene.dream_textures_upscale_outscale),
+            'full_precision': context.scene.dream_textures_upscale_full_precision,
         }
         global generator_advance
         generator_advance = generator.upscale(args, image_callback, info_callback, exception_callback)

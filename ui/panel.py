@@ -222,6 +222,11 @@ def upscaling_panels():
                 layout = layout.column()
                 layout.enabled = os.path.exists(REAL_ESRGAN_WEIGHTS_PATH)
                 layout.prop(context.scene, "dream_textures_upscale_outscale")
+                layout.prop(context.scene, "dream_textures_upscale_full_precision")
+                if not context.scene.dream_textures_upscale_full_precision:
+                    box = layout.box()
+                    box.label(text="Note: Some GPUs do not support mixed precision math", icon="ERROR")
+                    box.label(text="If you encounter an error, enable full precision.")
                 if context.scene.dream_textures_info != "":
                     layout.label(text=context.scene.dream_textures_info, icon="INFO")
                 else:

@@ -416,19 +416,17 @@ def main():
                 from realesrgan.archs.srvgg_arch import SRVGGNetCompact
                 # image = Image.open(args['input'])
                 image = cv2.imread(args['input'], cv2.IMREAD_UNCHANGED)
-                model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=32, upscale=4, act_type='prelu')
+                real_esrgan_model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=32, upscale=4, act_type='prelu')
                 netscale = 4
                 send_info("Loading Upsampler")
                 upsampler = RealESRGANer(
                     scale=netscale,
                     model_path=REAL_ESRGAN_WEIGHTS_PATH,
-                    dni_weight=1,
-                    model=model,
+                    model=real_esrgan_model,
                     tile=0,
                     tile_pad=10,
                     pre_pad=0,
-                    half=False,
-                    gpu_id=None
+                    half=not args['full_precision']
                 )
                 send_info("Enhancing Input")
                 output, _ = upsampler.enhance(image, outscale=args['outscale'])

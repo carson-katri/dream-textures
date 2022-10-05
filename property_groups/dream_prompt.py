@@ -33,6 +33,8 @@ def seed_clamp(self, ctx):
 attributes = {
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
+    "use_negative_prompt": BoolProperty(name="Use Negative Prompt", default=False),
+    "negative_prompt": StringProperty(name="Negative Prompt", description="The model will avoid aspects of the negative prompt"),
 
     # Size
     "width": IntProperty(name="Width", default=512, min=64, step=64),
@@ -91,7 +93,7 @@ def generate_prompt(self):
             tokens[segment.id] = getattr(self, 'prompt_structure_token_' + segment.id)
         else:
             tokens[segment.id] = next(x for x in segment.values if x[0] == enum_value)[1]
-    return structure.generate(dotdict(tokens))
+    return structure.generate(dotdict(tokens)) + (f" [{self.negative_prompt}]" if self.use_negative_prompt else "")
 
 def get_prompt_subject(self):
     structure = next(x for x in prompt_structures if x.id == self.prompt_structure)

@@ -79,6 +79,26 @@ def dream_texture_panels():
                 layout.prop(scene.dream_textures_prompt, "seamless")
         yield PromptPanel
     
+        class NegativePromptPanel(Panel, SubPanel):
+            """Create a subpanel for negative prompt input"""
+            bl_idname = f"DREAM_PT_dream_panel_negative_prompt_{space_type}"
+            bl_label = "Negative"
+            bl_parent_id = PromptPanel.bl_idname
+
+            def draw_header(self, context):
+                layout = self.layout
+                layout.prop(context.scene.dream_textures_prompt, "use_negative_prompt", text="")
+
+            def draw(self, context):
+                layout = self.layout
+                layout.use_property_split = True
+                layout.use_property_decorate = False
+                layout.enabled = context.scene.dream_textures_prompt.use_negative_prompt
+                scene = context.scene
+
+                layout.prop(scene.dream_textures_prompt, "negative_prompt")
+        yield NegativePromptPanel
+    
         class SizePanel(Panel, SubPanel):
             """Create a subpanel for size options"""
             bl_idname = f"DREAM_PT_dream_panel_size_{space_type}"

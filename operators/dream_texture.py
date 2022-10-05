@@ -44,7 +44,8 @@ class DreamTexture(bpy.types.Operator):
         screen = context.screen
         scene = context.scene
 
-        def image_writer(seed, width, height, pixels, upscaled=False):
+        def image_writer(shared_memory_name, seed, width, height, upscaled=False):
+            info() # clear variable
             global last_data_block
             # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
             if not upscaled:
@@ -53,7 +54,9 @@ class DreamTexture(bpy.types.Operator):
                     last_data_block = None
                 if generator is None or generator.process.poll() or width == 0 or height == 0:
                     return # process was closed
-                image = bpy_image(f"{seed}", width, height, pixels)
+                shared_memory = SharedMemory(shared_memory_name)
+                image = bpy_image(f"{seed}", width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+                shared_memory.close()
                 if node_tree is not None:
                     nodes = node_tree.nodes
                     texture_node = nodes.new("ShaderNodeTexImage")
@@ -67,13 +70,17 @@ class DreamTexture(bpy.types.Operator):
                 history_entry.seed = str(seed)
                 history_entry.random_seed = False
         
-        def view_step(step, width=None, height=None, pixels=None):
-            if pixels is None:
+        def view_step(step, width=None, height=None, shared_memory_name=None):
+            info() # clear variable
+            scene.dream_textures_progress = step + 1
+            if shared_memory_name is None:
                 return # show steps disabled
             global last_data_block
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
-                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, pixels)
+                    shared_memory = SharedMemory(shared_memory_name)
+                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+                    shared_memory.close()
                     area.spaces.active.image = step_image
                     if last_data_block is not None:
                         bpy.data.images.remove(last_data_block)
@@ -166,49 +173,6 @@ class HeadlessDreamTexture(bpy.types.Operator):
             image.pack()
             return image
 
-        def image_writer(shared_memory_name, seed, width, height, upscaled=False):
-            info() # clear variable
-            global last_data_block
-            # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
-            if not upscaled:
-                if last_data_block is not None:
-                    bpy.data.images.remove(last_data_block)
-                    last_data_block = None
-                if generator is None or generator.process.poll() or width == 0 or height == 0:
-                    return # process was closed
-                shared_memory = SharedMemory(shared_memory_name)
-                image = bpy_image(f"{seed}", width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
-                shared_memory.close()
-                if node_tree is not None:
-                    nodes = node_tree.nodes
-                    texture_node = nodes.new("ShaderNodeTexImage")
-                    texture_node.image = image
-                    nodes.active = texture_node
-                for area in screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
-                        area.spaces.active.image = image
-                scene.dream_textures_progress = 0
-                scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
-                history_entry.seed = str(seed)
-                history_entry.random_seed = False
-        
-        def view_step(step, width=None, height=None, shared_memory_name=None):
-            info() # clear variable
-            scene.dream_textures_progress = step + 1
-            if shared_memory_name is None:
-                return # show steps disabled
-            global last_data_block
-            for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    shared_memory = SharedMemory(shared_memory_name)
-                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
-                    shared_memory.close()
-                    area.spaces.active.image = step_image
-                    if last_data_block is not None:
-                        bpy.data.images.remove(last_data_block)
-                    last_data_block = step_image
-                    return # Only perform this on the first image editor found.
-
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
 
@@ -240,19 +204,19 @@ class HeadlessDreamTexture(bpy.types.Operator):
         if init_img is not None:
             init_img_path = save_temp_image(init_img)
 
-        args = scene.dream_textures_prompt.generate_args()
+        args = headless_prompt.generate_args()
         args['init_img'] = init_img_path
 
-        def step_callback(step, width=None, height=None, pixels=None):
+        def step_callback(step, width=None, height=None, shared_memory_name=None):
             global headless_step_callback
             info() # clear variable
             scene.dream_textures_progress = step + 1
-            headless_step_callback(step, width, height, pixels)
+            headless_step_callback(step, width, height, shared_memory_name)
 
-        def image_callback(seed, width, height, pixels, upscaled=False):
+        def image_callback(shared_memory_name, seed, width, height, upscaled=False):
             global headless_image_callback
             info() # clear variable
-            headless_image_callback(seed, width, height, pixels, upscaled)
+            headless_image_callback(shared_memory_name, seed, width, height, upscaled)
 
         global generator_advance
         generator_advance = generator.prompt2image(args,
@@ -273,14 +237,6 @@ def remove_timer(context):
     if timer:
         context.window_manager.event_timer_remove(timer)
         timer = None
-
-def get_generator() -> GeneratorProcess | None:
-    global generator
-    return generator
-
-def create_generator():
-    global generator
-    generator = GeneratorProcess()
 
 def kill_generator(context=bpy.context):
     GeneratorProcess.kill_shared()

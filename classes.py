@@ -10,7 +10,7 @@ from .preferences import OpenGitDownloads, OpenHuggingFace, OpenWeightsDirectory
 
 CLASSES = (
     HeadlessDreamTexture,
-    render_properties.RenderPropertiesPanel,
+    *render_properties.render_properties_panels(),
     
     DreamTexture,
     ReleaseGenerator,

@@ -164,9 +164,7 @@ class DreamTexture(bpy.types.Operator):
         if init_img is not None:
             init_img_path = save_temp_image(init_img)
 
-        args = {key: getattr(scene.dream_textures_prompt,key) for key in DreamPrompt.__annotations__}
-        args['prompt'] = context.scene.dream_textures_prompt.generate_prompt()
-        args['seed'] = scene.dream_textures_prompt.get_seed()
+        args = scene.dream_textures_prompt.generate_args()
         args['init_img'] = init_img_path
 
         global generator_advance

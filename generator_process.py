@@ -239,6 +239,7 @@ def main():
         pkg_resources._initialize_master_working_set()
 
         from stable_diffusion.ldm.generate import Generate
+        from stable_diffusion.ldm.dream.devices import choose_precision
         from omegaconf import OmegaConf
         from PIL import Image, ImageOps
         from io import StringIO
@@ -282,14 +283,14 @@ def main():
             send_action(Action.IMAGE, shared_memory_name=share_image_memory(image), seed=seed, width=image.width, height=image.height)
     
     step = 0
-    def view_step(samples):
+    def view_step(samples, i):
         nonlocal step
+        step = i
         if args['show_steps']:
             image = generator.sample_to_image(samples)
             send_action(Action.STEP_IMAGE, shared_memory_name=share_image_memory(image), step=step, width=image.width, height=image.height)
         else:
             send_action(Action.STEP_NO_SHOW, step=step)
-        step += 1
 
     def preload_models():
         tqdm = None
@@ -354,8 +355,11 @@ def main():
             if json_len == 0:
                 return # stdin closed
             args = json.loads(stdin.read(json_len))
+            
+            # Reset the step count
+            step = 0
 
-            if generator is None or generator.precision != args['precision']:
+            if generator is None or generator.precision != choose_precision(generator.device) if args['precision'] == 'auto' else args['precision']:
                 send_info("Loading Model")
                 try:
                     generator = Generate(

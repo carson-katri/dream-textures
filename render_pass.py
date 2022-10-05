@@ -26,7 +26,6 @@ def register_render_pass():
                 return original(self, depsgraph)
             result = original(self, depsgraph)
             try:
-                # TODO: Create the render result from scratch
                 original_result = self.get_result()
                 self.add_pass("Dream Textures", 4, "RGBA")
                 scale = scene.render.resolution_percentage / 100.0

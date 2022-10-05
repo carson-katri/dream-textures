@@ -48,8 +48,6 @@ def register_render_pass():
                                 self.update_stats("Dream Textures", "Pushing to render pass")
                                 # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
                                 if not upscaled:
-                                    print(width, height)
-                                    print(len(render_pass.rect))
                                     shared_memory = SharedMemory(shared_memory_name)
                                     pixels = np.frombuffer(shared_memory.buf, dtype=np.float32)
                                     reshaped = pixels.reshape((width * height, 4))
@@ -57,9 +55,9 @@ def register_render_pass():
                                     shared_memory.close()
                                     event.set()
                             
-                            step_count = scene.dream_textures_render_properties_prompt.steps
+                            step_count = int(scene.dream_textures_render_properties_prompt.strength * scene.dream_textures_render_properties_prompt.steps)
                             def step_callback(step, width=None, height=None, shared_memory_name=None):
-                                self.update_stats("Dream Textures", f"Step {step}/{step_count}")
+                                self.update_stats("Dream Textures", f"Step {step + 1}/{step_count}")
                                 self.update_progress(step / step_count)
                                 return
                             

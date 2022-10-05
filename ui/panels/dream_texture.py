@@ -6,6 +6,7 @@ from ...operators.open_latest_version import OpenLatestVersion, is_force_show_do
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
 from ...property_groups.dream_prompt import DreamPrompt
+import types
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -32,7 +33,6 @@ def dream_texture_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
-                layout.use_property_decorate = False
 
                 if is_force_show_download():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
@@ -50,7 +50,7 @@ def dream_texture_panels():
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, actions_panel, get_prompt)
 
-def create_panel(space_type, region_type, parent_id, ctor, get_prompt):
+def create_panel(space_type, region_type, parent_id, ctor, get_prompt, use_property_decorate=False):
     class BasePanel(bpy.types.Panel):
         bl_category = "Dream"
         bl_space_type = space_type
@@ -61,6 +61,9 @@ def create_panel(space_type, region_type, parent_id, ctor, get_prompt):
         bl_space_type = space_type
         bl_region_type = region_type
         bl_parent_id = parent_id
+
+        def draw(self, context):
+            self.layout.use_property_decorate = use_property_decorate
     
     return ctor(SubPanel, space_type, get_prompt)
 
@@ -75,6 +78,7 @@ def prompt_panel(sub_panel, space_type, get_prompt):
             layout.prop(get_prompt(context), "prompt_structure", text="")
 
         def draw(self, context):
+            super().draw(context)
             layout = self.layout
             layout.use_property_split = True
 
@@ -102,9 +106,9 @@ def prompt_panel(sub_panel, space_type, get_prompt):
             layout.prop(get_prompt(context), "use_negative_prompt", text="")
 
         def draw(self, context):
+            super().draw(context)
             layout = self.layout
             layout.use_property_split = True
-            layout.use_property_decorate = False
             layout.enabled = layout.enabled and get_prompt(context).use_negative_prompt
             scene = context.scene
 
@@ -118,6 +122,7 @@ def size_panel(sub_panel, space_type, get_prompt):
         bl_label = "Size"
 
         def draw(self, context):
+            super().draw(context)
             layout = self.layout
             layout.use_property_split = True
 
@@ -145,6 +150,7 @@ def inpaint_init_image_panels(sub_panel, space_type, get_prompt):
             self.layout.prop(get_prompt(context), "use_inpainting", text="")
 
         def draw(self, context):
+            super().draw(context)
             layout = self.layout
             layout.use_property_split = True
             layout.enabled = get_prompt(context).use_inpainting
@@ -171,6 +177,7 @@ def inpaint_init_image_panels(sub_panel, space_type, get_prompt):
             self.layout.prop(get_prompt(context), "use_init_img", text="")
 
         def draw(self, context):
+            super().draw(context)
             layout = self.layout
             layout.use_property_split = True
             
@@ -188,6 +195,7 @@ def advanced_panel(sub_panel, space_type, get_prompt):
         bl_options = {'DEFAULT_CLOSED'}
 
         def draw(self, context):
+            super().draw(context)
             layout = self.layout
             layout.use_property_split = True
             
@@ -210,6 +218,7 @@ def actions_panel(sub_panel, space_type, get_prompt):
         bl_options = {'HIDE_HEADER'}
 
         def draw(self, context):
+            super().draw(context)
             layout = self.layout
             layout.use_property_split = True
             

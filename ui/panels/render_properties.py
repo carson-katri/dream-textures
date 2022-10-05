@@ -32,8 +32,8 @@ def render_properties_panels():
     space_type = RenderPropertiesPanel.bl_space_type
     region_type = RenderPropertiesPanel.bl_region_type
     panels = [
-        *create_panel(space_type, region_type, RenderPropertiesPanel.bl_idname, prompt_panel, get_prompt),
-        create_panel(space_type, region_type, RenderPropertiesPanel.bl_idname, advanced_panel, get_prompt),
+        *create_panel(space_type, region_type, RenderPropertiesPanel.bl_idname, prompt_panel, get_prompt, True),
+        create_panel(space_type, region_type, RenderPropertiesPanel.bl_idname, advanced_panel, get_prompt, True),
     ]
     for panel in panels:
         def draw_decorator(original):

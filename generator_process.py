@@ -8,7 +8,6 @@ import site
 import traceback
 import numpy as np
 from enum import IntEnum
-import tempfile
 from multiprocessing.shared_memory import SharedMemory
 
 MISSING_DEPENDENCIES_ERROR = "Python dependencies are missing. Click Download Latest Release to fix."
@@ -54,9 +53,9 @@ class GeneratorProcess():
         self.thread.start()
     
     @classmethod
-    def shared(self):
+    def shared(self, create=True):
         global _shared_instance
-        if _shared_instance is None:
+        if _shared_instance is None and create:
             _shared_instance = GeneratorProcess()
         return _shared_instance
     

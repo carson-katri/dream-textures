@@ -28,7 +28,6 @@ from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty
 import sys
 
 from .render_pass import register_render_pass, unregister_render_pass
-
 from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .classes import CLASSES, PREFERENCE_CLASSES
@@ -63,12 +62,13 @@ def register():
     bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
     bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
-    def update_selection_preview(self, context):
-        history = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
-        if context.scene.dream_textures_history_selection > 0 and context.scene.dream_textures_history_selection < len(history):
-            context.scene.dream_textures_history_selection_preview = history[context.scene.dream_textures_history_selection].generate_prompt()
-    bpy.types.Scene.dream_textures_history_selection = IntProperty(update=update_selection_preview)
-    bpy.types.Scene.dream_textures_history_selection_preview = bpy.props.StringProperty(name="", default="", update=update_selection_preview)
+    def get_selection_preview(self):
+        history = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
+        if self.dream_textures_history_selection > 0 and self.dream_textures_history_selection < len(history):
+            return history[self.dream_textures_history_selection].generate_prompt()
+        return ""
+    bpy.types.Scene.dream_textures_history_selection = IntProperty(default=1)
+    bpy.types.Scene.dream_textures_history_selection_preview = bpy.props.StringProperty(name="", default="", get=get_selection_preview, set=lambda _, __: None)
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 

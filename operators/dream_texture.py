@@ -45,13 +45,13 @@ class DreamTexture(bpy.types.Operator):
         scene = context.scene
 
         def image_writer(shared_memory_name, seed, width, height, upscaled=False):
-            info() # clear variable
             global last_data_block
             # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
             if not upscaled:
                 if last_data_block is not None:
                     bpy.data.images.remove(last_data_block)
                     last_data_block = None
+                generator = GeneratorProcess.shared(create=False)
                 if generator is None or generator.process.poll() or width == 0 or height == 0:
                     return # process was closed
                 shared_memory = SharedMemory(shared_memory_name)
@@ -71,7 +71,6 @@ class DreamTexture(bpy.types.Operator):
                 history_entry.random_seed = False
         
         def view_step(step, width=None, height=None, shared_memory_name=None):
-            info() # clear variable
             scene.dream_textures_progress = step + 1
             if shared_memory_name is None:
                 return # show steps disabled

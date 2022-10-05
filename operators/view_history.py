@@ -83,6 +83,12 @@ class ExportHistorySelection(bpy.types.Operator, ExportHelper):
     def poll(self, context):
         return context.scene.dream_textures_history_selection is not None and context.scene.dream_textures_history_selection > 0
     
+    def invoke(self, context, event):
+        selection = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history[context.scene.dream_textures_history_selection]
+        self.filepath = "untitled" if selection is None else selection.get_prompt_subject()
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
     def execute(self, context):
         selection = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history[context.scene.dream_textures_history_selection]
         if selection is None:

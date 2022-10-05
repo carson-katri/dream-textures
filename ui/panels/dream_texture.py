@@ -32,6 +32,7 @@ def dream_texture_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
+                layout.use_property_decorate = False
 
                 if is_force_show_download():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
@@ -43,10 +44,9 @@ def dream_texture_panels():
 
         def get_prompt(context):
             return context.scene.dream_textures_prompt
-        yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, prompt_panel, get_prompt)
+        yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, prompt_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, size_panel, get_prompt)
-        for panel in create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, inpaint_init_image_panels, get_prompt):
-            yield panel
+        yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, inpaint_init_image_panels, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, actions_panel, get_prompt)
 
@@ -89,7 +89,27 @@ def prompt_panel(sub_panel, space_type, get_prompt):
                 if len(enum_cases) != 1 or enum_cases[0][0] != 'custom':
                     segment_row.prop(get_prompt(context), enum_prop, icon_only=is_custom)
             layout.prop(get_prompt(context), "seamless")
-    return PromptPanel
+    yield PromptPanel
+
+    class NegativePromptPanel(sub_panel):
+        """Create a subpanel for negative prompt input"""
+        bl_idname = f"DREAM_PT_dream_panel_negative_prompt_{space_type}"
+        bl_label = "Negative"
+        bl_parent_id = PromptPanel.bl_idname
+
+        def draw_header(self, context):
+            layout = self.layout
+            layout.prop(get_prompt(context), "use_negative_prompt", text="")
+
+        def draw(self, context):
+            layout = self.layout
+            layout.use_property_split = True
+            layout.use_property_decorate = False
+            layout.enabled = layout.enabled and get_prompt(context).use_negative_prompt
+            scene = context.scene
+
+            layout.prop(get_prompt(context), "negative_prompt")
+    yield NegativePromptPanel
 
 def size_panel(sub_panel, space_type, get_prompt):
     class SizePanel(sub_panel):

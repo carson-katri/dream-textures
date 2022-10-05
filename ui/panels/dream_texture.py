@@ -40,6 +40,7 @@ def dream_texture_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
+                layout.use_property_decorate = False
 
                 if is_force_show_download():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
@@ -62,6 +63,7 @@ def dream_texture_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
+                layout.use_property_decorate = False
                 scene = context.scene
 
                 structure = next(x for x in prompt_structures if x.id == scene.dream_textures_prompt.prompt_structure)
@@ -85,6 +87,7 @@ def dream_texture_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
+                layout.use_property_decorate = False
                 scene = context.scene
 
                 layout.prop(scene.dream_textures_prompt, "width")
@@ -112,6 +115,7 @@ def dream_texture_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
+                layout.use_property_decorate = False
                 layout.enabled = context.scene.dream_textures_prompt.use_inpainting
 
                 layout.label(text="1. Open an Image Editor space")
@@ -138,6 +142,7 @@ def dream_texture_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
+                layout.use_property_decorate = False
                 scene = context.scene
                 
                 layout.enabled = context.scene.dream_textures_prompt.use_init_img
@@ -155,6 +160,7 @@ def dream_texture_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
+                layout.use_property_decorate = False
                 scene = context.scene
                 
                 layout.prop(scene.dream_textures_prompt, "precision")
@@ -177,6 +183,7 @@ def dream_texture_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
+                layout.use_property_decorate = False
                 
                 row = layout.row()
                 row.scale_y = 1.5

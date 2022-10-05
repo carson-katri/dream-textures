@@ -27,8 +27,6 @@ import bpy
 from bpy.props import IntProperty, PointerProperty, EnumProperty
 import sys
 
-from .help_section import register_section_props
-
 from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .classes import CLASSES, PREFERENCE_CLASSES
@@ -36,6 +34,7 @@ from .tools import TOOLS
 from .operators.dream_texture import DreamTexture, kill_generator
 from .property_groups.dream_prompt import DreamPrompt
 from .operators.upscale import upscale_options
+from .preferences import StableDiffusionPreferences
 
 requirements_path_items = (
     # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
@@ -53,8 +52,6 @@ def register():
     
 
     bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='stable_diffusion/requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-win-torch-1-11-0.txt')
-    
-    register_section_props()
 
     for cls in PREFERENCE_CLASSES:
         bpy.utils.register_class(cls)
@@ -64,7 +61,13 @@ def register():
     bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
     bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
-    bpy.types.Scene.dream_textures_history_selection = IntProperty()
+    def get_selection_preview(self):
+        history = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
+        if self.dream_textures_history_selection > 0 and self.dream_textures_history_selection < len(history):
+            return history[self.dream_textures_history_selection].generate_prompt()
+        return ""
+    bpy.types.Scene.dream_textures_history_selection = IntProperty(default=1)
+    bpy.types.Scene.dream_textures_history_selection_preview = bpy.props.StringProperty(name="", default="", get=get_selection_preview, set=lambda _, __: None)
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 

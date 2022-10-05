@@ -33,6 +33,8 @@ def seed_clamp(self, ctx):
 attributes = {
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
+    "use_negative_prompt": BoolProperty(name="Use Negative Prompt", default=False),
+    "negative_prompt": StringProperty(name="Negative Prompt", description="The model will avoid aspects of the negative prompt"),
 
     # Size
     "width": IntProperty(name="Width", default=512, min=64, step=64),
@@ -48,14 +50,14 @@ attributes = {
     "precision": EnumProperty(name="Precision", items=precision_options, default='auto', description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
     "iterations": IntProperty(name="Iterations", default=1, min=1, description="How many images to generate"),
     "steps": IntProperty(name="Steps", default=25, min=1),
-    "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, description="How strongly the prompt influences the image"),
+    "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, soft_min=1.01, description="How strongly the prompt influences the image"),
     "sampler_name": EnumProperty(name="Sampler", items=sampler_options, default=3),
     "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=True),
 
     # Init Image
-    "use_init_img": BoolProperty(name="", default=False),
-    "use_inpainting": BoolProperty(name="", default=False),
-    "strength": FloatProperty(name="Strength", default=0.75, min=0, max=1),
+    "use_init_img": BoolProperty(name="Use Init Image", default=False),
+    "use_inpainting": BoolProperty(name="Use Inpainting", default=False),
+    "strength": FloatProperty(name="Strength", default=0.75, min=0, max=1, soft_min=0.01, soft_max=0.99),
     "fit": BoolProperty(name="Fit to width/height", default=True),
 }
 
@@ -91,7 +93,7 @@ def generate_prompt(self):
             tokens[segment.id] = getattr(self, 'prompt_structure_token_' + segment.id)
         else:
             tokens[segment.id] = next(x for x in segment.values if x[0] == enum_value)[1]
-    return structure.generate(dotdict(tokens))
+    return structure.generate(dotdict(tokens)) + (f" [{self.negative_prompt}]" if self.use_negative_prompt else "")
 
 def get_prompt_subject(self):
     structure = next(x for x in prompt_structures if x.id == self.prompt_structure)
@@ -113,6 +115,13 @@ def get_seed(self):
             h = ~h
         return (h & 0xFFFFFFFF) ^ (h >> 32) # 64 bit hash down to 32 bits
 
+def generate_args(self):
+    args = { key: getattr(self, key) for key in DreamPrompt.__annotations__ }
+    args['prompt'] = self.generate_prompt()
+    args['seed'] = self.get_seed()
+    return args
+
 DreamPrompt.generate_prompt = generate_prompt
 DreamPrompt.get_prompt_subject = get_prompt_subject
 DreamPrompt.get_seed = get_seed
+DreamPrompt.generate_args = generate_args

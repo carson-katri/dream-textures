@@ -75,7 +75,7 @@ def register_render_pass():
                             self.update_stats("Dream Textures", "Starting...")
                             event = threading.Event()
                             def do_dream_texture_pass():
-                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, event), combined_pass_image)
+                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, event), combined_pass_image, output_resize=(size_x, size_y))
                             bpy.app.timers.register(do_dream_texture_pass)
                             event.wait()
                             def cleanup():

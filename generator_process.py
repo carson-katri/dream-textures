@@ -267,6 +267,9 @@ def main():
 
     def share_image_memory(image):
         nonlocal shared_memory
+        if 'output_resize' in args and tuple(args['output_resize']) != image.size:
+            # may want to use RealESRGAN if the resize difference is large enough, then image.resize if the image size still doesn't match
+            image = image.resize(args['output_resize'], Image.Resampling.LANCZOS)
         image_bytes = image_to_bytes(image)
         image_bytes_len = len(image_bytes)
         if shared_memory is None or shared_memory.size != image_bytes_len:
@@ -274,12 +277,12 @@ def main():
                 shared_memory.close()
             shared_memory = SharedMemory(create=True, size=image_bytes_len)
         shared_memory.buf[:] = image_bytes
-        return shared_memory.name
+        return {'shared_memory_name': shared_memory.name, 'width': image.width, 'height': image.height}
 
     def image_writer(image, seed, upscaled=False, first_seed=None):
         # Only use the non-upscaled texture, as upscaling is a separate step in this addon.
         if not upscaled:
-            send_action(Action.IMAGE, shared_memory_name=share_image_memory(image), seed=seed, width=image.width, height=image.height)
+            send_action(Action.IMAGE, seed=seed, **share_image_memory(image))
     
     step = 0
     def view_step(samples, i):
@@ -287,7 +290,7 @@ def main():
         step = i
         if args['show_steps']:
             image = generator.sample_to_image(samples)
-            send_action(Action.STEP_IMAGE, shared_memory_name=share_image_memory(image), step=step, width=image.width, height=image.height)
+            send_action(Action.STEP_IMAGE, step=step, **share_image_memory(image))
         else:
             send_action(Action.STEP_NO_SHOW, step=step)
 

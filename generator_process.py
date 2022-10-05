@@ -26,8 +26,7 @@ class Action(IntEnum):
     @classmethod
     def _missing_(cls, value):
         return cls.UNKNOWN
-
-ACTION_BYTE_LENGTH = ceil(log(max(Action)+1,256)) # doubt there will ever be more than 255 actions, but just in case
+ACTION_BYTE_LENGTH = ceil(log(max(Action)+1,256))
 
 class Intent(IntEnum):
     """IPC messages types sent from frontend to backend"""
@@ -39,6 +38,9 @@ class Intent(IntEnum):
     @classmethod
     def _missing_(cls, value):
         return cls.UNKNOWN
+INTENT_BYTE_LENGTH = ceil(log(max(Intent)+1,256))
+
+
 
 _shared_instance = None
 class GeneratorProcess():
@@ -47,7 +49,6 @@ class GeneratorProcess():
         self.process = subprocess.Popen([sys.executable,'generator_process.py',bpy.app.binary_path],cwd=os.path.dirname(os.path.realpath(__file__)),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
         self.reader = self.process.stdout
         self.queue = []
-        self.args = None
         self.killed = False
         self.thread = threading.Thread(target=self._run,daemon=True,name="BackgroundReader")
         self.thread.start()
@@ -71,15 +72,38 @@ class GeneratorProcess():
         self.killed = True
         self.process.kill()
     
-    def prompt2image(self, args, step_callback, image_callback, info_callback, exception_callback):
-        self.args = args
+    def send_intent(self, intent, *, payload = None, **kwargs):
+        """Sends intent messages to backend.
+
+        Arguments:
+        * intent -- Intent enum or int
+        * payload -- Bytes-like value that is not suitable for json
+        * **kwargs -- json serializable key-value pairs used for subprocess function arguments
+        """
+        if Intent(intent) == Intent.UNKNOWN:
+            raise ValueError(f"Internal error, invalid Intent: {intent}")
+        kwargs_len = payload_len = b'\x00'*8
+        if kwargs:
+            kwargs = bytes(json.dumps(kwargs), encoding='utf-8')
+            kwargs_len = len(kwargs).to_bytes(len(kwargs_len), sys.byteorder, signed=False)
+        if payload is not None:
+            payload = bytes(payload)
+            payload_len = len(payload).to_bytes(len(payload_len), sys.byteorder, signed=False)
+        # keep all checks before writing so ipc doesn't get broken intents
+
         stdin = self.process.stdin
-        stdin.write(Intent.PROMPT_TO_IMAGE.to_bytes(ACTION_BYTE_LENGTH, sys.byteorder, signed=False))
+        stdin.write(intent.to_bytes(INTENT_BYTE_LENGTH, sys.byteorder, signed=False))
+        stdin.write(kwargs_len)
+        if kwargs:
+            stdin.write(kwargs)
+        stdin.write(payload_len)
+        if payload:
+            stdin.write(payload)
         stdin.flush()
-        b = bytes(json.dumps(args), encoding='utf-8')
-        stdin.write(len(b).to_bytes(8,sys.byteorder,signed=False))
-        stdin.write(b)
-        stdin.flush()
+
+    
+    def prompt2image(self, args, step_callback, image_callback, info_callback, exception_callback):
+        self.send_intent(Intent.PROMPT_TO_IMAGE, **args)
 
         queue = self.queue
         callbacks = {
@@ -103,13 +127,7 @@ class GeneratorProcess():
                     return
     
     def upscale(self, args, image_callback, info_callback, exception_callback):
-        stdin = self.process.stdin
-        stdin.write(Intent.UPSCALE.to_bytes(ACTION_BYTE_LENGTH, sys.byteorder, signed=False))
-        # stdin.flush()
-        b = bytes(json.dumps(args), encoding='utf-8')
-        stdin.write(len(b).to_bytes(8,sys.byteorder,signed=False))
-        stdin.write(b)
-        stdin.flush()
+        self.send_intent(Intent.UPSCALE, **args)
 
         queue = self.queue
         callbacks = {
@@ -158,15 +176,19 @@ class GeneratorProcess():
                 queue_exception_msg(f"Internal error, unexpected action id: {action}")
                 return
 
-def main():
-    shared_memory: SharedMemory | None = None
 
-    stdin = sys.stdin.buffer
-    stdout = sys.stdout.buffer
-    sys.stdout = open(os.devnull, 'w') # prevent stable diffusion logs from breaking ipc
-    stderr = sys.stderr
 
-    def send_action(action, *, payload = None, **kwargs):
+BYTE_TO_NORMALIZED = 1.0 / 255.0
+class Backend():
+    def __init__(self):
+        self.stdin = sys.stdin.buffer
+        self.stdout = sys.stdout.buffer
+        sys.stdout = open(os.devnull, 'w') # prevent stable diffusion logs from breaking ipc
+        self.stderr = sys.stderr
+        self.shared_memory = None
+        pass
+
+    def send_action(self, action, *, payload = None, **kwargs):
         """Sends action messages to frontend.
 
         Arguments:
@@ -181,29 +203,24 @@ def main():
             kwargs = bytes(json.dumps(kwargs), encoding='utf-8')
             kwargs_len = len(kwargs).to_bytes(len(kwargs_len), sys.byteorder, signed=False)
         if payload is not None:
-            payload = memoryview(payload)
+            payload = bytes(payload)
             payload_len = len(payload).to_bytes(len(payload_len), sys.byteorder, signed=False)
         # keep all checks before writing so ipc doesn't get broken actions
 
-        def split_write(mv):
-            for i in range(0,len(mv),1024*64):
-                stdout.write(bytes(mv[i:i+1024*64])) # writing fails when using memoryview slices directly, wrap byte() first
-            # stdout.write(bytes(mv)) # writing full image has caused the subprocess to crash without raising any exception, safer not to use
-
-        stdout.write(action.to_bytes(ACTION_BYTE_LENGTH, sys.byteorder, signed=False))
-        stdout.write(kwargs_len)
+        self.stdout.write(action.to_bytes(ACTION_BYTE_LENGTH, sys.byteorder, signed=False))
+        self.stdout.write(kwargs_len)
         if kwargs:
-            split_write(kwargs)
-        stdout.write(payload_len)
+            self.stdout.write(kwargs)
+        self.stdout.write(payload_len)
         if payload:
-            split_write(payload)
-        stdout.flush()
+            self.stdout.write(payload)
+        self.stdout.flush()
 
-    def send_info(msg):
+    def send_info(self, msg):
         """Sends information to be shown to the user before generation begins."""
-        send_action(Action.INFO, msg=msg)
+        self.send_action(Action.INFO, msg=msg)
 
-    def send_exception(fatal = True, msg: str = None, trace: str = None):
+    def send_exception(self, fatal = True, msg: str = None, trace: str = None):
         """Send exception information to frontend. When called within an except block arguments can be inferred.
 
         Arguments:
@@ -218,163 +235,125 @@ def main():
             trace = traceback.format_exc()
         if msg is None and trace is None:
             raise TypeError("msg and trace cannot be None outside of an except block")
-        send_action(Action.EXCEPTION, fatal=fatal, msg=msg, trace=trace)
+        self.send_action(Action.EXCEPTION, fatal=fatal, msg=msg, trace=trace)
+        if fatal:
+            sys.exit(1)
 
-    try:
-        if sys.platform == 'win32':
-            from ctypes import WinDLL
-            WinDLL(os.path.join(os.path.dirname(sys.argv[1]),"python3.dll")) # fix for ImportError: DLL load failed while importing cv2: The specified module could not be found.
-
-        from absolute_path import absolute_path
-        # Support Apple Silicon GPUs as much as possible.
-        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-        sys.path.append(absolute_path("stable_diffusion/"))
-        sys.path.append(absolute_path("stable_diffusion/src/clip"))
-        sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
-        sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
-
-        site.addsitedir(absolute_path(".python_dependencies"))
-        import pkg_resources
-        pkg_resources._initialize_master_working_set()
-
-        from stable_diffusion.ldm.generate import Generate
-        from stable_diffusion.ldm.dream.devices import choose_precision
-        from omegaconf import OmegaConf
-        from PIL import Image, ImageOps
-        from io import StringIO
-    except ModuleNotFoundError as e:
-        min_files = 10 # bump this up if more files get added to .python_dependencies in source
-                       # don't set too high so it can still pass info on individual missing modules
-        if not os.path.exists(".python_dependencies") or len(os.listdir()) < min_files:
-            send_exception(msg=MISSING_DEPENDENCIES_ERROR)
-        else:
-            send_exception()
-        return
-    except:
-        send_exception()
-        return
-
-    models_config  = absolute_path('stable_diffusion/configs/models.yaml')
-    model   = 'stable-diffusion-1.4'
-
-    models  = OmegaConf.load(models_config)
-    config  = absolute_path('stable_diffusion/' + models[model].config)
-    weights = absolute_path('stable_diffusion/' + models[model].weights)
-
-    byte_to_normalized = 1.0 / 255.0
-    def image_to_bytes(image):
-        return (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * byte_to_normalized).tobytes()
-
-    def share_image_memory(image):
-        nonlocal shared_memory
-        image_bytes = image_to_bytes(image)
+    def share_image_memory(self, image):
+        from PIL import ImageOps
+        image_bytes = (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * BYTE_TO_NORMALIZED).tobytes()
         image_bytes_len = len(image_bytes)
+        shared_memory = self.shared_memory
         if shared_memory is None or shared_memory.size != image_bytes_len:
             if shared_memory is not None:
                 shared_memory.close()
-            shared_memory = SharedMemory(create=True, size=image_bytes_len)
+            self.shared_memory = shared_memory = SharedMemory(create=True, size=image_bytes_len)
         shared_memory.buf[:] = image_bytes
         return shared_memory.name
 
-    def image_writer(image, seed, upscaled=False, first_seed=None):
-        # Only use the non-upscaled texture, as upscaling is a separate step in this addon.
-        if not upscaled:
-            send_action(Action.IMAGE, shared_memory_name=share_image_memory(image), seed=seed, width=image.width, height=image.height)
-    
-    step = 0
-    def view_step(samples, i):
-        nonlocal step
-        step = i
-        if args['show_steps']:
-            image = generator.sample_to_image(samples)
-            send_action(Action.STEP_IMAGE, shared_memory_name=share_image_memory(image), step=step, width=image.width, height=image.height)
-        else:
-            send_action(Action.STEP_NO_SHOW, step=step)
+    def prompt_to_image(self):
+        args = yield
+        from absolute_path import absolute_path
+        from stable_diffusion.ldm.generate import Generate
+        from stable_diffusion.ldm.dream.devices import choose_precision
+        from omegaconf import OmegaConf
+        from io import StringIO
 
-    def preload_models():
-        tqdm = None
-        try:
-            from huggingface_hub.utils.tqdm import tqdm as hfh_tqdm
-            tqdm = hfh_tqdm
-        except:
+        models_config  = absolute_path('stable_diffusion/configs/models.yaml')
+        model   = 'stable-diffusion-1.4'
+
+        models  = OmegaConf.load(models_config)
+        config  = absolute_path('stable_diffusion/' + models[model].config)
+        weights = absolute_path('stable_diffusion/' + models[model].weights)
+        generator: Generate = None
+
+        def image_writer(image, seed, upscaled=False, first_seed=None):
+            # Only use the non-upscaled texture, as upscaling is a separate step in this addon.
+            if not upscaled:
+                self.send_action(Action.IMAGE, shared_memory_name=self.share_image_memory(image), seed=seed, width=image.width, height=image.height)
+
+        step = 0
+        def view_step(samples, i):
+            nonlocal step
+            step = i
+            if args['show_steps']:
+                image = generator.sample_to_image(samples)
+                self.send_action(Action.STEP_IMAGE, shared_memory_name=self.share_image_memory(image), step=step, width=image.width, height=image.height)
+            else:
+                self.send_action(Action.STEP_NO_SHOW, step=step)
+
+        def preload_models():
+            tqdm = None
             try:
-                from tqdm.auto import tqdm as auto_tqdm
-                tqdm = auto_tqdm
+                from huggingface_hub.utils.tqdm import tqdm as hfh_tqdm
+                tqdm = hfh_tqdm
             except:
-                return
+                try:
+                    from tqdm.auto import tqdm as auto_tqdm
+                    tqdm = auto_tqdm
+                except:
+                    return
 
-        current_model_name = ""
-        def start_preloading(model_name):
-            nonlocal current_model_name
-            current_model_name = model_name
-            send_info(f"Downloading {model_name} (0%)")
-
-        def update_decorator(original):
-            def update(self, n=1):
-                result = original(self, n)
+            current_model_name = ""
+            def start_preloading(model_name):
                 nonlocal current_model_name
-                frac = self.n / self.total
-                percentage = int(frac * 100)
-                if self.n - self.last_print_n >= self.miniters:
-                    send_info(f"Downloading {current_model_name} ({percentage}%)")
-                return result
-            return update
-        old_update = tqdm.update
-        tqdm.update = update_decorator(tqdm.update)
+                current_model_name = model_name
+                self.send_info(f"Downloading {model_name} (0%)")
 
-        import warnings
-        import transformers
-        transformers.logging.set_verbosity_error()
+            def update_decorator(original):
+                def update(self, n=1):
+                    result = original(self, n)
+                    nonlocal current_model_name
+                    frac = self.n / self.total
+                    percentage = int(frac * 100)
+                    if self.n - self.last_print_n >= self.miniters:
+                        self.send_info(f"Downloading {current_model_name} ({percentage}%)")
+                    return result
+                return update
+            old_update = tqdm.update
+            tqdm.update = update_decorator(tqdm.update)
 
-        start_preloading("BERT tokenizer")
-        transformers.BertTokenizerFast.from_pretrained('bert-base-uncased')
+            import warnings
+            import transformers
+            transformers.logging.set_verbosity_error()
 
-        send_info("Preloading `kornia` requirements")
-        with warnings.catch_warnings():
-            warnings.filterwarnings('ignore', category=DeprecationWarning)
-            import kornia
+            start_preloading("BERT tokenizer")
+            transformers.BertTokenizerFast.from_pretrained('bert-base-uncased')
 
-        start_preloading("CLIP")
-        clip_version = 'openai/clip-vit-large-patch14'
-        transformers.CLIPTokenizer.from_pretrained(clip_version)
-        transformers.CLIPTextModel.from_pretrained(clip_version)
+            self.send_info("Preloading `kornia` requirements")
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=DeprecationWarning)
+                import kornia
 
-        tqdm.update = old_update
-    
-    from transformers.utils.hub import TRANSFORMERS_CACHE
-    model_paths = {'bert-base-uncased', 'openai--clip-vit-large-patch14'}
-    if any(not os.path.isdir(os.path.join(TRANSFORMERS_CACHE, f'models--{path}')) for path in model_paths):
-        preload_models()
+            start_preloading("CLIP")
+            clip_version = 'openai/clip-vit-large-patch14'
+            transformers.CLIPTokenizer.from_pretrained(clip_version)
+            transformers.CLIPTextModel.from_pretrained(clip_version)
 
-    generator = None
-    while True:
-        intent = Intent.from_bytes(stdin.read(ACTION_BYTE_LENGTH), sys.byteorder, signed=False)
-        if intent == Intent.PROMPT_TO_IMAGE:
-            json_len = int.from_bytes(stdin.read(8),sys.byteorder,signed=False)
-            if json_len == 0:
-                return # stdin closed
-            args = json.loads(stdin.read(json_len))
-            
+            tqdm.update = old_update
+        
+        from transformers.utils.hub import TRANSFORMERS_CACHE
+        model_paths = {'bert-base-uncased', 'openai--clip-vit-large-patch14'}
+        if any(not os.path.isdir(os.path.join(TRANSFORMERS_CACHE, f'models--{path}')) for path in model_paths):
+            preload_models()
+
+        while True:
             # Reset the step count
             step = 0
 
             if generator is None or generator.precision != choose_precision(generator.device) if args['precision'] == 'auto' else args['precision']:
-                send_info("Loading Model")
-                try:
-                    generator = Generate(
-                        conf=models_config,
-                        model=model,
-                        # These args are deprecated, but we need them to specify an absolute path to the weights.
-                        weights=weights,
-                        config=config,
-                        precision=args['precision']
-                    )
-                    generator.free_gpu_mem = False # Not sure what this is for, and why it isn't a flag but read from Args()?
-                    generator.load_model()
-                except:
-                    send_exception()
-                    return
-            send_info("Starting")
+                self.send_info("Loading Model")
+                generator = Generate(
+                    conf=models_config,
+                    model=model,
+                    # These args are deprecated, but we need them to specify an absolute path to the weights.
+                    weights=weights,
+                    config=config,
+                    precision=args['precision']
+                )
+                generator.free_gpu_mem = False # Not sure what this is for, and why it isn't a flag but read from Args()?
+                generator.load_model()
+            self.send_info("Starting")
             
             try:
                 tmp_stderr = sys.stderr = StringIO() # prompt2image writes exceptions straight to stderr, intercepting
@@ -394,56 +373,87 @@ def main():
                         import re
                         low_ram = re.search(r"(Not enough memory, use lower resolution)( \(max approx. \d+x\d+\))",s,re.IGNORECASE)
                         if low_ram:
-                            send_exception(False, f"{low_ram[1]}{' or disable full precision' if args['precision'] == 'float32' else ''}{low_ram[2]}", s)
+                            self.send_exception(False, f"{low_ram[1]}{' or disable full precision' if args['precision'] == 'float32' else ''}{low_ram[2]}", s)
                         elif s.find("CUDA out of memory. Tried to allocate") != -1:
-                            send_exception(False, f"Not enough memory, use lower resolution{' or disable full precision' if args['precision'] == 'float32' else ''}", s)
+                            self.send_exception(False, f"Not enough memory, use lower resolution{' or disable full precision' if args['precision'] == 'float32' else ''}", s)
                         else:
-                            send_exception(True, msg=None, trace=s) # consider all unknown exceptions to be fatal so the generator process is fully restarted next time
-                            return
-            except:
-                send_exception()
-                return
+                            self.send_exception(True, msg=None, trace=s) # consider all unknown exceptions to be fatal so the generator process is fully restarted next time
             finally:
-                sys.stderr = stderr
-        elif intent == Intent.UPSCALE:
-            tmp_stderr = sys.stderr = StringIO()
-            json_len = int.from_bytes(stdin.read(8),sys.byteorder,signed=False)
+                sys.stderr = self.stderr
+            args = yield
+
+    def upscale(self):
+        args = yield
+        self.send_info("Starting")
+        from absolute_path import REAL_ESRGAN_WEIGHTS_PATH
+        import cv2
+        from PIL import Image
+        from realesrgan import RealESRGANer
+        from realesrgan.archs.srvgg_arch import SRVGGNetCompact
+        while True:
+            image = cv2.imread(args['input'], cv2.IMREAD_UNCHANGED)
+            real_esrgan_model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=32, upscale=4, act_type='prelu')
+            netscale = 4
+            self.send_info("Loading Upsampler")
+            upsampler = RealESRGANer(
+                scale=netscale,
+                model_path=REAL_ESRGAN_WEIGHTS_PATH,
+                model=real_esrgan_model,
+                tile=0,
+                tile_pad=10,
+                pre_pad=0,
+                half=not args['full_precision']
+            )
+            self.send_info("Enhancing Input")
+            output, _ = upsampler.enhance(image, outscale=args['outscale'])
+            self.send_info("Converting Result")
+            output = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
+            output = Image.fromarray(output)
+            self.send_action(Action.IMAGE, shared_memory_name=self.share_image_memory(output), seed=args['name'], width=output.width, height=output.height)
+            args = yield
+
+def main():
+    try:
+        back = Backend()
+
+        if sys.platform == 'win32':
+            from ctypes import WinDLL
+            WinDLL(os.path.join(os.path.dirname(sys.argv[1]),"python3.dll")) # fix for ImportError: DLL load failed while importing cv2: The specified module could not be found.
+
+        from absolute_path import absolute_path
+        # Support Apple Silicon GPUs as much as possible.
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+        sys.path.append(absolute_path("stable_diffusion/"))
+        sys.path.append(absolute_path("stable_diffusion/src/clip"))
+        sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
+        sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
+
+        site.addsitedir(absolute_path(".python_dependencies"))
+        import pkg_resources
+        pkg_resources._initialize_master_working_set()
+
+        intents = {
+            Intent.PROMPT_TO_IMAGE: back.prompt_to_image(),
+            Intent.UPSCALE: back.upscale(),
+        }
+        for fn in intents.values():
+            next(fn)
+
+        while True:
+            intent = Intent.from_bytes(back.stdin.read(ACTION_BYTE_LENGTH), sys.byteorder, signed=False)
+            json_len = int.from_bytes(back.stdin.read(8),sys.byteorder,signed=False)
             if json_len == 0:
                 return # stdin closed
-            args = json.loads(stdin.read(json_len))
-            send_info("Starting")
-            try:
-                from absolute_path import REAL_ESRGAN_WEIGHTS_PATH
-                import cv2
-                from realesrgan import RealESRGANer
-                from realesrgan.archs.srvgg_arch import SRVGGNetCompact
-                # image = Image.open(args['input'])
-                image = cv2.imread(args['input'], cv2.IMREAD_UNCHANGED)
-                real_esrgan_model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=32, upscale=4, act_type='prelu')
-                netscale = 4
-                send_info("Loading Upsampler")
-                upsampler = RealESRGANer(
-                    scale=netscale,
-                    model_path=REAL_ESRGAN_WEIGHTS_PATH,
-                    model=real_esrgan_model,
-                    tile=0,
-                    tile_pad=10,
-                    pre_pad=0,
-                    half=not args['full_precision']
-                )
-                send_info("Enhancing Input")
-                output, _ = upsampler.enhance(image, outscale=args['outscale'])
-                send_info("Converting Result")
-                output = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
-                output = Image.fromarray(output)
-                image_writer(output, args['name'])
-            except:
-                send_exception()
-                return
-            finally:
-                sys.stderr = stderr
-        else:
-            send_exception(True, f"Unknown intent {intent} sent to process. Expected one of {Intent._member_names_}.", "")
+            args = json.loads(back.stdin.read(json_len))
+            payload_len = int.from_bytes(back.stdin.read(8),sys.byteorder,signed=False)
+            if intent in intents:
+                intents[intent].send(args)
+            else:
+                back.send_exception(True, f"Unknown intent {intent} sent to process. Expected one of {Intent._member_names_}.")
+    except SystemExit:
+        pass
+    except:
+        back.send_exception()
 
 if __name__ == "__main__":
     main()

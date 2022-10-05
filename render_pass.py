@@ -31,6 +31,9 @@ def register_render_pass():
                 scale = scene.render.resolution_percentage / 100.0
                 size_x = int(scene.render.resolution_x * scale)
                 size_y = int(scene.render.resolution_y * scale)
+                if size_x % 64 != 0 or size_y % 64 != 0:
+                    self.report({"ERROR"}, "Image dimensions must be multiples of 64 (e.x. 512x512, 512x768, ...)")
+                    return result
                 render_result = self.begin_result(0, 0, size_x, size_y)
                 for original_layer in original_result.layers:
                     layer = None
@@ -73,7 +76,7 @@ def register_render_pass():
                             self.update_stats("Dream Textures", "Starting...")
                             event = threading.Event()
                             def do_dream_texture_pass():
-                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, event), combined_pass_image)
+                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, event), combined_pass_image, width=size_x, height=size_y, show_steps=False)
                             bpy.app.timers.register(do_dream_texture_pass)
                             event.wait()
                             def cleanup():

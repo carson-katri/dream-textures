@@ -92,7 +92,8 @@ headless_prompt = None
 headless_step_callback = None
 headless_image_callback = None
 headless_init_img = None
-def dream_texture(prompt, step_callback, image_callback, init_img=None):
+headless_args = None
+def dream_texture(prompt, step_callback, image_callback, init_img=None, **kwargs):
     global headless_prompt
     headless_prompt = prompt
     global headless_step_callback
@@ -101,6 +102,8 @@ def dream_texture(prompt, step_callback, image_callback, init_img=None):
     headless_image_callback = image_callback
     global headless_init_img
     headless_init_img = init_img
+    global headless_args
+    headless_args = kwargs
     bpy.ops.shade.dream_texture_headless()
 
 class HeadlessDreamTexture(bpy.types.Operator):
@@ -175,12 +178,6 @@ class HeadlessDreamTexture(bpy.types.Operator):
         info("Waiting For Process")
         generator = GeneratorProcess.shared()
 
-        def bpy_image(name, width, height, pixels):
-            image = bpy.data.images.new(name, width=width, height=height)
-            image.pixels[:] = pixels
-            image.pack()
-            return image
-
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
 
@@ -211,6 +208,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
             init_img_path = save_temp_image(init_img)
 
         args = headless_prompt.generate_args()
+        args.update(headless_args)
         args['init_img'] = init_img_path
 
         def step_callback(step, width=None, height=None, shared_memory_name=None):

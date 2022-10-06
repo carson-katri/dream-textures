@@ -24,9 +24,10 @@ bl_info = {
 }
 
 import bpy
-from bpy.props import IntProperty, PointerProperty, EnumProperty
+from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty
 import sys
 
+from .render_pass import register_render_pass, unregister_render_pass
 from .prompt_engineering import *
 from .operators.open_latest_version import check_for_updates
 from .classes import CLASSES, PREFERENCE_CLASSES
@@ -71,6 +72,8 @@ def register():
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 
+    bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)
+    bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
     bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
     bpy.types.Scene.dream_textures_upscale_full_precision = bpy.props.BoolProperty(name="Full Precision", default=True)
 
@@ -80,6 +83,9 @@ def register():
     for tool in TOOLS:
         bpy.utils.register_tool(tool)
 
+    # Monkey patch cycles render passes
+    register_render_pass()
+
 def unregister():
     for cls in PREFERENCE_CLASSES:
         bpy.utils.unregister_class(cls)
@@ -88,6 +94,9 @@ def unregister():
         bpy.utils.unregister_class(cls)
     for tool in TOOLS:
         bpy.utils.unregister_tool(tool)
+    
+    unregister_render_pass()
+
     kill_generator()
 
 if __name__ == "__main__":

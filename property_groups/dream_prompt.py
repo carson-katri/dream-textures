@@ -1,7 +1,6 @@
 import bpy
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, PointerProperty
 from ..prompt_engineering import *
-import sys
 
 sampler_options = [
     ("ddim", "DDIM", "", 1),

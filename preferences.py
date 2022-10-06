@@ -42,9 +42,8 @@ class OpenWeightsDirectory(bpy.types.Operator, ImportHelper):
 
     def execute(self, context):
         path = os.path.dirname(WEIGHTS_PATH)
-        # if not os.path.exists(path):
-        #     os.mkdir(path)
-        # webbrowser.open(f"file:///{os.path.realpath(path)}")
+        if not os.path.exists(path):
+            os.mkdir(path)
         _, extension = os.path.splitext(self.filepath)
         if extension != '.ckpt':
             self.report({"ERROR"}, "Select a valid stable diffusion '.ckpt' file.")

@@ -17,7 +17,7 @@ bl_info = {
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
     "warning": "Requires installation of Stable Diffusion model weights",
     "blender": (3, 0, 0),
-    "version": (0, 0, 6),
+    "version": (0, 0, 7),
     "location": "",
     "warning": "",
     "category": "Paint"

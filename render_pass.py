@@ -32,7 +32,7 @@ def register_render_pass():
                 size_x = int(scene.render.resolution_x * scale)
                 size_y = int(scene.render.resolution_y * scale)
                 if size_x % 64 != 0 or size_y % 64 != 0:
-                    self.report({"ERROR"}, "Image dimensions must be multiples of 64 (e.x. 512x512, 512x768, ...)")
+                    self.report({"ERROR"}, f"Image dimensions must be multiples of 64 (e.x. 512x512, 512x768, ...) closest is {round(size_x/64)*64}x{round(size_y/64)*64}")
                     return result
                 render_result = self.begin_result(0, 0, size_x, size_y)
                 for original_layer in original_result.layers:

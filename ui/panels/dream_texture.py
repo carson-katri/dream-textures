@@ -233,7 +233,7 @@ def actions_panel(sub_panel, space_type, get_prompt):
                 disabled_row = row.row()
                 disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
                 disabled_row.enabled = False
-                if CancelGenerator.poll(context):
-                    row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
+            if CancelGenerator.poll(context):
+                row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
             row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
     return ActionsPanel

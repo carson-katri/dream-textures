@@ -129,10 +129,10 @@ class HeadlessDreamTexture(bpy.types.Operator):
         try:
             next(generator_advance)
         except StopIteration:
-            remove_timer(context)
+            modal_stopped(context)
             return {'FINISHED'}
         except Exception as e:
-            remove_timer(context)
+            modal_stopped(context)
             raise e
         return {'RUNNING_MODAL'}
 
@@ -242,7 +242,7 @@ def modal_stopped(context):
         context.window_manager.event_timer_remove(timer)
         timer = None
         if not hasattr(context,'scene'):
-            context = bpy.context
+            context = bpy.context # modal context is sometimes missing scene?
         context.scene.dream_textures_progress = 0
         context.scene.dream_textures_info = ""
     global last_data_block

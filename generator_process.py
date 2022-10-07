@@ -22,6 +22,7 @@ class Action(IntEnum):
     STEP_IMAGE = 3
     STEP_NO_SHOW = 4
     EXCEPTION = 5
+    STOPPED = 6
 
     @classmethod
     def _missing_(cls, value):
@@ -34,6 +35,7 @@ class Intent(IntEnum):
 
     PROMPT_TO_IMAGE = 0
     UPSCALE = 1
+    STOP = 2
 
     @classmethod
     def _missing_(cls, value):
@@ -77,7 +79,7 @@ class GeneratorProcess():
 
         Arguments:
         * intent -- Intent enum or int
-        * payload -- Bytes-like value that is not suitable for json
+        * payload -- Bytes-like value that is not suitable for json, it is recommended to use a shared memory approach instead if the payload is large
         * **kwargs -- json serializable key-value pairs used for subprocess function arguments
         """
         if Intent(intent) == Intent.UNKNOWN:
@@ -101,6 +103,8 @@ class GeneratorProcess():
             stdin.write(payload)
         stdin.flush()
 
+    def send_stop(self, stop_intent):
+        self.send_intent(Intent.STOP, stop_intent=stop_intent)
     
     def prompt2image(self, args, step_callback, image_callback, info_callback, exception_callback):
         self.send_intent(Intent.PROMPT_TO_IMAGE, **args)
@@ -111,20 +115,18 @@ class GeneratorProcess():
             Action.IMAGE: image_callback,
             Action.STEP_IMAGE: step_callback,
             Action.STEP_NO_SHOW: step_callback,
-            Action.EXCEPTION: exception_callback
+            Action.EXCEPTION: exception_callback,
+            Action.STOPPED: lambda: None
         }
 
-        for i in range(0,args['iterations']):
-            while True:
-                while len(queue) == 0:
-                    yield # nothing in queue, let blender resume
-                tup = queue.pop()
-                action = tup[0]
-                callbacks[action](**tup[1])
-                if action == Action.IMAGE:
-                    break
-                elif action == Action.EXCEPTION:
-                    return
+        while True:
+            while len(queue) == 0:
+                yield # nothing in queue, let blender resume
+            tup = queue.pop(0)
+            action = tup[0]
+            callbacks[action](**tup[1])
+            if action in [Action.STOPPED, Action.EXCEPTION]:
+                return
     
     def upscale(self, args, image_callback, info_callback, exception_callback):
         self.send_intent(Intent.UPSCALE, **args)
@@ -133,18 +135,17 @@ class GeneratorProcess():
         callbacks = {
             Action.INFO: info_callback,
             Action.IMAGE: image_callback,
-            Action.EXCEPTION: exception_callback
+            Action.EXCEPTION: exception_callback,
+            Action.STOPPED: lambda: None
         }
 
         while True:
             while len(queue) == 0:
                 yield
-            tup = queue.pop()
+            tup = queue.pop(0)
             action = tup[0]
             callbacks[action](**tup[1])
-            if action == Action.IMAGE:
-                break
-            elif action == Action.EXCEPTION:
+            if action in [Action.STOPPED, Action.EXCEPTION]:
                 return
 
     def _run(self):
@@ -165,8 +166,10 @@ class GeneratorProcess():
             kwargs_len = readUInt(8)
             kwargs = {} if kwargs_len == 0 else json.loads(reader.read(kwargs_len))
             payload_len = readUInt(8)
+            if payload_len > 0:
+                kwargs['payload'] = reader.read(payload_len)
 
-            if action in [Action.INFO, Action.STEP_NO_SHOW, Action.IMAGE, Action.STEP_IMAGE]:
+            if action in [Action.INFO, Action.STEP_NO_SHOW, Action.IMAGE, Action.STEP_IMAGE, Action.STOPPED]:
                 queue.append((action, kwargs))
             elif action == Action.EXCEPTION:
                 queue.append((action, kwargs))
@@ -186,14 +189,23 @@ class Backend():
         sys.stdout = open(os.devnull, 'w') # prevent stable diffusion logs from breaking ipc
         self.stderr = sys.stderr
         self.shared_memory = None
-        pass
+        self.stop_requested = False
+        self.intent = Intent.UNKNOWN
+        self.queue = []
+        self.queue_appended = threading.Event()
+        self.thread = threading.Thread(target=self._run,daemon=True,name="BackgroundReader")
+
+    def check_stop(self):
+        if self.stop_requested:
+            self.stop_requested = False
+            raise KeyboardInterrupt
 
     def send_action(self, action, *, payload = None, **kwargs):
         """Sends action messages to frontend.
 
         Arguments:
         * action -- Action enum or int
-        * payload -- Bytes-like value that is not suitable for json
+        * payload -- Bytes-like value that is not suitable for json, it is recommended to use a shared memory approach instead if the payload is large
         * **kwargs -- json serializable key-value pairs used for callback function arguments
         """
         if Action(action) == Action.UNKNOWN:
@@ -253,12 +265,12 @@ class Backend():
 
     def prompt_to_image(self):
         args = yield
+        self.send_info("Importing Dependencies")
         from absolute_path import absolute_path
         from stable_diffusion.ldm.generate import Generate
         from stable_diffusion.ldm.dream.devices import choose_precision
         from omegaconf import OmegaConf
         from io import StringIO
-
         models_config  = absolute_path('stable_diffusion/configs/models.yaml')
         model   = 'stable-diffusion-1.4'
 
@@ -274,6 +286,7 @@ class Backend():
 
         step = 0
         def view_step(samples, i):
+            self.check_stop()
             nonlocal step
             step = i
             if args['show_steps']:
@@ -298,7 +311,7 @@ class Backend():
             def start_preloading(model_name):
                 nonlocal current_model_name
                 current_model_name = model_name
-                self.send_info(f"Downloading {model_name} (0%)")
+                self.send_info(f"Loading {model_name}")
 
             def update_decorator(original):
                 def update(self, n=1):
@@ -338,24 +351,26 @@ class Backend():
             preload_models()
 
         while True:
-            # Reset the step count
-            step = 0
-
-            if generator is None or generator.precision != (choose_precision(generator.device) if args['precision'] == 'auto' else args['precision']):
-                self.send_info("Loading Model")
-                generator = Generate(
-                    conf=models_config,
-                    model=model,
-                    # These args are deprecated, but we need them to specify an absolute path to the weights.
-                    weights=weights,
-                    config=config,
-                    precision=args['precision']
-                )
-                generator.free_gpu_mem = False # Not sure what this is for, and why it isn't a flag but read from Args()?
-                generator.load_model()
-            self.send_info("Starting")
-            
             try:
+                self.check_stop()
+                # Reset the step count
+                step = 0
+
+                if generator is None or generator.precision != (choose_precision(generator.device) if args['precision'] == 'auto' else args['precision']):
+                    self.send_info("Loading Model")
+                    generator = Generate(
+                        conf=models_config,
+                        model=model,
+                        # These args are deprecated, but we need them to specify an absolute path to the weights.
+                        weights=weights,
+                        config=config,
+                        precision=args['precision']
+                    )
+                    generator.free_gpu_mem = False # Not sure what this is for, and why it isn't a flag but read from Args()?
+                    generator.load_model()
+                    self.check_stop()
+                self.send_info("Starting")
+                
                 tmp_stderr = sys.stderr = StringIO() # prompt2image writes exceptions straight to stderr, intercepting
                 generator.prompt2image(
                     # a function or method that will be called each step
@@ -378,6 +393,8 @@ class Backend():
                             self.send_exception(False, f"Not enough memory, use lower resolution{' or disable full precision' if args['precision'] == 'float32' else ''}", s)
                         else:
                             self.send_exception(True, msg=None, trace=s) # consider all unknown exceptions to be fatal so the generator process is fully restarted next time
+            except KeyboardInterrupt:
+                pass
             finally:
                 sys.stderr = self.stderr
             args = yield
@@ -411,6 +428,61 @@ class Backend():
             output = Image.fromarray(output)
             self.send_action(Action.IMAGE, shared_memory_name=self.share_image_memory(output), seed=args['name'], width=output.width, height=output.height)
             args = yield
+    
+    """ intent generator function format
+    def intent(self):
+        args = yield
+        # imports and prior setup
+        while True:
+            try: # try...except is only needed if you call self.check_stop() within
+                ... # execute intent
+            except KeyboardInterrupt:
+                pass
+            args = yield
+    """
+
+    def _run(self):
+        reader = self.stdin
+        def readUInt(length):
+            return int.from_bytes(reader.read(length),sys.byteorder,signed=False)
+
+        while True:
+            intent = readUInt(INTENT_BYTE_LENGTH)
+            json_len = readUInt(8)
+            if json_len == 0:
+                return # stdin closed
+            args = json.loads(reader.read(json_len))
+            payload_len = readUInt(8)
+            if payload_len > 0:
+                args['payload'] = reader.read(payload_len)
+            if intent == Intent.STOP:
+                if 'stop_intent' in args and self.intent == args['stop_intent']:
+                    self.stop_requested = True
+            else:
+                self.queue.append((intent, args))
+                self.queue_appended.set()
+    
+    def main_loop(self):
+        intents = {
+            Intent.PROMPT_TO_IMAGE: self.prompt_to_image(),
+            Intent.UPSCALE: self.upscale(),
+        }
+        for fn in intents.values():
+            next(fn)
+
+        while True:
+            if len(self.queue) == 0:
+                self.queue_appended.wait()
+                self.queue_appended.clear()
+            (intent, args) = self.queue.pop()
+            if intent in intents:
+                self.intent = intent
+                intents[intent].send(args)
+                self.stop_requested = False
+                self.intent = Intent.UNKNOWN
+                self.send_action(Action.STOPPED)
+            else:
+                self.send_exception(True, f"Unknown intent {intent} sent to process. Expected one of {Intent._member_names_}.")
 
 def main():
     try:
@@ -432,24 +504,13 @@ def main():
         import pkg_resources
         pkg_resources._initialize_master_working_set()
 
-        intents = {
-            Intent.PROMPT_TO_IMAGE: back.prompt_to_image(),
-            Intent.UPSCALE: back.upscale(),
-        }
-        for fn in intents.values():
-            next(fn)
+        if sys.platform == 'win32':
+            import scipy # This will hang when loading libbanded5x.Q3V52YHHGVBP5BKVHJ5RHQVFWHHSLVWO.gfortran-win_amd64.dll
+                         # if imported while background reading thread is waiting on next intent.
+                         # Hurray for more strange .dll bugs
 
-        while True:
-            intent = Intent.from_bytes(back.stdin.read(ACTION_BYTE_LENGTH), sys.byteorder, signed=False)
-            json_len = int.from_bytes(back.stdin.read(8),sys.byteorder,signed=False)
-            if json_len == 0:
-                return # stdin closed
-            args = json.loads(back.stdin.read(json_len))
-            payload_len = int.from_bytes(back.stdin.read(8),sys.byteorder,signed=False)
-            if intent in intents:
-                intents[intent].send(args)
-            else:
-                back.send_exception(True, f"Unknown intent {intent} sent to process. Expected one of {Intent._member_names_}.")
+        back.thread.start()
+        back.main_loop()
     except SystemExit:
         pass
     except:

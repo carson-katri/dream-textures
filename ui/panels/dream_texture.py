@@ -1,7 +1,7 @@
 from bpy.types import Panel
 from ...pil_to_image import *
 from ...prompt_engineering import *
-from ...operators.dream_texture import DreamTexture, ReleaseGenerator
+from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGenerator
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
@@ -233,5 +233,7 @@ def actions_panel(sub_panel, space_type, get_prompt):
                 disabled_row = row.row()
                 disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
                 disabled_row.enabled = False
+                if CancelGenerator.poll(context):
+                    row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
             row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
     return ActionsPanel

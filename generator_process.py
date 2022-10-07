@@ -341,7 +341,7 @@ class Backend():
             # Reset the step count
             step = 0
 
-            if generator is None or generator.precision != choose_precision(generator.device) if args['precision'] == 'auto' else args['precision']:
+            if generator is None or generator.precision != (choose_precision(generator.device) if args['precision'] == 'auto' else args['precision']):
                 self.send_info("Loading Model")
                 generator = Generate(
                     conf=models_config,

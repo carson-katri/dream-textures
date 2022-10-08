@@ -191,6 +191,7 @@ class Backend():
         self.shared_memory = None
         self.stop_requested = False
         self.intent = Intent.UNKNOWN
+        self.stopped_was_sent = False
         self.queue = []
         self.queue_appended = threading.Event()
         self.thread = threading.Thread(target=self._run,daemon=True,name="BackgroundReader")
@@ -227,6 +228,8 @@ class Backend():
         if payload:
             self.stdout.write(payload)
         self.stdout.flush()
+        if action in [Action.EXCEPTION, Action.STOPPED]:
+            self.stopped_was_sent = True
 
     def send_info(self, msg):
         """Sends information to be shown to the user before generation begins."""
@@ -477,10 +480,12 @@ class Backend():
             (intent, args) = self.queue.pop()
             if intent in intents:
                 self.intent = intent
+                self.stopped_was_sent = False
                 intents[intent].send(args)
                 self.stop_requested = False
                 self.intent = Intent.UNKNOWN
-                self.send_action(Action.STOPPED)
+                if not self.stopped_was_sent:
+                    self.send_action(Action.STOPPED)
             else:
                 self.send_exception(True, f"Unknown intent {intent} sent to process. Expected one of {Intent._member_names_}.")
 

@@ -241,10 +241,10 @@ def modal_stopped(context):
     if timer:
         context.window_manager.event_timer_remove(timer)
         timer = None
-        if not hasattr(context,'scene'):
-            context = bpy.context # modal context is sometimes missing scene?
-        context.scene.dream_textures_progress = 0
-        context.scene.dream_textures_info = ""
+    if not hasattr(context,'scene'):
+        context = bpy.context # modal context is sometimes missing scene?
+    context.scene.dream_textures_progress = 0
+    context.scene.dream_textures_info = ""
     global last_data_block
     if last_data_block is not None:
         bpy.data.images.remove(last_data_block)

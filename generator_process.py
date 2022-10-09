@@ -44,6 +44,17 @@ INTENT_BYTE_LENGTH = ceil(log(max(Intent)+1,256))
 
 
 
+def block_in_use(func):
+    def block(self, *args, **kwargs):
+        if self.in_use:
+            raise RuntimeError(f"Can't call {func.__qualname__} while process is in use")
+        try:
+            self.in_use = True
+            yield from func(self, *args, **kwargs)
+        finally:
+            self.in_use = False
+    return block
+
 _shared_instance = None
 class GeneratorProcess():
     def __init__(self):
@@ -51,6 +62,7 @@ class GeneratorProcess():
         self.process = subprocess.Popen([sys.executable,'generator_process.py',bpy.app.binary_path],cwd=os.path.dirname(os.path.realpath(__file__)),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
         self.reader = self.process.stdout
         self.queue = []
+        self.in_use = False
         self.killed = False
         self.thread = threading.Thread(target=self._run,daemon=True,name="BackgroundReader")
         self.thread.start()
@@ -69,6 +81,11 @@ class GeneratorProcess():
             return
         _shared_instance.kill()
         _shared_instance = None
+    
+    @classmethod
+    def can_use(self):
+        self = self.shared(False)
+        return not (self and self.in_use)
     
     def kill(self):
         self.killed = True
@@ -106,6 +123,7 @@ class GeneratorProcess():
     def send_stop(self, stop_intent):
         self.send_intent(Intent.STOP, stop_intent=stop_intent)
     
+    @block_in_use
     def prompt2image(self, args, step_callback, image_callback, info_callback, exception_callback):
         self.send_intent(Intent.PROMPT_TO_IMAGE, **args)
 
@@ -128,6 +146,7 @@ class GeneratorProcess():
             if action in [Action.STOPPED, Action.EXCEPTION]:
                 return
     
+    @block_in_use
     def upscale(self, args, image_callback, info_callback, exception_callback):
         self.send_intent(Intent.UPSCALE, **args)
 

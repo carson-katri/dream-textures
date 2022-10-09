@@ -25,8 +25,7 @@ class DreamTexture(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        global timer
-        return timer is None
+        return GeneratorProcess.can_use()
     
     def execute(self, context):
         history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
@@ -113,8 +112,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        global timer
-        return timer is None
+        return GeneratorProcess.can_use()
 
     def invoke(self, context, event):
         weights_installed = os.path.exists(WEIGHTS_PATH)

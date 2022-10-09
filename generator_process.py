@@ -475,9 +475,9 @@ class Backend():
 
         while True:
             if len(self.queue) == 0:
-                self.queue_appended.wait()
                 self.queue_appended.clear()
-            (intent, args) = self.queue.pop()
+                self.queue_appended.wait()
+            (intent, args) = self.queue.pop(0)
             if intent in intents:
                 self.intent = intent
                 self.stopped_was_sent = False

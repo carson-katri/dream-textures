@@ -8,7 +8,7 @@ assignees: ''
 ---
 
 **Is this a known issue?**
-Check the troubleshooting section of the addon before reporting a new issue. Also [search for the error](https://github.com/carson-katri/dream-textures/issues?q=is%3Aissue) first.
+Before reporting an error [search for an existing issue](https://github.com/carson-katri/dream-textures/issues?q=is%3Aissue) first.
 
 **Describe the bug**
 A clear and concise description of what the bug is.

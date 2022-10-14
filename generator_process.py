@@ -431,6 +431,10 @@ class Backend():
         from realesrgan.archs.srvgg_arch import SRVGGNetCompact
         while True:
             image = cv2.imread(args['input'], cv2.IMREAD_UNCHANGED)
+            padding = 32
+            if args['seamless']:
+                image = np.pad(image, ((padding, padding), (padding, padding), (0, 0)), 'wrap')
+
             real_esrgan_model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=32, upscale=4, act_type='prelu')
             netscale = 4
             self.send_info("Loading Upsampler")
@@ -445,6 +449,9 @@ class Backend():
             )
             self.send_info("Enhancing Input")
             output, _ = upsampler.enhance(image, outscale=args['outscale'])
+            if args['seamless']:
+                padding *= args['outscale']
+                output = output[padding:-padding, padding:-padding]
             self.send_info("Converting Result")
             output = cv2.cvtColor(output, cv2.COLOR_BGR2RGB)
             output = Image.fromarray(output)

@@ -72,6 +72,7 @@ def upscaling_panels():
                 layout.enabled = os.path.exists(REAL_ESRGAN_WEIGHTS_PATH)
                 layout.prop(context.scene, "dream_textures_upscale_outscale")
                 layout.prop(context.scene, "dream_textures_upscale_full_precision")
+                layout.prop(context.scene, "dream_textures_upscale_seamless")
                 if not context.scene.dream_textures_upscale_full_precision:
                     box = layout.box()
                     box.label(text="Note: Some GPUs do not support mixed precision math", icon="ERROR")

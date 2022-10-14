@@ -6,7 +6,6 @@ import os
 import threading
 import site
 import traceback
-import numpy as np
 from enum import IntEnum
 from multiprocessing.shared_memory import SharedMemory
 
@@ -281,6 +280,7 @@ class Backend():
 
     def share_image_memory(self, image):
         from PIL import ImageOps
+        import numpy as np
         image_bytes = (np.asarray(ImageOps.flip(image).convert('RGBA'),dtype=np.float32) * BYTE_TO_NORMALIZED).tobytes()
         image_bytes_len = len(image_bytes)
         shared_memory = self.shared_memory
@@ -515,9 +515,8 @@ class Backend():
                 self.send_exception(True, f"Unknown intent {intent} sent to process. Expected one of {Intent._member_names_}.")
 
 def main():
+    back = Backend()
     try:
-        back = Backend()
-
         if sys.platform == 'win32':
             from ctypes import WinDLL
             WinDLL(os.path.join(os.path.dirname(sys.argv[1]),"python3.dll")) # fix for ImportError: DLL load failed while importing cv2: The specified module could not be found.
@@ -525,12 +524,18 @@ def main():
         from absolute_path import absolute_path
         # Support Apple Silicon GPUs as much as possible.
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+
+        # Move Python runtime paths to end. (prioritize addon modules)
+        paths = sys.path[1:]
+        sys.path[:] = sys.path[0:1]
+
         sys.path.append(absolute_path("stable_diffusion/"))
         sys.path.append(absolute_path("stable_diffusion/src/clip"))
         sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
         sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
-
         site.addsitedir(absolute_path(".python_dependencies"))
+        sys.path.extend(paths)
+
         import pkg_resources
         pkg_resources._initialize_master_working_set()
 

@@ -59,7 +59,13 @@ _shared_instance = None
 class GeneratorProcess():
     def __init__(self):
         import bpy
-        self.process = subprocess.Popen([sys.executable,'generator_process.py',bpy.app.binary_path],cwd=os.path.dirname(os.path.realpath(__file__)),stdin=subprocess.PIPE,stdout=subprocess.PIPE)
+        env = os.environ.copy()
+        env.pop('PYTHONPATH', None) # in case if --python-use-system-env
+        self.process = subprocess.Popen(
+            [sys.executable,'-s','generator_process.py',bpy.app.binary_path],
+            cwd=os.path.dirname(os.path.realpath(__file__)),
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env
+        )
         self.reader = self.process.stdout
         self.queue = []
         self.in_use = False

@@ -55,6 +55,11 @@ def register_render_pass():
                                     pixels = np.frombuffer(shared_memory.buf, dtype=np.float32)
                                     reshaped = pixels.reshape((width * height, 4))
                                     render_pass.rect.foreach_set(reshaped)
+
+                                    # delete pointers before closing shared memory
+                                    del pixels
+                                    del reshaped
+
                                     shared_memory.close()
                                     event.set()
                             

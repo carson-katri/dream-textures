@@ -26,6 +26,14 @@ bl_info = {
 import bpy
 from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty
 import sys
+import os
+
+module_name = os.path.basename(os.path.dirname(__file__))
+def clear_modules():
+    for name in list(sys.modules.keys()):
+        if name.startswith(module_name) and name != module_name:
+            del sys.modules[name]
+clear_modules() # keep before all addon imports
 
 from .render_pass import register_render_pass, unregister_render_pass
 from .prompt_engineering import *

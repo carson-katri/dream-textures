@@ -8,7 +8,7 @@ from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..absolute_path import WEIGHTS_PATH
-from ..generator_process import MISSING_DEPENDENCIES_ERROR, GeneratorProcess
+from ..generator_process import MISSING_DEPENDENCIES_ERROR, GeneratorProcess, Intent
 from ..property_groups.dream_prompt import DreamPrompt
 
 import tempfile
@@ -25,8 +25,7 @@ class DreamTexture(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        global timer
-        return timer is None
+        return GeneratorProcess.can_use()
     
     def execute(self, context):
         history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
@@ -65,7 +64,6 @@ class DreamTexture(bpy.types.Operator):
                 for area in screen.areas:
                     if area.type == 'IMAGE_EDITOR':
                         area.spaces.active.image = image
-                scene.dream_textures_progress = 0
                 scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
                 history_entry.seed = str(seed)
                 history_entry.random_seed = False
@@ -114,8 +112,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        global timer
-        return timer is None
+        return GeneratorProcess.can_use()
 
     def invoke(self, context, event):
         weights_installed = os.path.exists(WEIGHTS_PATH)
@@ -130,10 +127,10 @@ class HeadlessDreamTexture(bpy.types.Operator):
         try:
             next(generator_advance)
         except StopIteration:
-            remove_timer(context)
+            modal_stopped(context)
             return {'FINISHED'}
         except Exception as e:
-            remove_timer(context)
+            modal_stopped(context)
             raise e
         return {'RUNNING_MODAL'}
 
@@ -233,24 +230,27 @@ class HeadlessDreamTexture(bpy.types.Operator):
             exception_callback=handle_exception
         )
         context.window_manager.modal_handler_add(self)
-        self.timer = context.window_manager.event_timer_add(1 / 15, window=context.window)
+        global timer
+        timer = context.window_manager.event_timer_add(1 / 15, window=context.window)
         return {'RUNNING_MODAL'}
 
-def remove_timer(context):
+def modal_stopped(context):
     global timer
     if timer:
         context.window_manager.event_timer_remove(timer)
         timer = None
-
-def kill_generator(context=bpy.context):
-    GeneratorProcess.kill_shared()
-    remove_timer(context)
-    bpy.context.scene.dream_textures_progress = 0
-    bpy.context.scene.dream_textures_info = ""
+    if not hasattr(context,'scene'):
+        context = bpy.context # modal context is sometimes missing scene?
+    context.scene.dream_textures_progress = 0
+    context.scene.dream_textures_info = ""
     global last_data_block
     if last_data_block is not None:
         bpy.data.images.remove(last_data_block)
         last_data_block = None
+
+def kill_generator(context=bpy.context):
+    GeneratorProcess.kill_shared()
+    modal_stopped(context)
 
 class ReleaseGenerator(bpy.types.Operator):
     bl_idname = "shade.dream_textures_release_generator"
@@ -260,4 +260,21 @@ class ReleaseGenerator(bpy.types.Operator):
 
     def execute(self, context):
         kill_generator(context)
+        return {'FINISHED'}
+
+class CancelGenerator(bpy.types.Operator):
+    bl_idname = "shade.dream_textures_stop_generator"
+    bl_label = "Cancel Generator"
+    bl_description = "Stops the generator without reloading everything next time"
+    bl_options = {'REGISTER'}
+
+    @classmethod
+    def poll(self, context):
+        global timer
+        return timer is not None
+
+    def execute(self, context):
+        gen = GeneratorProcess.shared(False)
+        if gen:
+            gen.send_stop(Intent.PROMPT_TO_IMAGE)
         return {'FINISHED'}

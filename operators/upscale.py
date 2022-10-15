@@ -27,8 +27,7 @@ class Upscale(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        global timer
-        return timer is None
+        return GeneratorProcess.can_use()
 
     def modal(self, context, event):
         if event.type != 'TIMER':

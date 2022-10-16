@@ -34,9 +34,14 @@ def upscale(self):
     from PIL import Image
     from realesrgan import RealESRGANer
     from realesrgan.archs.srvgg_arch import SRVGGNetCompact
+    from torch import nn
     while True:
         image = cv2.imread(args['input'], cv2.IMREAD_UNCHANGED)
         real_esrgan_model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=32, upscale=4, act_type='prelu')
+        if args['seamless']:
+            for m in real_esrgan_model.body:
+                if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+                    m.padding_mode = 'circular'
         netscale = 4
         self.send_info("Loading Upsampler")
         upsampler = RealESRGANer(

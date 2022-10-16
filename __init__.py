@@ -83,6 +83,7 @@ def register():
     bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
     bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
     bpy.types.Scene.dream_textures_upscale_full_precision = bpy.props.BoolProperty(name="Full Precision", default=True)
+    bpy.types.Scene.dream_textures_upscale_seamless = bpy.props.BoolProperty(name="Seamless", default=False)
 
     for cls in CLASSES:
         bpy.utils.register_class(cls)

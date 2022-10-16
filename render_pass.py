@@ -64,7 +64,7 @@ def register_render_pass():
                                     render_pass.rect.foreach_set(reshaped)
 
                                     seed_pass = next(filter(lambda x: x.name == "Dream Textures Seed", layer.passes))
-                                    seed_pass_data = np.repeat(np.float32(seed), len(seed_pass.rect))
+                                    seed_pass_data = np.repeat(np.float32(float(seed)), len(seed_pass.rect))
                                     seed_pass.rect.foreach_set(seed_pass_data)
 
                                     # delete pointers before closing shared memory
@@ -136,7 +136,7 @@ def register_render_pass():
                             bpy.app.timers.register(cleanup)
                             self.update_stats("Dream Textures", "Finished")
                         elif render_pass.name != "Dream Textures Seed":
-                            pixels = np.empty((size_x * size_y, 4), dtype=np.float32)
+                            pixels = np.empty((len(original_render_pass.rect), len(original_render_pass.rect[0])), dtype=np.float32)
                             original_render_pass.rect.foreach_get(pixels)
                             render_pass.rect[:] = pixels
                 self.end_result(render_result)

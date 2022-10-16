@@ -125,6 +125,7 @@ class Upscale(bpy.types.Operator):
             'name': input_image.name,
             'outscale': int(context.scene.dream_textures_upscale_outscale),
             'full_precision': context.scene.dream_textures_upscale_full_precision,
+            'seamless': context.scene.dream_textures_upscale_seamless
         }
         global generator_advance
         generator_advance = generator.upscale(args, image_callback, info_callback, exception_callback)

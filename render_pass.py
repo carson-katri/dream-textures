@@ -106,19 +106,23 @@ def register_render_pass():
                                 }
                                 def image_callback(event, shared_memory_name, seed, width, height, upscaled=False):
                                     nonlocal combined_pixels
+                                    nonlocal combined_pixels_memory
                                     shared_memory = SharedMemory(shared_memory_name)
                                     combined_pixels = np.frombuffer(shared_memory.buf, dtype=np.float32).copy().reshape((size_x * size_y, 4))
                                     shared_memory.close()
+                                    combined_pixels_memory.close()
                                     event.set()
                                 def exception_callback(fatal, msg, trace):
                                     print(fatal, msg, trace)
                                     event.set()
                                 generator_advance = GeneratorProcess.shared().apply_ocio_transforms(args, functools.partial(image_callback, event), exception_callback)
-                                while True:
+                                def timer():
                                     try:
                                         next(generator_advance)
+                                        return 0.01
                                     except StopIteration:
-                                        break
+                                        pass
+                                bpy.app.timers.register(timer)
 
                             bpy.app.timers.register(functools.partial(do_ocio_transform, event))
                             event.wait()

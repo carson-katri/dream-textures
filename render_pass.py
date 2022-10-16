@@ -6,7 +6,7 @@ import numpy as np
 import math
 import os
 import sys
-import PyOpenColorIO as OCIO
+# import PyOpenColorIO as OCIO
 from multiprocessing.shared_memory import SharedMemory
 
 from .operators.dream_texture import dream_texture

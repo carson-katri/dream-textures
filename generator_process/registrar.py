@@ -26,7 +26,6 @@ class _IntentRegistrar:
     def intent_backend(self, intent: Intent):
         def decorator(func):
             backend = _IntentBackend(intent, func)
-            print(func)
             self._intent_backends.append(backend)
             return backend
         return decorator

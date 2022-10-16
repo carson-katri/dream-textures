@@ -6,8 +6,9 @@ import numpy as np
 import math
 import os
 import sys
-# import PyOpenColorIO as OCIO
 from multiprocessing.shared_memory import SharedMemory
+
+from .generator_process import GeneratorProcess
 
 from .operators.dream_texture import dream_texture
 
@@ -20,6 +21,7 @@ def register_render_pass():
         def update_render_passes(self, scene=None, renderlayer=None):
             result = original(self, scene, renderlayer)
             self.register_pass(scene, renderlayer, "Dream Textures", 4, "RGBA", 'COLOR')
+            self.register_pass(scene, renderlayer, "Dream Textures Seed", 1, "X", 'VALUE')
             return result
         return update_render_passes
     cycles.CyclesRender.update_render_passes = update_render_passes_decorator(cycles.CyclesRender.update_render_passes)
@@ -32,6 +34,7 @@ def register_render_pass():
             try:
                 original_result = self.get_result()
                 self.add_pass("Dream Textures", 4, "RGBA")
+                self.add_pass("Dream Textures Seed", 1, "X")
                 scale = scene.render.resolution_percentage / 100.0
                 size_x = int(scene.render.resolution_x * scale)
                 size_y = int(scene.render.resolution_y * scale)
@@ -57,8 +60,12 @@ def register_render_pass():
                                 if not upscaled:
                                     shared_memory = SharedMemory(shared_memory_name)
                                     pixels = np.frombuffer(shared_memory.buf, dtype=np.float32)
-                                    reshaped = np.power(pixels.reshape((width * height, 4)), 2.4)
+                                    reshaped = pixels.reshape((width * height, 4))
                                     render_pass.rect.foreach_set(reshaped)
+
+                                    seed_pass = next(filter(lambda x: x.name == "Dream Textures Seed", layer.passes))
+                                    seed_pass_data = np.repeat(np.float32(seed), len(seed_pass.rect))
+                                    seed_pass.rect.foreach_set(seed_pass_data)
 
                                     # delete pointers before closing shared memory
                                     del pixels
@@ -81,89 +88,42 @@ def register_render_pass():
                             combined_pixels = np.empty((size_x * size_y, 4), dtype=np.float32)
                             rect.foreach_get(combined_pixels)
 
-                            ocio_config = OCIO.Config.CreateFromFile(os.path.join(bpy.utils.resource_path('LOCAL'), 'datafiles/colormanagement/config.ocio'))
+                            event = threading.Event()
+                            def do_ocio_transform(event):
+                                ocio_config_path = os.path.join(bpy.utils.resource_path('LOCAL'), 'datafiles/colormanagement/config.ocio')
+                                buf = combined_pixels.tobytes()
+                                combined_pixels_memory = SharedMemory(create=True, size=len(buf))
+                                combined_pixels_memory.buf[:] = buf
+                                args = {
+                                    'config_path': ocio_config_path,
+                                    'name': combined_pixels_memory.name,
+
+                                    'exposure': scene.view_settings.exposure,
+                                    'gamma': scene.view_settings.gamma,
+                                    'view_transform': scene.view_settings.view_transform,
+                                    'display_device': scene.display_settings.display_device,
+                                    'look': scene.view_settings.look,
+                                }
+                                def image_callback(event, shared_memory_name, seed, width, height, upscaled=False):
+                                    nonlocal combined_pixels
+                                    shared_memory = SharedMemory(shared_memory_name)
+                                    combined_pixels = np.frombuffer(shared_memory.buf, dtype=np.float32).copy().reshape((size_x * size_y, 4))
+                                    shared_memory.close()
+                                    event.set()
+                                def exception_callback(fatal, msg, trace):
+                                    print(fatal, msg, trace)
+                                    event.set()
+                                generator_advance = GeneratorProcess.shared().apply_ocio_transforms(args, functools.partial(image_callback, event), exception_callback)
+                                while True:
+                                    try:
+                                        next(generator_advance)
+                                    except StopIteration:
+                                        break
+
+                            bpy.app.timers.register(functools.partial(do_ocio_transform, event))
+                            event.wait()
                             
-                            # A reimplementation of `OCIOImpl::createDisplayProcessor` from the Blender source.
-                            # https://github.com/dfelinto/blender/blob/87a0770bb969ce37d9a41a04c1658ea09c63933a/intern/opencolorio/ocio_impl.cc#L643
-                            def create_display_processor(
-                                config,
-                                input_colorspace,
-                                view,
-                                display,
-                                look,
-                                scale, # Exposure
-                                exponent # Gamma
-                            ):
-                                group = OCIO.GroupTransform()
-
-                                # Exposure
-                                if scale != 1:
-                                    # Always apply exposure in scene linear.
-                                    color_space_transform = OCIO.ColorSpaceTransform()
-                                    color_space_transform.setSrc(input_colorspace)
-                                    color_space_transform.setDst(OCIO.ROLE_SCENE_LINEAR)
-                                    group.appendTransform(color_space_transform)
-
-                                    # Make further transforms aware of the color space change
-                                    input_colorspace = OCIO.ROLE_SCENE_LINEAR
-
-                                    # Apply scale
-                                    matrix_transform = OCIO.MatrixTransform([scale, 0.0, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 0.0, 1.0])
-                                    group.appendTransform(matrix_transform)
-                                
-                                # Add look transform
-                                use_look = look is not None and len(look) > 0
-                                if use_look:
-                                    look_output = config.getLook(look).getProcessSpace()
-                                    if look_output is not None and len(look_output) > 0:
-                                        look_transform = OCIO.LookTransform()
-                                        look_transform.setSrc(input_colorspace)
-                                        look_transform.setDst(look_output)
-                                        look_transform.setLooks(look)
-                                        group.appendTransform(look_transform)
-                                        # Make further transforms aware of the color space change.
-                                        input_colorspace = look_output
-                                    else:
-                                        # For empty looks, no output color space is returned.
-                                        use_look = False
-                                
-                                # Add view and display transform
-                                print(input_colorspace)
-                                print(use_look)
-                                print(view)
-                                print(display)
-                                display_view_transform = OCIO.DisplayViewTransform()
-                                display_view_transform.setSrc(input_colorspace)
-                                display_view_transform.setLooksBypass(True)
-                                display_view_transform.setView(view)
-                                display_view_transform.setDisplay(display)
-                                group.appendTransform(display_view_transform)
-
-                                # Gamma
-                                if exponent != 1:
-                                    exponent_transform = OCIO.ExponentTransform([exponent, exponent, exponent, 1.0])
-                                    group.appendTransform(exponent_transform)
-                                
-                                # Create processor from transform. This is the moment were OCIO validates
-                                # the entire transform, no need to check for the validity of inputs above.
-                                try:
-                                    processor = config.getProcessor(group)
-                                    if processor is not None:
-                                        return processor
-                                except Exception as e:
-                                    print(e)
-                                
-                                return None
-                            
-                            # Exposure and gamma transformations derived from Blender source:
-                            # https://github.com/dfelinto/blender/blob/87a0770bb969ce37d9a41a04c1658ea09c63933a/source/blender/imbuf/intern/colormanagement.c#L825
-                            scale = 1 if scene.view_settings.exposure == 0 else math.pow(2, scene.view_settings.exposure)
-                            exponent = 1 if scene.view_settings.gamma == 1 else (1 / (scene.view_settings.gamma if scene.view_settings.gamma > sys.float_info.epsilon else sys.float_info.epsilon))
-                            processor = create_display_processor(ocio_config, OCIO.ROLE_SCENE_LINEAR, scene.view_settings.view_transform, scene.display_settings.display_device, scene.view_settings.look if scene.view_settings.look != 'None' else None, scale, exponent)
-
-                            flat_pixels = combined_pixels.ravel()
-                            processor.getDefaultCPUProcessor().applyRGBA(flat_pixels)
-                            combined_pass_image.pixels[:] = flat_pixels
+                            combined_pass_image.pixels[:] = combined_pixels.ravel()
 
                             self.update_stats("Dream Textures", "Starting...")
                             event = threading.Event()
@@ -175,7 +135,7 @@ def register_render_pass():
                                 bpy.data.images.remove(combined_pass_image)
                             bpy.app.timers.register(cleanup)
                             self.update_stats("Dream Textures", "Finished")
-                        else:
+                        elif render_pass.name != "Dream Textures Seed":
                             pixels = np.empty((size_x * size_y, 4), dtype=np.float32)
                             original_render_pass.rect.foreach_get(pixels)
                             render_pass.rect[:] = pixels

@@ -12,6 +12,7 @@ from .action import ACTION_BYTE_LENGTH, Action
 from .intent import INTENT_BYTE_LENGTH, Intent
 
 from .registrar import registrar
+from .intents.apply_ocio_transforms import *
 from .intents.prompt_to_image import *
 from .intents.send_stop import *
 from .intents.upscale import *
@@ -30,7 +31,6 @@ class GeneratorProcess():
         self.thread = threading.Thread(target=self._run,daemon=True,name="BackgroundReader")
         self.thread.start()
 
-        print(registrar)
         for intent in registrar._generator_intents:
             # Bind self with __get__
             setattr(self, intent.name, intent.func.__get__(self, GeneratorProcess))

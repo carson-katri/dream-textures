@@ -103,7 +103,7 @@ def _apply_ocio_transforms(self):
         
         # Exposure and gamma transformations derived from Blender source:
         # https://github.com/dfelinto/blender/blob/87a0770bb969ce37d9a41a04c1658ea09c63933a/source/blender/imbuf/intern/colormanagement.c#L825
-        scale = 1 if args['exposure'] == 0 else math.pow(2, scene.view_settings.exposure)
+        scale = math.pow(2, args['exposure'])
         exponent = 1 if args['gamma'] == 1 else (1 / (args['gamma'] if args['gamma'] > sys.float_info.epsilon else sys.float_info.epsilon))
         processor = create_display_processor(ocio_config, OCIO.ROLE_SCENE_LINEAR, args['view_transform'], args['display_device'], args['look'] if args['look'] != 'None' else None, scale, exponent)
 

@@ -42,7 +42,8 @@ def _apply_ocio_transforms(self):
             display,
             look,
             scale, # Exposure
-            exponent # Gamma
+            exponent, # Gamma
+            inverse=False
         ):
             group = OCIO.GroupTransform()
 
@@ -93,11 +94,13 @@ def _apply_ocio_transforms(self):
             # Create processor from transform. This is the moment were OCIO validates
             # the entire transform, no need to check for the validity of inputs above.
             try:
+                if inverse:
+                    group.setDirection(OCIO.TransformDirection.TRANSFORM_DIR_INVERSE)
                 processor = config.getProcessor(group)
                 if processor is not None:
                     return processor
             except Exception as e:
-                print(e)
+                self.send_exception(True, msg=str(e), trace="")
             
             return None
         
@@ -105,7 +108,7 @@ def _apply_ocio_transforms(self):
         # https://github.com/dfelinto/blender/blob/87a0770bb969ce37d9a41a04c1658ea09c63933a/source/blender/imbuf/intern/colormanagement.c#L825
         scale = math.pow(2, args['exposure'])
         exponent = 1 if args['gamma'] == 1 else (1 / (args['gamma'] if args['gamma'] > sys.float_info.epsilon else sys.float_info.epsilon))
-        processor = create_display_processor(ocio_config, OCIO.ROLE_SCENE_LINEAR, args['view_transform'], args['display_device'], args['look'] if args['look'] != 'None' else None, scale, exponent)
+        processor = create_display_processor(ocio_config, OCIO.ROLE_SCENE_LINEAR, args['view_transform'], args['display_device'], args['look'] if args['look'] != 'None' else None, scale, exponent, args['inverse'])
 
         shared_memory = SharedMemory(args['name'])
         input_image = np.frombuffer(shared_memory.buf, dtype=np.float32)

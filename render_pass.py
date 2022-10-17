@@ -69,7 +69,7 @@ def register_render_pass():
                             def image_callback(event, shared_memory_name, seed, width, height, upscaled=False):
                                 nonlocal target_pixels
                                 nonlocal target_pixels_memory
-                                target_pixels = np.frombuffer(target_pixels_memory.buf, dtype=np.float32).copy().reshape((size_x * size_y, 4))
+                                target_pixels[:] = np.frombuffer(target_pixels_memory.buf, dtype=np.float32).copy().reshape((size_x * size_y, 4))
                                 event.set()
                             def exception_callback(fatal, msg, trace):
                                 print(fatal, msg, trace)
@@ -89,7 +89,7 @@ def register_render_pass():
                                 # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
                                 if not upscaled:
                                     shared_memory = SharedMemory(shared_memory_name)
-                                    set_pixels(np.frombuffer(shared_memory.buf, dtype=np.float32).copy())
+                                    set_pixels(np.frombuffer(shared_memory.buf, dtype=np.float32).copy().reshape((size_x * size_y, 4)))
 
                                     seed_pass = next(filter(lambda x: x.name == "Dream Textures Seed", layer.passes))
                                     seed_pass_data = np.repeat(np.float32(float(seed)), len(seed_pass.rect))

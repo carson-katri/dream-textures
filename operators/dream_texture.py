@@ -9,7 +9,6 @@ from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..absolute_path import WEIGHTS_PATH
 from ..generator_process import MISSING_DEPENDENCIES_ERROR, GeneratorProcess, Intent
-from ..property_groups.dream_prompt import DreamPrompt
 
 import tempfile
 

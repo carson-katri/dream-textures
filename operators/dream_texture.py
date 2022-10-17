@@ -16,6 +16,12 @@ generator_advance = None
 last_data_block = None
 timer = None
 
+def weights_are_installed(report = None):
+    weights_installed = os.path.exists(WEIGHTS_PATH)
+    if report and (not weights_installed):
+        report({'ERROR'}, "Please complete setup in the preferences window.")
+    return weights_installed
+
 class DreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture"
     bl_label = "Dream Texture"
@@ -25,7 +31,12 @@ class DreamTexture(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return GeneratorProcess.can_use()
-    
+
+    def invoke(self, context, event):
+        if weights_are_installed(self.report):
+            return self.execute(context)
+        return {'CANCELLED'}
+
     def execute(self, context):
         history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
         for prop in context.scene.dream_textures_prompt.__annotations__.keys():
@@ -112,13 +123,6 @@ class HeadlessDreamTexture(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         return GeneratorProcess.can_use()
-
-    def invoke(self, context, event):
-        weights_installed = os.path.exists(WEIGHTS_PATH)
-        if not weights_installed:
-            self.report({'ERROR'}, "Please complete setup in the preferences window.")
-            return {'CANCELLED'}
-        return self.execute(context)
 
     def modal(self, context, event):
         if event.type != 'TIMER':

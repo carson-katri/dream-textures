@@ -8,7 +8,7 @@ from .property_groups.dream_prompt import DreamPrompt
 from .ui.panels import dream_texture, history, upscaling, render_properties
 from .preferences import OpenGitDownloads, OpenHuggingFace, OpenWeightsDirectory, OpenRustInstaller, ValidateInstallation, StableDiffusionPreferences
 
-from .ui.presets import DREAM_PT_AdvancedPresets, DREAM_MT_AdvancedPresets, AddAdvancedPreset
+from .ui.presets import DREAM_PT_AdvancedPresets, DREAM_MT_AdvancedPresets, AddAdvancedPreset, RestoreDefaultPresets
 
 CLASSES = (
     HeadlessDreamTexture,
@@ -48,4 +48,5 @@ PREFERENCE_CLASSES = (
                       OpenWeightsDirectory,
                       OpenRustInstaller,
                       ValidateInstallation,
+                      RestoreDefaultPresets,
                       StableDiffusionPreferences)

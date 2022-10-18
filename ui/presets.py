@@ -45,10 +45,30 @@ class AddAdvancedPreset(AddPresetBase, Operator):
         "prompt.show_steps",
     ]
 
-def register_default_presets():
-    presets_path = os.path.join(bpy.utils.user_resource('SCRIPTS'), 'presets/dream_textures/advanced')
-    default_presets_path = absolute_path('builtin_presets')
-    if not os.path.isdir(presets_path):
-        os.makedirs(presets_path)
-        for default_preset in os.listdir(default_presets_path):
-            shutil.copy(os.path.join(default_presets_path, default_preset), presets_path)
+class RestoreDefaultPresets(Operator):
+    bl_idname = "dream_textures.restore_default_presets"
+    bl_label = "Restore Default Presets"
+    bl_description = ("Restores all default presets provided by the addon.")
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        register_default_presets(force=True)
+        return {"FINISHED"}
+
+PRESETS_PATH = os.path.join(bpy.utils.user_resource('SCRIPTS'), 'presets/dream_textures/advanced')
+DEFAULT_PRESETS_PATH = absolute_path('builtin_presets')
+def register_default_presets(force=False):
+    presets_path_exists = os.path.isdir(PRESETS_PATH)
+    if not presets_path_exists or force:
+        if not presets_path_exists:
+            os.makedirs(PRESETS_PATH)
+        for default_preset in os.listdir(DEFAULT_PRESETS_PATH):
+            if not os.path.exists(os.path.join(PRESETS_PATH, default_preset)):
+                shutil.copy(os.path.join(DEFAULT_PRESETS_PATH, default_preset), PRESETS_PATH)
+
+def default_presets_missing():
+    if not os.path.isdir(PRESETS_PATH):
+        return True
+    for default_preset in os.listdir(DEFAULT_PRESETS_PATH):
+        if not os.path.exists(os.path.join(PRESETS_PATH, default_preset)):
+            return True

@@ -29,5 +29,4 @@ class InpaintAreaBrush(bpy.types.WorkSpaceTool):
     bl_widget = InpaintAreaBrushActivated.bl_idname
 
     def draw_settings(self, layout, tool):
-        # context.scene.tool_settings.unified_paint_settings
         layout.prop(bpy.context.scene.tool_settings.unified_paint_settings, 'size')

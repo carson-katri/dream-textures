@@ -225,6 +225,8 @@ def actions_panel(sub_panel, space_type, get_prompt):
             super().draw(context)
             layout = self.layout
             layout.use_property_split = True
+
+            layout.prop(get_prompt(context), "iterations")
             
             row = layout.row()
             row.scale_y = 1.5

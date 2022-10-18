@@ -10,7 +10,7 @@ from multiprocessing.shared_memory import SharedMemory
 
 from .generator_process import GeneratorProcess
 
-from .operators.dream_texture import dream_texture
+from .operators.dream_texture import dream_texture, weights_are_installed
 
 update_render_passes_original = cycles.CyclesRender.update_render_passes
 render_original = cycles.CyclesRender.render
@@ -40,6 +40,8 @@ def register_render_pass():
                 size_y = int(scene.render.resolution_y * scale)
                 if size_x % 64 != 0 or size_y % 64 != 0:
                     self.report({"ERROR"}, f"Image dimensions must be multiples of 64 (e.x. 512x512, 512x768, ...) closest is {round(size_x/64)*64}x{round(size_y/64)*64}")
+                    return result
+                if not weights_are_installed(self.report):
                     return result
                 render_result = self.begin_result(0, 0, size_x, size_y)
                 for original_layer in original_result.layers:

@@ -1,4 +1,5 @@
 from bpy.types import Panel
+from ..presets import DREAM_PT_AdvancedPresets
 from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGenerator
@@ -193,6 +194,9 @@ def advanced_panel(sub_panel, space_type, get_prompt):
         bl_idname = f"DREAM_PT_dream_panel_advanced_{space_type}"
         bl_label = "Advanced"
         bl_options = {'DEFAULT_CLOSED'}
+
+        def draw_header_preset(self, context):
+            DREAM_PT_AdvancedPresets.draw_panel_header(self.layout)
 
         def draw(self, context):
             super().draw(context)

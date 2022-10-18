@@ -41,7 +41,7 @@ class AddAdvancedPreset(AddPresetBase, Operator):
         "prompt.seed",
         "prompt.steps",
         "prompt.cfg_scale",
-        "prompt.scheduler",
+        "prompt.sampler_name",
         "prompt.show_steps",
     ]
 

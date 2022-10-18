@@ -51,7 +51,7 @@ attributes = {
     "steps": IntProperty(name="Steps", default=25, min=1),
     "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, soft_min=1.01, description="How strongly the prompt influences the image"),
     "sampler_name": EnumProperty(name="Sampler", items=sampler_options, default=3),
-    "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=True),
+    "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=False),
 
     # Init Image
     "use_init_img": BoolProperty(name="Use Init Image", default=False),

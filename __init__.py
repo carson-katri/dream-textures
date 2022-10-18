@@ -44,6 +44,7 @@ from .operators.dream_texture import DreamTexture, kill_generator
 from .property_groups.dream_prompt import DreamPrompt
 from .operators.upscale import upscale_options
 from .preferences import StableDiffusionPreferences
+from .ui.presets import register_default_presets
 
 requirements_path_items = (
     # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
@@ -93,6 +94,8 @@ def register():
 
     # Monkey patch cycles render passes
     register_render_pass()
+
+    register_default_presets()
 
 def unregister():
     for cls in PREFERENCE_CLASSES:

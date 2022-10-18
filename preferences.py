@@ -9,6 +9,7 @@ from .absolute_path import WEIGHTS_PATH, absolute_path
 from .operators.install_dependencies import InstallDependencies
 from .operators.open_latest_version import OpenLatestVersion
 from .property_groups.dream_prompt import DreamPrompt
+from .ui.presets import RestoreDefaultPresets, default_presets_missing
 
 class OpenHuggingFace(bpy.types.Operator):
     bl_idname = "stable_diffusion.open_hugging_face"
@@ -127,6 +128,13 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             complete_box.label(text="1. Open an Image Editor or Shader Editor space")
             complete_box.label(text="2. Enable 'View' > 'Sidebar'")
             complete_box.label(text="3. Select the 'Dream' tab")
+        
+        if default_presets_missing():
+            presets_box = layout.box()
+            presets_box.label(text="Default Presets", icon="PRESET")
+            presets_box.label(text="It looks like you removed some of the default presets.")
+            presets_box.label(text="You can restore them here.")
+            presets_box.operator(RestoreDefaultPresets.bl_idname, icon="RECOVER_LAST")
 
         if context.preferences.view.show_developer_ui: # If 'Developer Extras' is enabled, show addon development tools
             developer_box = layout.box()

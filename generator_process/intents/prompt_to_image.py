@@ -35,15 +35,10 @@ def prompt_to_image(self):
     self.send_info("Importing Dependencies")
     from absolute_path import absolute_path
     from stable_diffusion.ldm.generate import Generate
-    from stable_diffusion.ldm.dream.devices import choose_precision
-    from omegaconf import OmegaConf
+    from stable_diffusion.ldm.invoke.devices import choose_precision
     from io import StringIO
-    models_config  = absolute_path('stable_diffusion/configs/models.yaml')
-    model   = 'stable-diffusion-1.4'
-
-    models  = OmegaConf.load(models_config)
-    config  = absolute_path('stable_diffusion/' + models[model].config)
-    weights = absolute_path('stable_diffusion/' + models[model].weights)
+    
+    models_config  = absolute_path('weights/config.yml')
     generator: Generate = None
 
     def image_writer(image, seed, upscaled=False, first_seed=None):
@@ -127,10 +122,6 @@ def prompt_to_image(self):
                 self.send_info("Loading Model")
                 generator = Generate(
                     conf=models_config,
-                    model=model,
-                    # These args are deprecated, but we need them to specify an absolute path to the weights.
-                    weights=weights,
-                    config=config,
                     precision=args['precision']
                 )
                 generator.free_gpu_mem = False # Not sure what this is for, and why it isn't a flag but read from Args()?

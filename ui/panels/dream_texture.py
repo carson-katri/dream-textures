@@ -93,7 +93,6 @@ def prompt_panel(sub_panel, space_type, get_prompt):
                 if len(enum_cases) != 1 or enum_cases[0][0] != 'custom':
                     segment_row.prop(get_prompt(context), enum_prop, icon_only=is_custom)
             if get_prompt(context).prompt_structure == file_batch_structure.id:
-                # layout.prop(get_prompt(context), "prompt_file")
                 layout.template_ID(context.scene, "dream_textures_prompt_file", open="text.open")
             else:
                 layout.prop(get_prompt(context), "seamless")

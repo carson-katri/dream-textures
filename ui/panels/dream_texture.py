@@ -172,7 +172,7 @@ def init_image_panels(sub_panel, space_type, get_prompt):
     class InitImagePanel(sub_panel):
         """Create a subpanel for init image options"""
         bl_idname = f"DREAM_PT_dream_panel_init_image_{space_type}"
-        bl_label = "Modify Image"
+        bl_label = "Source Image"
         bl_options = {'DEFAULT_CLOSED'}
 
         def draw_header(self, context):

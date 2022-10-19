@@ -167,7 +167,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
             return None
 
         bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(
-            name="Progress",
+            name="",
             default=0,
             min=0,
             max=(int(headless_prompt.strength * headless_prompt.steps) if init_img is not None else headless_prompt.steps) + 1,
@@ -206,10 +206,13 @@ class HeadlessDreamTexture(bpy.types.Operator):
         init_img_path = None
         if init_img is not None:
             init_img_path = save_temp_image(init_img)
+            print(init_img_path)
 
         args = headless_prompt.generate_args()
         args.update(headless_args)
         args['init_img'] = init_img_path
+        if headless_prompt.use_init_img_color:
+            args['init_color'] = init_img_path
 
         def step_callback(step, width=None, height=None, shared_memory_name=None):
             global headless_step_callback

@@ -203,16 +203,22 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                     else:
                         layout.prop(prompt, "text_mask")
                         layout.prop(prompt, "text_mask_confidence")
-                layout.prop(prompt, "strength")
                 layout.prop(prompt, "inpaint_replace")
             elif prompt.init_img_action == 'outpaint':
-                layout.prop(prompt, "outpaint_top")
-                layout.prop(prompt, "outpaint_right")
-                layout.prop(prompt, "outpaint_bottom")
-                layout.prop(prompt, "outpaint_left")
+                column = layout.column(align=True)
+                column.prop(prompt, "outpaint_top")
+                column.prop(prompt, "outpaint_right")
+                column.prop(prompt, "outpaint_bottom")
+                column.prop(prompt, "outpaint_left")
+
+                layout.separator()
+                
+                layout.prop(prompt, "outpaint_blend")
+                layout.prop(prompt, "inpaint_replace")
             elif prompt.init_img_action == 'modify':
-                layout.prop(prompt, "strength")
                 layout.prop(prompt, "fit")
+            layout.prop(prompt, "strength")
+            layout.prop(prompt, "use_init_img_color")
     yield InitImagePanel
 
 def advanced_panel(sub_panel, space_type, get_prompt):
@@ -262,6 +268,7 @@ def actions_panel(sub_panel, space_type, get_prompt):
                     row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
             else:
                 disabled_row = row.row()
+                disabled_row.use_property_split = True
                 disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
                 disabled_row.enabled = False
             if CancelGenerator.poll(context):

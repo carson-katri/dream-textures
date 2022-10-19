@@ -75,6 +75,7 @@ attributes = {
     "init_img_action": EnumProperty(name="Action", items=init_image_actions, default="modify"),
     "strength": FloatProperty(name="Noise Strength", description="The ratio of noise:image. A higher value gives more 'creative' results", default=0.75, min=0, max=1, soft_min=0.01, soft_max=0.99),
     "fit": BoolProperty(name="Fit to width/height", default=True),
+    "use_init_img_color": BoolProperty(name="Color Correct", default=True),
     
     # Inpaint
     "inpaint_mask_src": EnumProperty(name="Mask Source", items=inpaint_mask_sources, default="alpha"),
@@ -87,6 +88,7 @@ attributes = {
     "outpaint_right": IntProperty(name="Right", default=64, step=64, min=0),
     "outpaint_bottom": IntProperty(name="Bottom", default=64, step=64, min=0),
     "outpaint_left": IntProperty(name="Left", default=64, step=64, min=0),
+    "outpaint_blend": IntProperty(name="Blend", description="Gaussian blur amount to apply to the extended area", default=16, min=0),
 }
 
 def map_structure_token_items(value):

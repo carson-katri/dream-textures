@@ -152,10 +152,22 @@ def prompt_to_image(self):
             for prompt in prompt_list:
                 generator_args = args.copy()
                 generator_args['prompt'] = prompt
-                if args['inpaint_mask_src'] == 'prompt':
+                if args['init_img_action'] == 'inpaint' and args['inpaint_mask_src'] == 'prompt':
                     generator_args['text_mask'] = (generator_args['text_mask'], generator_args['text_mask_confidence'])
                 else:
                     generator_args['text_mask'] = None
+                if args['init_img_action'] == 'outpaint':
+                    args['fit'] = False
+                    # Extend the image in the specified directions
+                    from PIL import Image, ImageFilter
+                    init_img = Image.open(args['init_img'])
+                    extended_size = (init_img.size[0] + args['outpaint_left'] + args['outpaint_right'], init_img.size[1] + args['outpaint_top'] + args['outpaint_bottom'])
+                    extended_img = Image.new('RGBA', extended_size, (0, 0, 0, 0))
+                    blurred_fill = init_img.resize(extended_size).filter(filter=ImageFilter.GaussianBlur(radius=args['outpaint_blend']))
+                    blurred_fill.putalpha(0)
+                    extended_img.paste(blurred_fill, (0, 0))
+                    extended_img.paste(init_img, (args['outpaint_left'], args['outpaint_top']))
+                    extended_img.save(args['init_img'], 'png')
                 generator.prompt2image(
                     # a function or method that will be called each step
                     step_callback=view_step,

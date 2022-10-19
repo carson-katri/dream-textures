@@ -219,9 +219,15 @@ class HeadlessDreamTexture(bpy.types.Operator):
             scene.dream_textures_progress = step + 1
             headless_step_callback(step, width, height, shared_memory_name)
 
+        received_noncolorized = False
         def image_callback(shared_memory_name, seed, width, height, upscaled=False):
             global headless_image_callback
             info() # clear variable
+            nonlocal received_noncolorized
+            if headless_prompt.use_init_img_color and not received_noncolorized:
+                received_noncolorized = True
+                return
+            received_noncolorized = False
             headless_image_callback(shared_memory_name, seed, width, height, upscaled)
 
         global generator_advance

@@ -224,7 +224,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
             global headless_image_callback
             info() # clear variable
             nonlocal received_noncolorized
-            if headless_prompt.use_init_img_color and not received_noncolorized:
+            if headless_prompt.use_init_img and headless_prompt.use_init_img_color and not received_noncolorized:
                 received_noncolorized = True
                 return
             received_noncolorized = False

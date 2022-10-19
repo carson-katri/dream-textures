@@ -156,7 +156,7 @@ def prompt_to_image(self):
                     generator_args['text_mask'] = (generator_args['text_mask'], generator_args['text_mask_confidence'])
                 else:
                     generator_args['text_mask'] = None
-                if args['init_img_action'] == 'outpaint':
+                if args['use_init_img'] and args['init_img_action'] == 'outpaint':
                     args['fit'] = False
                     # Extend the image in the specified directions
                     from PIL import Image, ImageFilter

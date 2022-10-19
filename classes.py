@@ -6,7 +6,7 @@ from .operators.inpaint_area_brush import InpaintAreaStroke
 from .operators.upscale import Upscale
 from .property_groups.dream_prompt import DreamPrompt
 from .ui.panels import dream_texture, history, upscaling, render_properties
-from .preferences import OpenGitDownloads, OpenHuggingFace, OpenWeightsDirectory, OpenRustInstaller, ValidateInstallation, StableDiffusionPreferences
+from .preferences import OpenHuggingFace, OpenWeightsDirectory, OpenContributors, StableDiffusionPreferences
 
 from .ui.presets import DREAM_PT_AdvancedPresets, DREAM_MT_AdvancedPresets, AddAdvancedPreset, RestoreDefaultPresets
 
@@ -42,11 +42,9 @@ CLASSES = (
 
 PREFERENCE_CLASSES = (
                       DreamPrompt,
-                      OpenGitDownloads,
                       InstallDependencies,
                       OpenHuggingFace,
                       OpenWeightsDirectory,
-                      OpenRustInstaller,
-                      ValidateInstallation,
+                      OpenContributors,
                       RestoreDefaultPresets,
                       StableDiffusionPreferences)

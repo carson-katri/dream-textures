@@ -10,3 +10,4 @@ def absolute_path(component):
 
 WEIGHTS_PATH = absolute_path("weights/stable-diffusion-v1.4/model.ckpt")
 REAL_ESRGAN_WEIGHTS_PATH = absolute_path("weights/realesrgan/realesr-general-x4v3.pth")
+CLIPSEG_WEIGHTS_PATH = absolute_path("weights/clipseg/rd64-uni.pth")

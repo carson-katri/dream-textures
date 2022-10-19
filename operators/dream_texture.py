@@ -7,7 +7,7 @@ from multiprocessing.shared_memory import SharedMemory
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
-from ..absolute_path import WEIGHTS_PATH
+from ..absolute_path import WEIGHTS_PATH, CLIPSEG_WEIGHTS_PATH
 from ..generator_process import MISSING_DEPENDENCIES_ERROR, GeneratorProcess, Intent
 
 import tempfile
@@ -143,7 +143,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
         scene = context.scene
 
         global headless_init_img
-        init_img = headless_init_img or (scene.init_img if headless_prompt.use_init_img else None)
+        init_img = headless_init_img or (scene.init_img if headless_prompt.use_init_img and headless_prompt.init_img_src == 'file' else None)
 
         def info(msg=""):
             scene.dream_textures_info = msg
@@ -198,7 +198,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
 
             return path
 
-        if headless_prompt.use_inpainting:
+        if headless_prompt.use_init_img and headless_prompt.init_img_src == 'open_editor':
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     if area.spaces.active.image is not None:

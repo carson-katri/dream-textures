@@ -25,6 +25,7 @@ transformers==4.19.2
 git+https://github.com/openai/CLIP.git@main#egg=clip
 git+https://github.com/lstein/k-diffusion.git@master#egg=k-diffusion
 git+https://github.com/lstein/GFPGAN@fix-dark-cast-images#egg=gfpgan
+git+https://github.com/invoke-ai/clipseg.git#egg=clipseg
 # No CUDA in PyPi builds
 --extra-index-url https://download.pytorch.org/whl/cu113 --trusted-host https://download.pytorch.org
 torch==1.11.0

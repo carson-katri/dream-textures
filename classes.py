@@ -37,7 +37,10 @@ CLASSES = (
     *history.history_panels(),
 
     upscaling.OpenRealESRGANDownload,
-    upscaling.OpenRealESRGANWeightsDirectory
+    upscaling.OpenRealESRGANWeightsDirectory,
+
+    dream_texture.OpenClipSegDownload,
+    dream_texture.OpenClipSegWeightsDirectory,
 )
 
 PREFERENCE_CLASSES = (

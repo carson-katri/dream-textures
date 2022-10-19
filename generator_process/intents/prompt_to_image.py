@@ -58,6 +58,18 @@ def prompt_to_image(self):
             self.send_action(Action.STEP_NO_SHOW, step=step)
 
     def preload_models():
+        import urllib
+        import ssl
+        urlopen = urllib.request.urlopen
+        def urlopen_decroator(func):
+            def urlopen(*args, **kwargs):
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                return func(*args, **kwargs, context=ssl_context)
+            return urlopen
+        urllib.request.urlopen = urlopen_decroator(urllib.request.urlopen)
+
         tqdm = None
         try:
             from huggingface_hub.utils.tqdm import tqdm as hfh_tqdm
@@ -105,11 +117,17 @@ def prompt_to_image(self):
         transformers.CLIPTokenizer.from_pretrained(clip_version)
         transformers.CLIPTextModel.from_pretrained(clip_version)
 
+        start_preloading("CLIP Segmentation")
+        from absolute_path import CLIPSEG_WEIGHTS_PATH
+        from models.clipseg import CLIPDensePredT
+        CLIPDensePredT(version='ViT-B/16', reduce_dim=64)
+
         tqdm.update = old_update
+        urllib.request.urlopen = urlopen
     
     from transformers.utils.hub import TRANSFORMERS_CACHE
     model_paths = {'bert-base-uncased', 'openai--clip-vit-large-patch14'}
-    if any(not os.path.isdir(os.path.join(TRANSFORMERS_CACHE, f'models--{path}')) for path in model_paths):
+    if any(not os.path.isdir(os.path.join(TRANSFORMERS_CACHE, f'models--{path}')) for path in model_paths) or not os.path.exists(os.path.join(os.path.expanduser("~/.cache/clip"), 'ViT-B-16.pt')):
         preload_models()
 
     while True:
@@ -130,13 +148,21 @@ def prompt_to_image(self):
             self.send_info("Starting")
             
             tmp_stderr = sys.stderr = StringIO() # prompt2image writes exceptions straight to stderr, intercepting
-            generator.prompt2image(
-                # a function or method that will be called each step
-                step_callback=view_step,
-                # a function or method that will be called each time an image is generated
-                image_callback=image_writer,
-                **args
-            )
+            prompt_list = args['prompt'] if isinstance(args['prompt'], list) else [args['prompt']]
+            for prompt in prompt_list:
+                generator_args = args.copy()
+                generator_args['prompt'] = prompt
+                if args['inpaint_mask_src'] == 'prompt':
+                    generator_args['text_mask'] = (generator_args['text_mask'], generator_args['text_mask_confidence'])
+                else:
+                    generator_args['text_mask'] = None
+                generator.prompt2image(
+                    # a function or method that will be called each step
+                    step_callback=view_step,
+                    # a function or method that will be called each time an image is generated
+                    image_callback=image_writer,
+                    **generator_args
+                )
             if tmp_stderr.tell() > 0:
                 tmp_stderr.seek(0)
                 s = tmp_stderr.read()

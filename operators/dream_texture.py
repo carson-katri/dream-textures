@@ -206,7 +206,6 @@ class HeadlessDreamTexture(bpy.types.Operator):
         init_img_path = None
         if init_img is not None:
             init_img_path = save_temp_image(init_img)
-            print(init_img_path)
 
         args = headless_prompt.generate_args()
         args.update(headless_args)

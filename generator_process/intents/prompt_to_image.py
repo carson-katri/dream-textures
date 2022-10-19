@@ -167,7 +167,9 @@ def prompt_to_image(self):
                     blurred_fill.putalpha(0)
                     extended_img.paste(blurred_fill, (0, 0))
                     extended_img.paste(init_img, (args['outpaint_left'], args['outpaint_top']))
-                    extended_img.save(args['init_img'], 'png')
+                    extended_img.save(generator_args['init_img'], 'png')
+                    generator_args['width'] = extended_size[0]
+                    generator_args['height'] = extended_size[1]
                 generator.prompt2image(
                     # a function or method that will be called each step
                     step_callback=view_step,

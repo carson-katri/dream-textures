@@ -152,6 +152,7 @@ def prompt_to_image(self):
             for prompt in prompt_list:
                 generator_args = args.copy()
                 generator_args['prompt'] = prompt
+                generator_args['seamless_axes'] = list(generator_args['seamless_axes'])
                 if args['init_img_action'] == 'inpaint' and args['inpaint_mask_src'] == 'prompt':
                     generator_args['text_mask'] = (generator_args['text_mask'], generator_args['text_mask_confidence'])
                 else:

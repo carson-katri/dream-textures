@@ -36,6 +36,12 @@ inpaint_mask_sources = [
     ('prompt', 'Prompt', '', 2),
 ]
 
+seamless_axes = [
+    ('x', 'X', '', 1),
+    ('y', 'Y', '', 2),
+    ('xy', 'Both', '', 3),
+]
+
 def seed_clamp(self, ctx):
     # clamp seed right after input to make it clear what the limits are
     try:
@@ -57,6 +63,7 @@ attributes = {
 
     # Simple Options
     "seamless": BoolProperty(name="Seamless", default=False, description="Enables seamless/tilable image generation"),
+    "seamless_axes": EnumProperty(name="Seamless Axes", items=seamless_axes, default='xy', description="Specify which axes should be seamless/tilable"),
 
     # Advanced
     "show_advanced": BoolProperty(name="", default=False),

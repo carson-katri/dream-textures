@@ -100,6 +100,8 @@ def prompt_panel(sub_panel, space_type, get_prompt):
                 if len(enum_cases) != 1 or enum_cases[0][0] != 'custom':
                     segment_row.prop(get_prompt(context), enum_prop, icon_only=is_custom)
             layout.prop(get_prompt(context), "seamless")
+            if get_prompt(context).seamless:
+                layout.prop(get_prompt(context), "seamless_axes")
     yield PromptPanel
 
     class NegativePromptPanel(sub_panel):

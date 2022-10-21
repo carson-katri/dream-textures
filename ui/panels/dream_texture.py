@@ -39,6 +39,10 @@ def dream_texture_panels():
 
             def draw(self, context):
                 layout = self.layout
+                layout.use_property_split = False
+
+                layout.prop(context.scene.dream_textures_prompt, 'model')
+
                 layout.use_property_split = True
 
                 if is_force_show_download():

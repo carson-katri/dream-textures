@@ -31,7 +31,7 @@ class OpenGitDownloads(bpy.types.Operator):
         webbrowser.open("https://git-scm.com/downloads")
         return {"FINISHED"}
 
-class OpenWeightsDirectory(bpy.types.Operator, ImportHelper):
+class ImportWeights(bpy.types.Operator, ImportHelper):
     bl_idname = "stable_diffusion.open_weights_directory"
     bl_label = "Import Model Weights"
     filename_ext = ".ckpt"
@@ -51,6 +51,18 @@ class OpenWeightsDirectory(bpy.types.Operator, ImportHelper):
             return {"FINISHED"}
         shutil.copy(self.filepath, WEIGHTS_PATH)
         
+        return {"FINISHED"}
+
+class DeleteSelectedWeights(bpy.types.Operator):
+    bl_idname = "stable_diffusion.delete_selected_weights"
+    bl_label = "Delete Selected Weights"
+    bl_options = {'REGISTER', 'INTERNAL'}
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, context):
+        os.remove(os.path.join(WEIGHTS_PATH, context.preferences.addons['dream_textures'].preferences.weights[context.preferences.addons['dream_textures'].preferences.active_weights].name))
         return {"FINISHED"}
 
 is_install_valid = None
@@ -85,15 +97,31 @@ class ValidateInstallation(bpy.types.Operator):
 
         return {"FINISHED"}
 
+class WeightsFile(bpy.types.PropertyGroup):
+    bl_label = "Weights File"
+    bl_idname = "dream_textures.WeightsFile"
+
+    name: bpy.props.StringProperty(name="Path")
+
+class PREFERENCES_UL_WeightsFileList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        layout.label(text=item.name)
+
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     history: CollectionProperty(type=DreamPrompt)
+    weights: CollectionProperty(type=WeightsFile)
+    active_weights: bpy.props.IntProperty(name="Active Weights", default=0)
 
     def draw(self, context):
         layout = self.layout
 
-        weights_installed = os.path.exists(WEIGHTS_PATH)
+        self.weights.clear()
+        for path in filter(lambda f: f.endswith('.ckpt'), os.listdir(WEIGHTS_PATH)):
+            weights_file = self.weights.add()
+            weights_file.name = path
+        weights_installed = len(self.weights) > 0
 
         if not weights_installed:
             layout.label(text="Complete the following steps to finish setting up the addon:")
@@ -119,7 +147,9 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             model_weights_box.label(text="1. Download the file 'sd-v1-4.ckpt'")
             model_weights_box.operator(OpenHuggingFace.bl_idname, icon="URL")
             model_weights_box.label(text="2. Select the downloaded weights to install.")
-            model_weights_box.operator(OpenWeightsDirectory.bl_idname, text="Import Model Weights", icon="IMPORT")
+        model_weights_box.operator(ImportWeights.bl_idname, text="Import Model Weights", icon="IMPORT")
+        model_weights_box.template_list("UI_UL_list", "dream_textures_weights", self, "weights", self, "active_weights")
+        model_weights_box.operator(DeleteSelectedWeights.bl_idname, text="Delete Selected Weights", icon="X")
 
         if weights_installed:
             complete_box = layout.box()

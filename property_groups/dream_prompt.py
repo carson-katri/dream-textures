@@ -1,5 +1,7 @@
 import bpy
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty
+import os
+from ..absolute_path import WEIGHTS_PATH
 from ..prompt_engineering import *
 
 sampler_options = [
@@ -42,6 +44,9 @@ seamless_axes = [
     ('xy', 'Both', '', 3),
 ]
 
+def weights_options(self, context):
+    return [(f, f, '', i) for i, f in enumerate(filter(lambda f: f.endswith('.ckpt'), os.listdir(WEIGHTS_PATH)))]
+
 def seed_clamp(self, ctx):
     # clamp seed right after input to make it clear what the limits are
     try:
@@ -52,6 +57,8 @@ def seed_clamp(self, ctx):
         pass # will get hashed once generated
 
 attributes = {
+    "model": EnumProperty(name="Model", items=weights_options, description="Specify which weights file to use for inference"),
+
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
     "use_negative_prompt": BoolProperty(name="Use Negative Prompt", default=False),

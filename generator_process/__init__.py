@@ -1,3 +1,4 @@
+from enum import IntEnum
 import json
 import subprocess
 import sys
@@ -11,7 +12,7 @@ from multiprocessing.shared_memory import SharedMemory
 from .action import ACTION_BYTE_LENGTH, Action
 from .intent import INTENT_BYTE_LENGTH, Intent
 
-from .registrar import registrar
+from .registrar import BackendTarget, registrar
 from .intents.apply_ocio_transforms import *
 from .intents.prompt_to_image import *
 from .intents.send_stop import *
@@ -21,12 +22,12 @@ MISSING_DEPENDENCIES_ERROR = "Python dependencies are missing. Click Download La
 
 _shared_instance = None
 class GeneratorProcess():
-    def __init__(self):
+    def __init__(self, backend: BackendTarget = BackendTarget.STABILITY_SDK):
         import bpy
         env = os.environ.copy()
         env.pop('PYTHONPATH', None) # in case if --python-use-system-env
         self.process = subprocess.Popen(
-            [sys.executable,'-s','generator_process',bpy.app.binary_path],
+            [sys.executable,'-s','generator_process', bpy.app.binary_path, '--backend', backend.name],
             cwd=os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env
         )
@@ -127,7 +128,8 @@ class GeneratorProcess():
 
 BYTE_TO_NORMALIZED = 1.0 / 255.0
 class Backend():
-    def __init__(self):
+    def __init__(self, backend: BackendTarget):
+        self.backend_target = backend
         self.intent_backends = {}
         self.stdin = sys.stdin.buffer
         self.stdout = sys.stdout.buffer
@@ -246,7 +248,8 @@ class Backend():
     
     def main_loop(self):
         intents = {}
-        for intent in registrar._intent_backends:
+        for intent in filter(lambda x: x.backend == None or x.backend == self.backend_target, registrar._intent_backends):
+            print(f"Using {intent.intent} for {intent.backend}")
             intents[intent.intent] = intent.func(self)
         for fn in intents.values():
             next(fn)
@@ -268,11 +271,18 @@ class Backend():
                 self.send_exception(True, f"Unknown intent {intent} sent to process. Expected one of {Intent._member_names_}.")
 
 def main():
-    back = Backend()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('binary_path')
+    parser.add_argument("--backend", dest="backend", type=lambda x: BackendTarget[x], choices=list(BackendTarget))
+    args = parser.parse_args()
+
+    back = Backend(backend=args.backend)
+    
     try:
         if sys.platform == 'win32':
             from ctypes import WinDLL
-            WinDLL(os.path.join(os.path.dirname(sys.argv[1]),"python3.dll")) # fix for ImportError: DLL load failed while importing cv2: The specified module could not be found.
+            WinDLL(os.path.join(os.path.dirname(args.binary_path),"python3.dll")) # fix for ImportError: DLL load failed while importing cv2: The specified module could not be found.
 
         from absolute_path import absolute_path, CLIPSEG_WEIGHTS_PATH
         # Support Apple Silicon GPUs as much as possible.
@@ -282,11 +292,12 @@ def main():
         paths = sys.path[1:]
         sys.path[:] = sys.path[0:1]
 
-        sys.path.append(absolute_path("stable_diffusion/"))
-        sys.path.append(absolute_path("stable_diffusion/src/clip"))
-        sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
-        sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
-        sys.path.append(absolute_path("stable_diffusion/src/clipseg"))
+        if args.backend == BackendTarget.LOCAL:
+            sys.path.append(absolute_path("stable_diffusion/"))
+            sys.path.append(absolute_path("stable_diffusion/src/clip"))
+            sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
+            sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
+            sys.path.append(absolute_path("stable_diffusion/src/clipseg"))
         site.addsitedir(absolute_path(".python_dependencies"))
         sys.path.extend(paths)
 
@@ -298,8 +309,9 @@ def main():
                          # if imported while background reading thread is waiting on next intent.
                          # Hurray for more strange .dll bugs
 
-        from ldm.invoke import txt2mask
-        txt2mask.CLIPSEG_WEIGHTS = CLIPSEG_WEIGHTS_PATH
+        if args.backend == BackendTarget.LOCAL:
+            from ldm.invoke import txt2mask
+            txt2mask.CLIPSEG_WEIGHTS = CLIPSEG_WEIGHTS_PATH
 
         back.thread.start()
         back.main_loop()

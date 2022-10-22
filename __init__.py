@@ -80,6 +80,7 @@ def register():
     bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=0)
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 
+    bpy.types.Scene.dream_textures_viewport_enabled = BoolProperty(name="Viewport Enabled", default=False)
     bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)
     bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
     bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)

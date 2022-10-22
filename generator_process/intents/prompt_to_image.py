@@ -207,6 +207,7 @@ def prompt_to_image_stability_sdk(self):
     from PIL import Image
     import io
     import random
+    from multiprocessing.shared_memory import SharedMemory
 
     # Some of these names are abbreviated.
     algorithms = client.algorithms.copy()
@@ -220,30 +221,27 @@ def prompt_to_image_stability_sdk(self):
         if not upscaled:
             self.send_action(Action.IMAGE, shared_memory_name=self.share_image_memory(image), seed=seed, width=image.width, height=image.height)
 
-    step = 0
-    def view_step(samples, i):
-        self.check_stop()
-        nonlocal step
-        step = i
-        if args['show_steps']:
-            image = generator.sample_to_image(samples)
-            self.send_action(Action.STEP_IMAGE, shared_memory_name=self.share_image_memory(image), step=step, width=image.width, height=image.height)
-        else:
-            self.send_action(Action.STEP_NO_SHOW, step=step)
-
     while True:
         self.check_stop()
 
         self.send_info("Generating...")
         
         seed = random.randrange(0, 4294967295) if args['seed'] is None else args['seed']
+        shared_init_img = None
+        if args['init_img_shared_memory'] is not None:
+            init_img_memory = SharedMemory(args['init_img_shared_memory'])
+            shared_init_img = Image.frombytes('RGBA', (args['init_img_shared_memory_width'], args['init_img_shared_memory_height']), init_img_memory.buf.tobytes())
+            shared_init_img.save('/Users/carsonkatri/Documents/Art/Add-ons/Custom/Blender/dream_textures/test.png')
+            shared_init_img = shared_init_img.resize((512, round(((shared_init_img.height / shared_init_img.width) * 512) / 64)*64))
+            init_img_memory.close()
+            shared_init_img.save('/Users/carsonkatri/Documents/Art/Add-ons/Custom/Blender/dream_textures/test_scaled.png')
         answers = stability_inference.generate(
             prompt=args['prompt'],
-            init_image=Image.open(args['init_img']) if args['init_img'] is not None else None,
+            init_image=shared_init_img if shared_init_img is not None else (Image.open(args['init_img']) if args['init_img'] is not None else None),
             # mask_image: Optional[Image.Image] = None,
-            height=args['height'],
-            width=args['width'],
-            start_schedule=1.0,
+            width=shared_init_img.width if shared_init_img is not None else args['width'],
+            height=shared_init_img.height if shared_init_img is not None else args['height'],
+            start_schedule=1.0 * args['strength'],
             end_schedule=0.01,
             cfg_scale=args['cfg_scale'],
             sampler=algorithms[args['sampler_name']],

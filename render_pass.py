@@ -47,11 +47,15 @@ def debounce(wait_time):
 def DREAMTEXTURES_HT_viewport_enabled(self, context):
     self.layout.prop(context.scene, "dream_textures_viewport_enabled", text="", icon="OUTLINER_OB_VOLUME" if context.scene.dream_textures_viewport_enabled else "VOLUME_DATA", toggle=True)
 
-redraw = False
 is_rendering_viewport = False
 last_viewport_update = time.time()
+last_viewport_pixel_buffer_update = time.time()
 dream_viewport = None
 is_rendering_dream = False
+render_dream_flag = False
+viewport_pixel_buffer = None
+viewport_size = (0, 0)
+ignore_next = 0
 def create_image():
     print("Create image")
     global dream_viewport
@@ -223,7 +227,11 @@ def register_render_pass():
         def view_update(self, context, depsgraph):
             result = original(self, context, depsgraph)
             global last_viewport_update
-            last_viewport_update = time.time()
+            global ignore_next
+            if ignore_next <= 0:
+                last_viewport_update = time.time()
+                print("View Update")
+            ignore_next -= 1
             return result
         return view_update
     cycles.CyclesRender.view_update = view_update_decorator(cycles.CyclesRender.view_update)
@@ -231,30 +239,54 @@ def register_render_pass():
     def updates_stopped():
         global last_viewport_update
         global is_rendering_viewport
-        global redraw
+        global is_rendering_dream
         threshold_reached = (time.time() - last_viewport_update) < 0.5
         if threshold_reached != is_rendering_viewport:
             is_rendering_viewport = threshold_reached
-            if not is_rendering_viewport and not is_rendering_dream:
+            global viewport_pixel_buffer
+            if not is_rendering_viewport and not is_rendering_dream and viewport_pixel_buffer is not None:
                 print("Stopped rendering viewport")
-                redraw = True
-                for area in bpy.context.screen.areas:
-                    if area.type == 'VIEW_3D':
-                        area.tag_redraw()
+                is_rendering_dream = True
+                array = np.flipud((np.array(viewport_pixel_buffer) * 255).astype(np.int8))
+                pixels_memory = SharedMemory(create=True, size=array.nbytes)
+                pixels_memory_array = np.ndarray(array.shape, dtype=array.dtype, buffer=pixels_memory.buf)
+                pixels_memory_array[:] = array[:]
+
+                def image_callback(shared_memory_name, seed, width, height, upscaled=False):
+                    if not upscaled:
+                        shared_memory = SharedMemory(shared_memory_name)
+                        pixels = np.frombuffer(shared_memory.buf, dtype=np.float32).copy()
+
+                        global ignore_next
+                        ignore_next = 5
+                        global dream_viewport
+                        dream_viewport.scale(width, height)
+                        dream_viewport.pixels[:] = pixels
+
+                        shared_memory.close()
+                        pixels_memory.close()
+
+                        print("Done")
+                        global is_rendering_dream
+                        is_rendering_dream = False
+                        # for area in bpy.context.screen.areas:
+                        #     if area.type == 'VIEW_3D':
+                                # area.tag_redraw()
+                
+                def step_callback(step, width=None, height=None, shared_memory_name=None):
+                    pass
+
+                dream_texture(bpy.context.scene.dream_textures_render_properties_prompt, step_callback, image_callback, init_img_shared_memory=pixels_memory.name, init_img_shared_memory_width=viewport_size[0], init_img_shared_memory_height=viewport_size[1])
         return 0.5
     bpy.app.timers.register(updates_stopped)
 
     def draw():
-        if not bpy.context.scene.dream_textures_render_properties_enabled:
+        global last_viewport_pixel_buffer_update
+        if not bpy.context.scene.dream_textures_viewport_enabled:
             return
-        global redraw
-        global is_rendering_dream
-        if not redraw or is_rendering_dream:
+        if (time.time() - last_viewport_pixel_buffer_update) < 0.5:
             return
-        else:
-            redraw = False
-            is_rendering_dream = True
-            print("Render!")
+        last_viewport_pixel_buffer_update = time.time()
         # get currently bound framebuffer
         framebuffer = gpu.state.active_framebuffer_get()
 
@@ -263,43 +295,14 @@ def register_render_pass():
         width = viewport_info[2]
         height = viewport_info[3]
         
-        pixelBuffer = framebuffer.read_color(0, 0, width, height, 4, 0, 'FLOAT')
-        
-        array = np.flipud((np.array(pixelBuffer.to_list()) * 255).astype(np.int8))
-        pixels_memory = SharedMemory(create=True, size=array.nbytes)
-        pixels_memory_array = np.ndarray(array.shape, dtype=array.dtype, buffer=pixels_memory.buf)
-        pixels_memory_array[:] = array[:]
-
-        def image_callback(shared_memory_name, seed, width, height, upscaled=False):
-            if not upscaled:
-                shared_memory = SharedMemory(shared_memory_name)
-                pixels = np.frombuffer(shared_memory.buf, dtype=np.float32).copy()
-
-                global dream_viewport
-                dream_viewport.scale(width, height)
-                dream_viewport.pixels[:] = pixels
-
-                shared_memory.close()
-                pixels_memory.close()
-
-                for area in bpy.context.screen.areas:
-                    if area.type == 'VIEW_3D':
-                        area.tag_redraw()
-                global is_rendering_dream
-                global redraw
-                is_rendering_dream = False
-                redraw = False
-        
-        def step_callback(step, width=None, height=None, shared_memory_name=None):
-            pass
-
-        def dream():
-            print("Dream")
-            # dream_texture(bpy.context.scene.dream_textures_render_properties_prompt, step_callback, image_callback, init_img_shared_memory=pixels_memory.name, init_img_shared_memory_width=width, init_img_shared_memory_height=height)
-        bpy.app.timers.register(dream)
+        global viewport_pixel_buffer
+        global viewport_size
+        viewport_pixel_buffer = framebuffer.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list()
+        viewport_size = (width, height)
 
     bpy.types.SpaceView3D.draw_handler_add(draw, (), 'WINDOW', 'PRE_VIEW')
     def draw_dream():
+        global is_rendering_dream
         global is_rendering_viewport
         global dream_viewport
         if not bpy.context.scene.dream_textures_viewport_enabled or is_rendering_viewport:

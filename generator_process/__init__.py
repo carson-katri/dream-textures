@@ -22,7 +22,7 @@ MISSING_DEPENDENCIES_ERROR = "Python dependencies are missing. Click Download La
 
 _shared_instance = None
 class GeneratorProcess():
-    def __init__(self, backend: BackendTarget = BackendTarget.STABILITY_SDK):
+    def __init__(self, backend: BackendTarget = BackendTarget.LOCAL):
         import bpy
         env = os.environ.copy()
         env.pop('PYTHONPATH', None) # in case if --python-use-system-env

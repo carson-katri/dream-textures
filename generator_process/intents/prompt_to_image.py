@@ -228,13 +228,13 @@ def prompt_to_image_stability_sdk(self):
         
         seed = random.randrange(0, 4294967295) if args['seed'] is None else args['seed']
         shared_init_img = None
-        if args['init_img_shared_memory'] is not None:
-            init_img_memory = SharedMemory(args['init_img_shared_memory'])
-            shared_init_img = Image.frombytes('RGBA', (args['init_img_shared_memory_width'], args['init_img_shared_memory_height']), init_img_memory.buf.tobytes())
-            shared_init_img.save('/Users/carsonkatri/Documents/Art/Add-ons/Custom/Blender/dream_textures/test.png')
-            shared_init_img = shared_init_img.resize((512, round(((shared_init_img.height / shared_init_img.width) * 512) / 64)*64))
-            init_img_memory.close()
-            shared_init_img.save('/Users/carsonkatri/Documents/Art/Add-ons/Custom/Blender/dream_textures/test_scaled.png')
+        # if args['init_img_shared_memory'] is not None:
+        #     init_img_memory = SharedMemory(args['init_img_shared_memory'])
+        #     shared_init_img = Image.frombytes('RGBA', (args['init_img_shared_memory_width'], args['init_img_shared_memory_height']), init_img_memory.buf.tobytes())
+        #     shared_init_img.save('/Users/carsonkatri/Documents/Art/Add-ons/Custom/Blender/dream_textures/test.png')
+        #     shared_init_img = shared_init_img.resize((512, round(((shared_init_img.height / shared_init_img.width) * 512) / 64)*64))
+        #     init_img_memory.close()
+        #     shared_init_img.save('/Users/carsonkatri/Documents/Art/Add-ons/Custom/Blender/dream_textures/test_scaled.png')
         answers = stability_inference.generate(
             prompt=args['prompt'],
             init_image=shared_init_img if shared_init_img is not None else (Image.open(args['init_img']) if args['init_img'] is not None else None),

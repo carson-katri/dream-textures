@@ -119,7 +119,7 @@ def prompt_to_image(self):
 
         start_preloading("CLIP Segmentation")
         from absolute_path import CLIPSEG_WEIGHTS_PATH
-        from models.clipseg import CLIPDensePredT
+        from clipseg_models.clipseg import CLIPDensePredT
         CLIPDensePredT(version='ViT-B/16', reduce_dim=64)
 
         tqdm.update = old_update

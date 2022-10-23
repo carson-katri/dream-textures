@@ -293,10 +293,14 @@ def main():
         import pkg_resources
         pkg_resources._initialize_master_working_set()
 
+        # Import specific modules that cause subprocess to hang if first imported after the background thread is started
         if sys.platform == 'win32':
-            import scipy # This will hang when loading libbanded5x.Q3V52YHHGVBP5BKVHJ5RHQVFWHHSLVWO.gfortran-win_amd64.dll
-                         # if imported while background reading thread is waiting on next intent.
-                         # Hurray for more strange .dll bugs
+            # I'm not sure if scipy will be an issue since we're not using a version that has
+            # libbanded5x.Q3V52YHHGVBP5BKVHJ5RHQVFWHHSLVWO.gfortran-win_amd64.dll anymore.
+            # Importing skimage is indirectly loading scipy anyway. Keeping note for future reference.
+
+            # Couldn't track down exactly where it was hanging but it's good enough.
+            from skimage import transform
 
         from ldm.invoke import txt2mask
         txt2mask.CLIPSEG_WEIGHTS = CLIPSEG_WEIGHTS_PATH

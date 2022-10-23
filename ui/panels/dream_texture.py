@@ -232,7 +232,9 @@ def actions_panel(sub_panel, space_type, get_prompt):
             layout = self.layout
             layout.use_property_split = True
 
-            layout.prop(get_prompt(context), "iterations")
+            iterations_row = layout.row()
+            iterations_row.enabled = get_prompt(context).prompt_structure != file_batch_structure.id
+            iterations_row.prop(get_prompt(context), "iterations")
             
             row = layout.row()
             row.scale_y = 1.5

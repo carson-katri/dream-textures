@@ -130,13 +130,17 @@ def prompt_to_image(self):
             self.send_info("Starting")
             
             tmp_stderr = sys.stderr = StringIO() # prompt2image writes exceptions straight to stderr, intercepting
-            generator.prompt2image(
-                # a function or method that will be called each step
-                step_callback=view_step,
-                # a function or method that will be called each time an image is generated
-                image_callback=image_writer,
-                **args
-            )
+            prompt_list = args['prompt'] if isinstance(args['prompt'], list) else [args['prompt']]
+            for prompt in prompt_list:
+                generator_args = args.copy()
+                generator_args['prompt'] = prompt
+                generator.prompt2image(
+                    # a function or method that will be called each step
+                    step_callback=view_step,
+                    # a function or method that will be called each time an image is generated
+                    image_callback=image_writer,
+                    **generator_args
+                )
             if tmp_stderr.tell() > 0:
                 tmp_stderr.seek(0)
                 s = tmp_stderr.read()

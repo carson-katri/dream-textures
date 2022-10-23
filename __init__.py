@@ -68,6 +68,7 @@ def register():
     check_for_updates()
 
     bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
+    bpy.types.Scene.dream_textures_prompt_file = PointerProperty(type=bpy.types.Text)
     bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
     bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
     def get_selection_preview(self):

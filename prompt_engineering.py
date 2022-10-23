@@ -124,11 +124,21 @@ custom_structure = PromptStructure(
     custom_prompt
 )
 
+def file_batch_prompt(tokens):
+    return f""
+file_batch_structure = PromptStructure(
+    'file_batch',
+    "File Batch",
+    [],
+    file_batch_prompt
+)
+
 prompt_structures = [
     texture_structure,
     photography_structure,
     concept_art_structure,
     custom_structure,
+    file_batch_structure
 ]
 
 def map_structure(x):

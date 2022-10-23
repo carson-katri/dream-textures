@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, PointerProperty
+from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty
 from ..prompt_engineering import *
 
 sampler_options = [

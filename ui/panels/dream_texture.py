@@ -99,6 +99,8 @@ def prompt_panel(sub_panel, space_type, get_prompt):
                 enum_cases = DreamPrompt.__annotations__[enum_prop].keywords['items']
                 if len(enum_cases) != 1 or enum_cases[0][0] != 'custom':
                     segment_row.prop(get_prompt(context), enum_prop, icon_only=is_custom)
+            if get_prompt(context).prompt_structure == file_batch_structure.id:
+                layout.template_ID(context.scene, "dream_textures_prompt_file", open="text.open")
             layout.prop(get_prompt(context), "seamless")
             if get_prompt(context).seamless:
                 layout.prop(get_prompt(context), "seamless_axes")
@@ -109,6 +111,10 @@ def prompt_panel(sub_panel, space_type, get_prompt):
         bl_idname = f"DREAM_PT_dream_panel_negative_prompt_{space_type}"
         bl_label = "Negative"
         bl_parent_id = PromptPanel.bl_idname
+
+        @classmethod
+        def poll(self, context):
+            return get_prompt(context).prompt_structure != file_batch_structure.id
 
         def draw_header(self, context):
             layout = self.layout
@@ -260,6 +266,10 @@ def actions_panel(sub_panel, space_type, get_prompt):
             super().draw(context)
             layout = self.layout
             layout.use_property_split = True
+
+            iterations_row = layout.row()
+            iterations_row.enabled = get_prompt(context).prompt_structure != file_batch_structure.id
+            iterations_row.prop(get_prompt(context), "iterations")
             
             row = layout.row()
             row.scale_y = 1.5

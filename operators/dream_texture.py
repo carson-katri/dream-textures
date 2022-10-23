@@ -42,6 +42,7 @@ class DreamTexture(bpy.types.Operator):
         is_file_batch = context.scene.dream_textures_prompt.prompt_structure == file_batch_structure.id
         file_batch_lines = []
         if is_file_batch:
+            context.scene.dream_textures_prompt.iterations = 1
             file_batch_lines = [line for line in context.scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
             history_entries = [context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add() for _ in file_batch_lines]
         else:
@@ -53,9 +54,6 @@ class DreamTexture(bpy.types.Operator):
             if is_file_batch:
                 history_entry.prompt_structure = custom_structure.id
                 history_entry.prompt_structure_token_subject = file_batch_lines[i].body
-        
-        if is_file_batch:
-            context.scene.dream_textures_prompt.iterations = 1
 
         def bpy_image(name, width, height, pixels):
             image = bpy.data.images.new(name, width=width, height=height)

@@ -21,6 +21,7 @@ class InpaintAreaBrushActivated(bpy.types.GizmoGroup):
             bpy.data.brushes["TexDraw"].blend = "ERASE_ALPHA"
             bpy.data.brushes["TexDraw"].curve_preset = "CONSTANT"
             bpy.data.brushes["TexDraw"].strength = 1.0
+            bpy.ops.paint.brush_select(image_tool='DRAW', toggle=False)
         bpy.app.timers.register(set_blend)
 
     def __del__(self):

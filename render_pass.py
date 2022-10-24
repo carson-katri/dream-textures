@@ -16,7 +16,7 @@ from .operators.dream_texture import dream_texture, weights_are_installed
 
 update_render_passes_original = cycles.CyclesRender.update_render_passes
 render_original = cycles.CyclesRender.render
-del_original = cycles.CyclesRender.__del__
+# del_original = cycles.CyclesRender.__del__
 view_update_original = cycles.CyclesRender.view_update
 view_draw_original = cycles.CyclesRender.view_draw
 
@@ -68,7 +68,6 @@ def register_render_pass():
         def update_render_passes(self, scene=None, renderlayer=None):
             result = original(self, scene, renderlayer)
             self.register_pass(scene, renderlayer, "Dream Textures", 4, "RGBA", 'COLOR')
-            self.register_pass(scene, renderlayer, "Dream Textures Seed", 1, "X", 'VALUE')
             return result
         return update_render_passes
     cycles.CyclesRender.update_render_passes = update_render_passes_decorator(cycles.CyclesRender.update_render_passes)
@@ -81,7 +80,6 @@ def register_render_pass():
             try:
                 original_result = self.get_result()
                 self.add_pass("Dream Textures", 4, "RGBA")
-                self.add_pass("Dream Textures Seed", 1, "X")
                 scale = scene.render.resolution_percentage / 100.0
                 size_x = int(scene.render.resolution_x * scale)
                 size_y = int(scene.render.resolution_y * scale)
@@ -134,15 +132,10 @@ def register_render_pass():
                         if render_pass.name == "Dream Textures":
                             self.update_stats("Dream Textures", "Starting")
                             def image_callback(event, set_pixels, shared_memory_name, seed, width, height, upscaled=False):
-                                self.update_stats("Dream Textures", "Pushing to render pass")
                                 # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
                                 if not upscaled:
                                     shared_memory = SharedMemory(shared_memory_name)
                                     set_pixels(np.frombuffer(shared_memory.buf, dtype=np.float32).copy().reshape((size_x * size_y, 4)))
-
-                                    seed_pass = next(filter(lambda x: x.name == "Dream Textures Seed", layer.passes))
-                                    seed_pass_data = np.repeat(np.float32(float(seed)), len(seed_pass.rect))
-                                    seed_pass.rect.foreach_set(seed_pass_data)
 
                                     shared_memory.close()
 
@@ -179,7 +172,7 @@ def register_render_pass():
                                 nonlocal pixels
                                 pixels = npbuf
                             def do_dream_texture_pass():
-                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, event, set_pixels), combined_pass_image, width=size_x, height=size_y, show_steps=False)
+                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, event, set_pixels), combined_pass_image, width=size_x, height=size_y, show_steps=False, use_init_img_color=False)
                             bpy.app.timers.register(do_dream_texture_pass)
                             event.wait()
 
@@ -204,7 +197,7 @@ def register_render_pass():
                                 bpy.data.images.remove(combined_pass_image)
                             bpy.app.timers.register(cleanup)
                             self.update_stats("Dream Textures", "Finished")
-                        elif render_pass.name != "Dream Textures Seed":
+                        else:
                             pixels = np.empty((len(original_render_pass.rect), len(original_render_pass.rect[0])), dtype=np.float32)
                             original_render_pass.rect.foreach_get(pixels)
                             render_pass.rect[:] = pixels

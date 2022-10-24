@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty
+from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty
 import os
 from ..absolute_path import absolute_path
 from ..generator_process.registrar import BackendTarget

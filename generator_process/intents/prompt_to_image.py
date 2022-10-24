@@ -214,7 +214,7 @@ def prompt_to_image_stability_sdk(self):
     algorithms['k_euler_a'] = algorithms['k_euler_ancestral']
     algorithms['k_dpm_2_a'] = algorithms['k_dpm_2_ancestral']
 
-    stability_inference = client.StabilityInference(key="KEY")
+    stability_inference = client.StabilityInference(key=args['dream_studio_key'])
 
     def image_writer(image, seed, upscaled=False, first_seed=None):
         # Only use the non-upscaled texture, as upscaling is a separate step in this addon.

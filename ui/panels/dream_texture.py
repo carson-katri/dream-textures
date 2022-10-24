@@ -41,6 +41,8 @@ def dream_texture_panels():
                 layout = self.layout
                 layout.use_property_split = True
 
+                layout.prop(context.scene.dream_textures_prompt, "backend")
+
                 if is_force_show_download():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
                 elif new_version_available():

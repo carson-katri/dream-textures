@@ -23,6 +23,7 @@ class RenderPropertiesPanel(bpy.types.Panel):
         layout.use_property_decorate = False
         layout.active = context.scene.dream_textures_render_properties_enabled
 
+        layout.prop(context.scene.dream_textures_render_properties_prompt, "backend")
         layout.prop(context.scene.dream_textures_render_properties_prompt, "strength")
 
 def render_properties_panels():

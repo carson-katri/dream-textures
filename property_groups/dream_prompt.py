@@ -1,5 +1,8 @@
 import bpy
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty
+import os
+from ..absolute_path import absolute_path
+from ..generator_process.registrar import BackendTarget
 from ..prompt_engineering import *
 
 sampler_options = [
@@ -42,6 +45,14 @@ seamless_axes = [
     ('xy', 'Both', '', 3),
 ]
 
+def backend_options(self, context):
+    def options():
+        if os.path.exists(absolute_path("stable_diffusion")):
+            yield (BackendTarget.LOCAL.name, 'Local', 'Run on your own hardware', 1)
+        if len(context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key) > 0:
+            yield (BackendTarget.STABILITY_SDK.name, 'Dream Studio', 'Run in the cloud with Dream Studio', 2)
+    return [*options()]
+
 def seed_clamp(self, ctx):
     # clamp seed right after input to make it clear what the limits are
     try:
@@ -52,6 +63,8 @@ def seed_clamp(self, ctx):
         pass # will get hashed once generated
 
 attributes = {
+    "backend": EnumProperty(name="Backend", items=backend_options, description="Fill in a few simple options to create interesting images quickly"),
+
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
     "use_negative_prompt": BoolProperty(name="Use Negative Prompt", default=False),

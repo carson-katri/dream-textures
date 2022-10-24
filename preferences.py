@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import CollectionProperty
+from bpy.props import CollectionProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
 import os
 import webbrowser
@@ -65,6 +65,7 @@ class OpenRustInstaller(bpy.types.Operator):
         webbrowser.open("https://www.rust-lang.org/tools/install")
         return {"FINISHED"}
 
+
 class ValidateInstallation(bpy.types.Operator):
     bl_idname = "stable_diffusion.validate_installation"
     bl_label = "Validate Installation"
@@ -85,10 +86,21 @@ class ValidateInstallation(bpy.types.Operator):
 
         return {"FINISHED"}
 
+class OpenDreamStudio(bpy.types.Operator):
+    bl_idname = "dream_textures.open_dream_studio"
+    bl_label = "Find Your Key"
+    bl_description = ("Opens Dream Studio to the API key tab.")
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        webbrowser.open("https://beta.dreamstudio.ai/membership?tab=apiKeys")
+        return {"FINISHED"}
+
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     history: CollectionProperty(type=DreamPrompt)
+    dream_studio_key: StringProperty(name="Dream Studio Key")
 
     def draw(self, context):
         layout = self.layout
@@ -98,30 +110,40 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
         if not weights_installed:
             layout.label(text="Complete the following steps to finish setting up the addon:")
 
-        if not os.path.exists(absolute_path("stable_diffusion")) or len(os.listdir(absolute_path("stable_diffusion"))) < 5:
+        if len(os.listdir(absolute_path(".python_dependencies"))) < 2:
             missing_sd_box = layout.box()
-            missing_sd_box.label(text="Stable diffusion is missing.", icon="ERROR")
+            missing_sd_box.label(text="Dependencies Missing", icon="ERROR")
             missing_sd_box.label(text="You've likely downloaded source instead of release by accident.")
+            missing_sd_box.label(text="Follow the instructions to install for your platform.")
             missing_sd_box.operator(OpenLatestVersion.bl_idname, text="Download Latest Release")
             return
-        else:
+
+        has_local = os.path.exists(absolute_path("stable_diffusion"))
+        if has_local:
             dependencies_box = layout.box()
             dependencies_box.label(text="Dependencies Located", icon="CHECKMARK")
             dependencies_box.label(text="All dependencies (except for model weights) are included in the release.")
 
-        model_weights_box = layout.box()
-        model_weights_box.label(text="Setup Model Weights", icon="SETTINGS")
-        if weights_installed:
-            model_weights_box.label(text="Model weights setup successfully.", icon="CHECKMARK")
-        else:
-            model_weights_box.label(text="The model weights are not distributed with the addon.")
-            model_weights_box.label(text="Follow the steps below to download and install them.")
-            model_weights_box.label(text="1. Download the file 'sd-v1-4.ckpt'")
-            model_weights_box.operator(OpenHuggingFace.bl_idname, icon="URL")
-            model_weights_box.label(text="2. Select the downloaded weights to install.")
-            model_weights_box.operator(OpenWeightsDirectory.bl_idname, text="Import Model Weights", icon="IMPORT")
+            model_weights_box = layout.box()
+            model_weights_box.label(text="Setup Model Weights", icon="SETTINGS")
+            if weights_installed:
+                model_weights_box.label(text="Model weights setup successfully.", icon="CHECKMARK")
+            else:
+                model_weights_box.label(text="The model weights are not distributed with the addon.")
+                model_weights_box.label(text="Follow the steps below to download and install them.")
+                model_weights_box.label(text="1. Download the file 'sd-v1-4.ckpt'")
+                model_weights_box.operator(OpenHuggingFace.bl_idname, icon="URL")
+                model_weights_box.label(text="2. Select the downloaded weights to install.")
+                model_weights_box.operator(OpenWeightsDirectory.bl_idname, text="Import Model Weights", icon="IMPORT")
+        
+        dream_studio_box = layout.box()
+        dream_studio_box.label(text=f"Dream Studio{' (Optional)' if has_local else ''}", icon="HIDE_OFF")
+        dream_studio_box.label(text=f"Link to your Dream Studio account to run on the cloud{' instead of locally.' if has_local else '.'}")
+        key_row = dream_studio_box.row()
+        key_row.prop(self, "dream_studio_key", text="Key")
+        key_row.operator(OpenDreamStudio.bl_idname, text="Find Your Key", icon="KEYINGSET")
 
-        if weights_installed:
+        if weights_installed or len(self.dream_studio_key) > 0:
             complete_box = layout.box()
             complete_box.label(text="Addon Setup Complete", icon="CHECKMARK")
             complete_box.label(text="To locate the interface:")

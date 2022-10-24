@@ -26,6 +26,7 @@ class GeneratorProcess():
         import bpy
         env = os.environ.copy()
         env.pop('PYTHONPATH', None) # in case if --python-use-system-env
+        self.backend = backend
         self.process = subprocess.Popen(
             [sys.executable,'-s','generator_process', bpy.app.binary_path, '--backend', backend.name],
             cwd=os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
@@ -43,10 +44,13 @@ class GeneratorProcess():
             setattr(self, intent.name, intent.func.__get__(self, GeneratorProcess))
     
     @classmethod
-    def shared(self, create=True):
+    def shared(self, backend: BackendTarget | None = None, create=True):
         global _shared_instance
-        if _shared_instance is None and create:
-            _shared_instance = GeneratorProcess()
+        if create:
+            if _shared_instance is None or (backend is not None and _shared_instance.backend != backend):
+                GeneratorProcess.kill_shared()
+                _shared_instance = GeneratorProcess(backend=backend if backend is not None else BackendTarget.STABILITY_SDK)
+
         return _shared_instance
     
     @classmethod
@@ -59,7 +63,7 @@ class GeneratorProcess():
     
     @classmethod
     def can_use(self):
-        self = self.shared(False)
+        self = self.shared(create=False)
         return not (self and self.in_use)
     
     def kill(self):

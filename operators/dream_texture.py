@@ -7,7 +7,7 @@ from multiprocessing.shared_memory import SharedMemory
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
-from ..absolute_path import WEIGHTS_PATH
+from ..absolute_path import WEIGHTS_PATH, CLIPSEG_WEIGHTS_PATH
 from ..generator_process import MISSING_DEPENDENCIES_ERROR, GeneratorProcess, Intent
 
 import tempfile
@@ -158,7 +158,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
         scene = context.scene
 
         global headless_init_img
-        init_img = headless_init_img or (scene.init_img if headless_prompt.use_init_img else None)
+        init_img = headless_init_img or (scene.init_img if headless_prompt.use_init_img and headless_prompt.init_img_src == 'file' else None)
 
         def info(msg=""):
             scene.dream_textures_info = msg
@@ -182,7 +182,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
             return None
 
         bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(
-            name="Progress",
+            name="",
             default=0,
             min=0,
             max=(int(headless_prompt.strength * headless_prompt.steps) if init_img is not None else headless_prompt.steps) + 1,
@@ -213,7 +213,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
 
             return path
 
-        if headless_prompt.use_inpainting:
+        if headless_prompt.use_init_img and headless_prompt.init_img_src == 'open_editor':
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     if area.spaces.active.image is not None:
@@ -227,6 +227,8 @@ class HeadlessDreamTexture(bpy.types.Operator):
         if headless_prompt.prompt_structure == file_batch_structure.id:
             args['prompt'] = [line.body for line in scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
         args['init_img'] = init_img_path
+        if headless_prompt.use_init_img_color:
+            args['init_color'] = init_img_path
 
         def step_callback(step, width=None, height=None, shared_memory_name=None):
             global headless_step_callback
@@ -234,9 +236,15 @@ class HeadlessDreamTexture(bpy.types.Operator):
             scene.dream_textures_progress = step + 1
             headless_step_callback(step, width, height, shared_memory_name)
 
+        received_noncolorized = False
         def image_callback(shared_memory_name, seed, width, height, upscaled=False):
             global headless_image_callback
             info() # clear variable
+            nonlocal received_noncolorized
+            if headless_prompt.use_init_img and headless_prompt.use_init_img_color and not received_noncolorized:
+                received_noncolorized = True
+                return
+            received_noncolorized = False
             headless_image_callback(shared_memory_name, seed, width, height, upscaled)
 
         global generator_advance

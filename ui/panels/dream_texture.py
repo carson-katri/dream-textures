@@ -1,4 +1,11 @@
 from bpy.types import Panel
+from bpy_extras.io_utils import ImportHelper
+
+import webbrowser
+import os
+import shutil
+
+from ...absolute_path import CLIPSEG_WEIGHTS_PATH
 from ..presets import DREAM_PT_AdvancedPresets
 from ...pil_to_image import *
 from ...prompt_engineering import *
@@ -46,7 +53,7 @@ def dream_texture_panels():
             return context.scene.dream_textures_prompt
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, prompt_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, size_panel, get_prompt)
-        yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, inpaint_init_image_panels, get_prompt)
+        yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, init_image_panels, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, actions_panel, get_prompt)
 
@@ -137,48 +144,43 @@ def size_panel(sub_panel, space_type, get_prompt):
             layout.prop(get_prompt(context), "height")
     return SizePanel
 
-def inpaint_init_image_panels(sub_panel, space_type, get_prompt):
-    class InpaintPanel(sub_panel):
-        """Create a subpanel for inpainting options"""
-        bl_idname = f"DREAM_PT_dream_panel_inpaint_{space_type}"
-        bl_label = "Inpaint Open Image"
-        bl_options = {'DEFAULT_CLOSED'}
+class OpenClipSegDownload(bpy.types.Operator):
+    bl_idname = "dream_textures.open_clipseg_download"
+    bl_label = "Download Weights"
+    bl_description = ("Opens to where the weights can be downloaded.")
+    bl_options = {"REGISTER", "INTERNAL"}
 
-        @classmethod
-        def poll(self, context):
-            if not get_prompt(context).use_init_img:
-                for area in context.screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
-                        if area.spaces.active.image is not None:
-                            return True
-            return False
+    def execute(self, context):
+        webbrowser.open("https://owncloud.gwdg.de/index.php/s/ioHbRzFx6th32hn")
+        return {"FINISHED"}
 
-        def draw_header(self, context):
-            self.layout.prop(get_prompt(context), "use_inpainting", text="")
+class OpenClipSegWeightsDirectory(bpy.types.Operator, ImportHelper):
+    bl_idname = "dream_textures.open_clipseg_weights_directory"
+    bl_label = "Import Model Weights"
+    bl_description = ("Opens the directory that should contain the 'realesr-general-x4v3.pth' file")
 
-        def draw(self, context):
-            super().draw(context)
-            layout = self.layout
-            layout.use_property_split = True
-            layout.enabled = get_prompt(context).use_inpainting
+    filename_ext = ".pth"
+    filter_glob: bpy.props.StringProperty(
+        default="*.pth",
+        options={'HIDDEN'},
+        maxlen=255,
+    )
 
-            layout.label(text="1. Open an Image Editor space")
-            layout.label(text="2. Select the 'Paint' editing context")
-            layout.label(text="3. Choose the 'Mark Inpaint Area' brush")
-            layout.label(text="4. Draw over the area to inpaint")
-    yield InpaintPanel
+    def execute(self, context):
+        _, extension = os.path.splitext(self.filepath)
+        if extension != '.pth':
+            self.report({"ERROR"}, "Select a valid '.pth' file.")
+            return {"FINISHED"}
+        shutil.copy(self.filepath, CLIPSEG_WEIGHTS_PATH)
+        
+        return {"FINISHED"}
 
+def init_image_panels(sub_panel, space_type, get_prompt):
     class InitImagePanel(sub_panel):
         """Create a subpanel for init image options"""
         bl_idname = f"DREAM_PT_dream_panel_init_image_{space_type}"
-        bl_label = "Init Image"
+        bl_label = "Source Image"
         bl_options = {'DEFAULT_CLOSED'}
-
-        @classmethod
-        def poll(self, context):
-            if get_prompt(context).use_inpainting and InpaintPanel.poll(context):
-                return False
-            return True
 
         def draw_header(self, context):
             self.layout.prop(get_prompt(context), "use_init_img", text="")
@@ -186,12 +188,44 @@ def inpaint_init_image_panels(sub_panel, space_type, get_prompt):
         def draw(self, context):
             super().draw(context)
             layout = self.layout
+            prompt = get_prompt(context)
+            layout.enabled = prompt.use_init_img
+            
+            layout.prop(prompt, "init_img_src", expand=True)
+            if prompt.init_img_src == 'file':
+                layout.template_ID(context.scene, "init_img", open="image.open")
+            layout.prop(prompt, "init_img_action", expand=True)
+            
             layout.use_property_split = True
             
-            layout.enabled = get_prompt(context).use_init_img
-            layout.template_ID(context.scene, "init_img", open="image.open")
-            layout.prop(get_prompt(context), "strength")
-            layout.prop(get_prompt(context), "fit")
+            if prompt.init_img_action == 'inpaint':
+                layout.prop(prompt, "inpaint_mask_src")
+                if prompt.inpaint_mask_src == 'prompt':
+                    if not os.path.exists(CLIPSEG_WEIGHTS_PATH):
+                        layout.label(text="CLIP Segmentation model weights not installed.")
+                        layout.label(text="1. Download the file 'rd64-uni.pth'")
+                        layout.operator(OpenClipSegDownload.bl_idname, icon="URL")
+                        layout.label(text="2. Select the downloaded weights to install.")
+                        layout.operator(OpenClipSegWeightsDirectory.bl_idname, icon="IMPORT")
+                    else:
+                        layout.prop(prompt, "text_mask")
+                        layout.prop(prompt, "text_mask_confidence")
+                layout.prop(prompt, "inpaint_replace")
+            elif prompt.init_img_action == 'outpaint':
+                column = layout.column(align=True)
+                column.prop(prompt, "outpaint_top")
+                column.prop(prompt, "outpaint_right")
+                column.prop(prompt, "outpaint_bottom")
+                column.prop(prompt, "outpaint_left")
+
+                layout.separator()
+                
+                layout.prop(prompt, "outpaint_blend")
+                layout.prop(prompt, "inpaint_replace")
+            elif prompt.init_img_action == 'modify':
+                layout.prop(prompt, "fit")
+            layout.prop(prompt, "strength")
+            layout.prop(prompt, "use_init_img_color")
     yield InitImagePanel
 
 def advanced_panel(sub_panel, space_type, get_prompt):
@@ -245,6 +279,7 @@ def actions_panel(sub_panel, space_type, get_prompt):
                     row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
             else:
                 disabled_row = row.row()
+                disabled_row.use_property_split = True
                 disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
                 disabled_row.enabled = False
             if CancelGenerator.poll(context):

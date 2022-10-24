@@ -20,6 +20,22 @@ precision_options = [
     ('float16', 'Half Precision (float16)', "", 4),
 ]
 
+init_image_sources = [
+    ('file', 'File', '', 'IMAGE_DATA', 1),
+    ('open_editor', 'Open Image', '', 'TPAINT_HLT', 2),
+]
+
+init_image_actions = [
+    ('modify', 'Modify', 'Combine the initial image with noise to influence the output', 'IMAGE', 1),
+    ('inpaint', 'Inpaint', 'Fill in any masked areas', 'TPAINT_HLT', 2),
+    ('outpaint', 'Outpaint', 'Extend the image in a specific direction', 'FULLSCREEN_ENTER', 3),
+]
+
+inpaint_mask_sources = [
+    ('alpha', 'Alpha Channel', '', 1),
+    ('prompt', 'Prompt', '', 2),
+]
+
 def seed_clamp(self, ctx):
     # clamp seed right after input to make it clear what the limits are
     try:
@@ -55,9 +71,24 @@ attributes = {
 
     # Init Image
     "use_init_img": BoolProperty(name="Use Init Image", default=False),
-    "use_inpainting": BoolProperty(name="Use Inpainting", default=False),
-    "strength": FloatProperty(name="Strength", default=0.75, min=0, max=1, soft_min=0.01, soft_max=0.99),
+    "init_img_src": EnumProperty(name=" ", items=init_image_sources, default="file"),
+    "init_img_action": EnumProperty(name="Action", items=init_image_actions, default="modify"),
+    "strength": FloatProperty(name="Noise Strength", description="The ratio of noise:image. A higher value gives more 'creative' results", default=0.75, min=0, max=1, soft_min=0.01, soft_max=0.99),
     "fit": BoolProperty(name="Fit to width/height", default=True),
+    "use_init_img_color": BoolProperty(name="Color Correct", default=True),
+    
+    # Inpaint
+    "inpaint_mask_src": EnumProperty(name="Mask Source", items=inpaint_mask_sources, default="alpha"),
+    "inpaint_replace": FloatProperty(name="Replace", description="Replaces the masked area with a specified amount of noise, can create more extreme changes. Values of 0 or 1 will give the best results", min=0, max=1, default=0),
+    "text_mask": StringProperty(name="Mask Prompt"),
+    "text_mask_confidence": FloatProperty(name="Confidence Threshold", description="How confident the segmentation model needs to be", default=0.5, min=0),
+
+    # Outpaint
+    "outpaint_top": IntProperty(name="Top", default=64, step=64, min=0),
+    "outpaint_right": IntProperty(name="Right", default=64, step=64, min=0),
+    "outpaint_bottom": IntProperty(name="Bottom", default=64, step=64, min=0),
+    "outpaint_left": IntProperty(name="Left", default=64, step=64, min=0),
+    "outpaint_blend": IntProperty(name="Blend", description="Gaussian blur amount to apply to the extended area", default=16, min=0),
 }
 
 def map_structure_token_items(value):

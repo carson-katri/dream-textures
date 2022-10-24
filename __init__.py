@@ -78,7 +78,7 @@ def register():
         return ""
     bpy.types.Scene.dream_textures_history_selection = IntProperty(default=1)
     bpy.types.Scene.dream_textures_history_selection_preview = bpy.props.StringProperty(name="", default="", get=get_selection_preview, set=lambda _, __: None)
-    bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="Progress", default=0, min=0, max=0)
+    bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=0)
     bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 
     bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)

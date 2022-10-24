@@ -58,6 +58,18 @@ def prompt_to_image(self):
             self.send_action(Action.STEP_NO_SHOW, step=step)
 
     def preload_models():
+        import urllib
+        import ssl
+        urlopen = urllib.request.urlopen
+        def urlopen_decroator(func):
+            def urlopen(*args, **kwargs):
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                return func(*args, **kwargs, context=ssl_context)
+            return urlopen
+        urllib.request.urlopen = urlopen_decroator(urllib.request.urlopen)
+
         tqdm = None
         try:
             from huggingface_hub.utils.tqdm import tqdm as hfh_tqdm
@@ -105,11 +117,17 @@ def prompt_to_image(self):
         transformers.CLIPTokenizer.from_pretrained(clip_version)
         transformers.CLIPTextModel.from_pretrained(clip_version)
 
+        start_preloading("CLIP Segmentation")
+        from absolute_path import CLIPSEG_WEIGHTS_PATH
+        from clipseg_models.clipseg import CLIPDensePredT
+        CLIPDensePredT(version='ViT-B/16', reduce_dim=64)
+
         tqdm.update = old_update
+        urllib.request.urlopen = urlopen
     
     from transformers.utils.hub import TRANSFORMERS_CACHE
     model_paths = {'bert-base-uncased', 'openai--clip-vit-large-patch14'}
-    if any(not os.path.isdir(os.path.join(TRANSFORMERS_CACHE, f'models--{path}')) for path in model_paths):
+    if any(not os.path.isdir(os.path.join(TRANSFORMERS_CACHE, f'models--{path}')) for path in model_paths) or not os.path.exists(os.path.join(os.path.expanduser("~/.cache/clip"), 'ViT-B-16.pt')):
         preload_models()
 
     while True:
@@ -134,6 +152,24 @@ def prompt_to_image(self):
             for prompt in prompt_list:
                 generator_args = args.copy()
                 generator_args['prompt'] = prompt
+                if args['init_img_action'] == 'inpaint' and args['inpaint_mask_src'] == 'prompt':
+                    generator_args['text_mask'] = (generator_args['text_mask'], generator_args['text_mask_confidence'])
+                else:
+                    generator_args['text_mask'] = None
+                if args['use_init_img'] and args['init_img_action'] == 'outpaint':
+                    args['fit'] = False
+                    # Extend the image in the specified directions
+                    from PIL import Image, ImageFilter
+                    init_img = Image.open(args['init_img'])
+                    extended_size = (init_img.size[0] + args['outpaint_left'] + args['outpaint_right'], init_img.size[1] + args['outpaint_top'] + args['outpaint_bottom'])
+                    extended_img = Image.new('RGBA', extended_size, (0, 0, 0, 0))
+                    blurred_fill = init_img.resize(extended_size).filter(filter=ImageFilter.GaussianBlur(radius=args['outpaint_blend']))
+                    blurred_fill.putalpha(0)
+                    extended_img.paste(blurred_fill, (0, 0))
+                    extended_img.paste(init_img, (args['outpaint_left'], args['outpaint_top']))
+                    extended_img.save(generator_args['init_img'], 'png')
+                    generator_args['width'] = extended_size[0]
+                    generator_args['height'] = extended_size[1]
                 generator.prompt2image(
                     # a function or method that will be called each step
                     step_callback=view_step,

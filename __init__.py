@@ -13,13 +13,11 @@
 
 bl_info = {
     "name": "Dream Textures",
-    "author": "Carson Katri, Greg Richardson, Kevin C. Burke",
+    "author": "Dream Textures contributors",
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
-    "warning": "Requires installation of Stable Diffusion model weights",
     "blender": (3, 0, 0),
     "version": (0, 0, 7),
-    "location": "",
-    "warning": "",
+    "location": "Image Editor -> Sidebar -> Dream",
     "category": "Paint"
 }
 

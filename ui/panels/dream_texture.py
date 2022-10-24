@@ -101,8 +101,9 @@ def prompt_panel(sub_panel, space_type, get_prompt):
                     segment_row.prop(get_prompt(context), enum_prop, icon_only=is_custom)
             if get_prompt(context).prompt_structure == file_batch_structure.id:
                 layout.template_ID(context.scene, "dream_textures_prompt_file", open="text.open")
-            else:
-                layout.prop(get_prompt(context), "seamless")
+            layout.prop(get_prompt(context), "seamless")
+            if get_prompt(context).seamless:
+                layout.prop(get_prompt(context), "seamless_axes")
     yield PromptPanel
 
     class NegativePromptPanel(sub_panel):

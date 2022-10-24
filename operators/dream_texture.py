@@ -4,6 +4,8 @@ import os
 import numpy as np
 from multiprocessing.shared_memory import SharedMemory
 
+from ..property_groups.dream_prompt import backend_options
+
 from ..generator_process.registrar import BackendTarget
 
 from ..preferences import StableDiffusionPreferences
@@ -193,6 +195,8 @@ class HeadlessDreamTexture(bpy.types.Operator):
         bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info", update=step_progress_update)
         
         info("Waiting For Process")
+        if len(backend_options(self, context)) <= 1:
+            headless_prompt.backend = backend_options(self, context)[0]
         generator = GeneratorProcess.shared(backend=BackendTarget[headless_prompt.backend])
 
         def save_temp_image(img, path=None):

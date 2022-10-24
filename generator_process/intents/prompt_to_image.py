@@ -260,7 +260,7 @@ def prompt_to_image_stability_sdk(self):
         for answer in answers:
             for artifact in answer.artifacts:
                 if artifact.finish_reason == interfaces.gooseai.generation.generation_pb2.FILTER:
-                    self.send_exception(False, "Your request activated Dream Studio's safety filter. Please modify your prompt and try again.")
+                    self.send_exception(False, "Your request activated DreamStudio's safety filter. Please modify your prompt and try again.")
                 if artifact.type == interfaces.gooseai.generation.generation_pb2.ARTIFACT_IMAGE:
                     response = Image.open(io.BytesIO(artifact.binary))
                     image_writer(response, seed)

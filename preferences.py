@@ -89,7 +89,7 @@ class ValidateInstallation(bpy.types.Operator):
 class OpenDreamStudio(bpy.types.Operator):
     bl_idname = "dream_textures.open_dream_studio"
     bl_label = "Find Your Key"
-    bl_description = ("Opens Dream Studio to the API key tab.")
+    bl_description = ("Opens DreamStudio to the API key tab.")
     bl_options = {"REGISTER", "INTERNAL"}
 
     def execute(self, context):
@@ -100,7 +100,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     history: CollectionProperty(type=DreamPrompt)
-    dream_studio_key: StringProperty(name="Dream Studio Key")
+    dream_studio_key: StringProperty(name="DreamStudio Key")
 
     def draw(self, context):
         layout = self.layout
@@ -137,8 +137,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                 model_weights_box.operator(OpenWeightsDirectory.bl_idname, text="Import Model Weights", icon="IMPORT")
         
         dream_studio_box = layout.box()
-        dream_studio_box.label(text=f"Dream Studio{' (Optional)' if has_local else ''}", icon="HIDE_OFF")
-        dream_studio_box.label(text=f"Link to your Dream Studio account to run on the cloud{' instead of locally.' if has_local else '.'}")
+        dream_studio_box.label(text=f"DreamStudio{' (Optional)' if has_local else ''}", icon="HIDE_OFF")
+        dream_studio_box.label(text=f"Link to your DreamStudio account to run in the cloud{' instead of locally.' if has_local else '.'}")
         key_row = dream_studio_box.row()
         key_row.prop(self, "dream_studio_key", text="Key")
         key_row.operator(OpenDreamStudio.bl_idname, text="Find Your Key", icon="KEYINGSET")

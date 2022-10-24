@@ -50,7 +50,7 @@ def backend_options(self, context):
         if os.path.exists(absolute_path("stable_diffusion")):
             yield (BackendTarget.LOCAL.name, 'Local', 'Run on your own hardware', 1)
         if len(context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key) > 0:
-            yield (BackendTarget.STABILITY_SDK.name, 'Dream Studio', 'Run in the cloud with Dream Studio', 2)
+            yield (BackendTarget.STABILITY_SDK.name, 'DreamStudio', 'Run in the cloud with DreamStudio', 2)
     return [*options()]
 
 def seed_clamp(self, ctx):

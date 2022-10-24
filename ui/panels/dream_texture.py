@@ -13,7 +13,7 @@ from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGen
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
-from ...property_groups.dream_prompt import DreamPrompt
+from ...property_groups.dream_prompt import DreamPrompt, backend_options
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -44,6 +44,10 @@ def dream_texture_panels():
                 layout.prop(context.scene.dream_textures_prompt, 'model')
 
                 layout.use_property_split = True
+                layout.use_property_decorate = False
+
+                if len(backend_options(self, context)) > 1:
+                    layout.prop(context.scene.dream_textures_prompt, "backend")
 
                 if is_force_show_download():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
@@ -103,6 +107,8 @@ def prompt_panel(sub_panel, space_type, get_prompt):
                 enum_cases = DreamPrompt.__annotations__[enum_prop].keywords['items']
                 if len(enum_cases) != 1 or enum_cases[0][0] != 'custom':
                     segment_row.prop(get_prompt(context), enum_prop, icon_only=is_custom)
+            if get_prompt(context).prompt_structure == file_batch_structure.id:
+                layout.template_ID(context.scene, "dream_textures_prompt_file", open="text.open")
             layout.prop(get_prompt(context), "seamless")
             if get_prompt(context).seamless:
                 layout.prop(get_prompt(context), "seamless_axes")
@@ -113,6 +119,10 @@ def prompt_panel(sub_panel, space_type, get_prompt):
         bl_idname = f"DREAM_PT_dream_panel_negative_prompt_{space_type}"
         bl_label = "Negative"
         bl_parent_id = PromptPanel.bl_idname
+
+        @classmethod
+        def poll(self, context):
+            return get_prompt(context).prompt_structure != file_batch_structure.id
 
         def draw_header(self, context):
             layout = self.layout
@@ -264,6 +274,10 @@ def actions_panel(sub_panel, space_type, get_prompt):
             super().draw(context)
             layout = self.layout
             layout.use_property_split = True
+
+            iterations_row = layout.row()
+            iterations_row.enabled = get_prompt(context).prompt_structure != file_batch_structure.id
+            iterations_row.prop(get_prompt(context), "iterations")
             
             row = layout.row()
             row.scale_y = 1.5

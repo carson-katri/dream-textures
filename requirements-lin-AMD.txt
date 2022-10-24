@@ -6,4 +6,5 @@ torch
 torchvision
 realesrgan==0.2.5.0
 opencolorio
+stability-sdk
 -e .

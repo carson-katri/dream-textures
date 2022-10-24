@@ -1,5 +1,9 @@
 ![Dream Textures, subtitle: Stable Diffusion built-in to Blender](readme_assets/banner.png)
 
+[![Latest Release](https://flat.badgen.net/github/release/carson-katri/dream-textures)](https://github.com/carson-katri/dream-textures/releases/latest)
+[![Join the Discord](https://flat.badgen.net/badge/icon/discord?icon=discord&label)](https://discord.gg/EmDJ8CaWZ7)
+[![Total Downloads](https://img.shields.io/github/downloads/carson-katri/dream-textures/total?style=flat-square)](https://github.com/carson-katri/dream-textures/releases/latest)
+
 * Create textures, concept art, background assets, and more with a simple text prompt
 * Use the 'Seamless' option to create textures that tile perfectly with no visible seam
 * Quickly create variations on an existing texture
@@ -48,3 +52,10 @@ git submodule update --init --recursive
     * Enable *Interface* > *Display* > *Developer Extras*
     * Then install dependencies for development under *Add-ons* > *Dream Textures* > *Development Tools*
     * This will download all pip dependencies for the selected platform into `.python_dependencies`
+
+### Tips
+
+1. On Apple Silicon, with the `requirements-dream-studio.txt` you may run into an error with gRPC using an incompatible binary. If so, please use the following command to install the correct gRPC version:
+```sh
+pip install --no-binary :all: grpcio --ignore-installed --target .python_dependencies --upgrade
+```

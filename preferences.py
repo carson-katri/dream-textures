@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import CollectionProperty
+from bpy.props import CollectionProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
 import os
 import webbrowser
@@ -12,7 +12,7 @@ from .property_groups.dream_prompt import DreamPrompt
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
 
 class OpenHuggingFace(bpy.types.Operator):
-    bl_idname = "stable_diffusion.open_hugging_face"
+    bl_idname = "dream_textures.open_hugging_face"
     bl_label = "Download Weights from Hugging Face"
     bl_description = ("Opens huggingface.co to the download page for the model weights.")
     bl_options = {"REGISTER", "INTERNAL"}
@@ -21,18 +21,8 @@ class OpenHuggingFace(bpy.types.Operator):
         webbrowser.open("https://huggingface.co/CompVis/stable-diffusion-v-1-4-original")
         return {"FINISHED"}
 
-class OpenGitDownloads(bpy.types.Operator):
-    bl_idname = "stable_diffusion.open_git_downloads"
-    bl_label = "Go to git-scm.com"
-    bl_description = ("Opens git-scm.com to the download page for Git")
-    bl_options = {"REGISTER", "INTERNAL"}
-
-    def execute(self, context):
-        webbrowser.open("https://git-scm.com/downloads")
-        return {"FINISHED"}
-
 class ImportWeights(bpy.types.Operator, ImportHelper):
-    bl_idname = "stable_diffusion.open_weights_directory"
+    bl_idname = "dream_textures.import_weights"
     bl_label = "Import Model Weights"
     filename_ext = ".ckpt"
     filter_glob: bpy.props.StringProperty(
@@ -54,7 +44,7 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
         return {"FINISHED"}
 
 class DeleteSelectedWeights(bpy.types.Operator):
-    bl_idname = "stable_diffusion.delete_selected_weights"
+    bl_idname = "dream_textures.delete_selected_weights"
     bl_label = "Delete Selected Weights"
     bl_options = {'REGISTER', 'INTERNAL'}
 
@@ -65,36 +55,22 @@ class DeleteSelectedWeights(bpy.types.Operator):
         os.remove(os.path.join(WEIGHTS_PATH, context.preferences.addons['dream_textures'].preferences.weights[context.preferences.addons['dream_textures'].preferences.active_weights].name))
         return {"FINISHED"}
 
-is_install_valid = None
-
-class OpenRustInstaller(bpy.types.Operator):
-    bl_idname = "stable_diffusion.open_rust_installer"
-    bl_label = "Go to rust-lang.org"
-    bl_description = ("Opens rust-lang.org to the install page")
-    bl_options = {"REGISTER", "INTERNAL"}
+class OpenContributors(bpy.types.Operator):
+    bl_idname = "dream_textures.open_contributors"
+    bl_label = "See All Contributors"
 
     def execute(self, context):
-        webbrowser.open("https://www.rust-lang.org/tools/install")
+        webbrowser.open("https://github.com/carson-katri/dream-textures/graphs/contributors")
         return {"FINISHED"}
 
-class ValidateInstallation(bpy.types.Operator):
-    bl_idname = "stable_diffusion.validate_installation"
-    bl_label = "Validate Installation"
-    bl_description = ("Tests importing the generator to locate a subset of errors with the installation")
+class OpenDreamStudio(bpy.types.Operator):
+    bl_idname = "dream_textures.open_dream_studio"
+    bl_label = "Find Your Key"
+    bl_description = ("Opens DreamStudio to the API key tab.")
     bl_options = {"REGISTER", "INTERNAL"}
 
     def execute(self, context):
-        global is_install_valid
-        try:
-            # Support Apple Silicon GPUs as much as possible.
-            os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-            from .stable_diffusion.ldm.generate import Generate
-            
-            is_install_valid = True
-        except Exception as e:
-            self.report({"ERROR"}, str(e))
-            is_install_valid = False
-
+        webbrowser.open("https://beta.dreamstudio.ai/membership?tab=apiKeys")
         return {"FINISHED"}
 
 class WeightsFile(bpy.types.PropertyGroup):
@@ -111,8 +87,11 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     history: CollectionProperty(type=DreamPrompt)
+    
     weights: CollectionProperty(type=WeightsFile)
     active_weights: bpy.props.IntProperty(name="Active Weights", default=0)
+
+    dream_studio_key: StringProperty(name="DreamStudio Key")
 
     def draw(self, context):
         layout = self.layout
@@ -126,32 +105,42 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
         if not weights_installed:
             layout.label(text="Complete the following steps to finish setting up the addon:")
 
-        if not os.path.exists(absolute_path("stable_diffusion")) or len(os.listdir(absolute_path("stable_diffusion"))) < 5:
+        if len(os.listdir(absolute_path(".python_dependencies"))) < 2:
             missing_sd_box = layout.box()
-            missing_sd_box.label(text="Stable diffusion is missing.", icon="ERROR")
+            missing_sd_box.label(text="Dependencies Missing", icon="ERROR")
             missing_sd_box.label(text="You've likely downloaded source instead of release by accident.")
+            missing_sd_box.label(text="Follow the instructions to install for your platform.")
             missing_sd_box.operator(OpenLatestVersion.bl_idname, text="Download Latest Release")
             return
-        else:
+
+        has_local = os.path.exists(absolute_path("stable_diffusion"))
+        if has_local:
             dependencies_box = layout.box()
             dependencies_box.label(text="Dependencies Located", icon="CHECKMARK")
             dependencies_box.label(text="All dependencies (except for model weights) are included in the release.")
 
-        model_weights_box = layout.box()
-        model_weights_box.label(text="Setup Model Weights", icon="SETTINGS")
-        if weights_installed:
-            model_weights_box.label(text="Model weights setup successfully.", icon="CHECKMARK")
-        else:
-            model_weights_box.label(text="The model weights are not distributed with the addon.")
-            model_weights_box.label(text="Follow the steps below to download and install them.")
-            model_weights_box.label(text="1. Download the file 'sd-v1-4.ckpt'")
-            model_weights_box.operator(OpenHuggingFace.bl_idname, icon="URL")
-            model_weights_box.label(text="2. Select the downloaded weights to install.")
-        model_weights_box.operator(ImportWeights.bl_idname, text="Import Model Weights", icon="IMPORT")
-        model_weights_box.template_list("UI_UL_list", "dream_textures_weights", self, "weights", self, "active_weights")
-        model_weights_box.operator(DeleteSelectedWeights.bl_idname, text="Delete Selected Weights", icon="X")
+            model_weights_box = layout.box()
+            model_weights_box.label(text="Setup Model Weights", icon="SETTINGS")
+            if weights_installed:
+                model_weights_box.label(text="Model weights setup successfully.", icon="CHECKMARK")
+            else:
+                model_weights_box.label(text="The model weights are not distributed with the addon.")
+                model_weights_box.label(text="Follow the steps below to download and install them.")
+                model_weights_box.label(text="1. Download the file 'sd-v1-4.ckpt'")
+                model_weights_box.operator(OpenHuggingFace.bl_idname, icon="URL")
+                model_weights_box.label(text="2. Select the downloaded weights to install.")
+            model_weights_box.operator(ImportWeights.bl_idname, text="Import Model Weights", icon="IMPORT")
+            model_weights_box.template_list("UI_UL_list", "dream_textures_weights", self, "weights", self, "active_weights")
+            model_weights_box.operator(DeleteSelectedWeights.bl_idname, text="Delete Selected Weights", icon="X")
+        
+        dream_studio_box = layout.box()
+        dream_studio_box.label(text=f"DreamStudio{' (Optional)' if has_local else ''}", icon="HIDE_OFF")
+        dream_studio_box.label(text=f"Link to your DreamStudio account to run in the cloud{' instead of locally.' if has_local else '.'}")
+        key_row = dream_studio_box.row()
+        key_row.prop(self, "dream_studio_key", text="Key")
+        key_row.operator(OpenDreamStudio.bl_idname, text="Find Your Key", icon="KEYINGSET")
 
-        if weights_installed:
+        if weights_installed or len(self.dream_studio_key) > 0:
             complete_box = layout.box()
             complete_box.label(text="Addon Setup Complete", icon="CHECKMARK")
             complete_box.label(text="To locate the interface:")
@@ -165,11 +154,20 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             presets_box.label(text="It looks like you removed some of the default presets.")
             presets_box.label(text="You can restore them here.")
             presets_box.operator(RestoreDefaultPresets.bl_idname, icon="RECOVER_LAST")
+        
+        contributors_box = layout.box()
+        contributors_box.label(text="Contributors", icon="COMMUNITY")
+        contributors_box.label(text="Dream Textures is made possible by the contributors on GitHub.")
+        contributors_box.operator(OpenContributors.bl_idname, icon="URL")
 
         if context.preferences.view.show_developer_ui: # If 'Developer Extras' is enabled, show addon development tools
             developer_box = layout.box()
             developer_box.label(text="Development Tools", icon="CONSOLE")
             developer_box.label(text="This section is for addon development only. You are seeing this because you have 'Developer Extras' enabled.")
             developer_box.label(text="Do not use any operators in this section unless you are setting up a development environment.")
+            already_installed = len(os.listdir(absolute_path(".python_dependencies"))) > 0
+            if already_installed:
+                warn_box = developer_box.box()
+                warn_box.label(text="Dependencies already installed. Only install below if you developing the addon", icon="CHECKMARK")
             developer_box.prop(context.scene, 'dream_textures_requirements_path')
             developer_box.operator(InstallDependencies.bl_idname, icon="CONSOLE")

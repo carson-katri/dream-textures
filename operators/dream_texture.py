@@ -4,6 +4,10 @@ import os
 import numpy as np
 from multiprocessing.shared_memory import SharedMemory
 
+from ..property_groups.dream_prompt import backend_options
+
+from ..generator_process.registrar import BackendTarget
+
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
@@ -38,10 +42,22 @@ class DreamTexture(bpy.types.Operator):
         return {'CANCELLED'}
 
     def execute(self, context):
-        history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
-        for prop in context.scene.dream_textures_prompt.__annotations__.keys():
-            if hasattr(history_entry, prop):
-                setattr(history_entry, prop, getattr(context.scene.dream_textures_prompt, prop))
+        history_entries = []
+        is_file_batch = context.scene.dream_textures_prompt.prompt_structure == file_batch_structure.id
+        file_batch_lines = []
+        if is_file_batch:
+            context.scene.dream_textures_prompt.iterations = 1
+            file_batch_lines = [line for line in context.scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
+            history_entries = [context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add() for _ in file_batch_lines]
+        else:
+            history_entries = [context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add() for _ in range(context.scene.dream_textures_prompt.iterations)]
+        for i, history_entry in enumerate(history_entries):
+            for prop in context.scene.dream_textures_prompt.__annotations__.keys():
+                if hasattr(history_entry, prop):
+                    setattr(history_entry, prop, getattr(context.scene.dream_textures_prompt, prop))
+            if is_file_batch:
+                history_entry.prompt_structure = custom_structure.id
+                history_entry.prompt_structure_token_subject = file_batch_lines[i].body
 
         def bpy_image(name, width, height, pixels):
             image = bpy.data.images.new(name, width=width, height=height)
@@ -53,7 +69,9 @@ class DreamTexture(bpy.types.Operator):
         screen = context.screen
         scene = context.scene
 
+        iteration = 0
         def image_writer(shared_memory_name, seed, width, height, upscaled=False):
+            nonlocal iteration
             global last_data_block
             # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
             if not upscaled:
@@ -75,8 +93,9 @@ class DreamTexture(bpy.types.Operator):
                     if area.type == 'IMAGE_EDITOR':
                         area.spaces.active.image = image
                 scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
-                history_entry.seed = str(seed)
-                history_entry.random_seed = False
+                history_entries[iteration].seed = str(seed)
+                history_entries[iteration].random_seed = False
+                iteration += 1
         
         def view_step(step, width=None, height=None, shared_memory_name=None):
             scene.dream_textures_progress = step + 1
@@ -176,7 +195,9 @@ class HeadlessDreamTexture(bpy.types.Operator):
         bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info", update=step_progress_update)
         
         info("Waiting For Process")
-        generator = GeneratorProcess.shared()
+        if len(backend_options(self, context)) <= 1:
+            headless_prompt.backend = backend_options(self, context)[0]
+        generator = GeneratorProcess.shared(backend=BackendTarget[headless_prompt.backend])
 
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
@@ -209,9 +230,13 @@ class HeadlessDreamTexture(bpy.types.Operator):
 
         args = headless_prompt.generate_args()
         args.update(headless_args)
+        if headless_prompt.prompt_structure == file_batch_structure.id:
+            args['prompt'] = [line.body for line in scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
         args['init_img'] = init_img_path
         if headless_prompt.use_init_img_color:
             args['init_color'] = init_img_path
+        if headless_prompt.backend == BackendTarget.STABILITY_SDK.name:
+            args['dream_studio_key'] = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key
 
         def step_callback(step, width=None, height=None, shared_memory_name=None):
             global headless_step_callback
@@ -285,7 +310,7 @@ class CancelGenerator(bpy.types.Operator):
         return timer is not None
 
     def execute(self, context):
-        gen = GeneratorProcess.shared(False)
+        gen = GeneratorProcess.shared(create=False)
         if gen:
             gen.send_stop(Intent.PROMPT_TO_IMAGE)
         return {'FINISHED'}

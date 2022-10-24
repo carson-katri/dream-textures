@@ -1,7 +1,8 @@
 import bpy
-from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty
+from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty
 import os
-from ..absolute_path import WEIGHTS_PATH
+from ..absolute_path import absolute_path, WEIGHTS_PATH
+from ..generator_process.registrar import BackendTarget
 from ..prompt_engineering import *
 
 sampler_options = [
@@ -47,6 +48,14 @@ seamless_axes = [
 def weights_options(self, context):
     return [(f, f, '', i) for i, f in enumerate(filter(lambda f: f.endswith('.ckpt'), os.listdir(WEIGHTS_PATH)))]
 
+def backend_options(self, context):
+    def options():
+        if os.path.exists(absolute_path("stable_diffusion")):
+            yield (BackendTarget.LOCAL.name, 'Local', 'Run on your own hardware', 1)
+        if len(context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key) > 0:
+            yield (BackendTarget.STABILITY_SDK.name, 'DreamStudio', 'Run in the cloud with DreamStudio', 2)
+    return [*options()]
+
 def seed_clamp(self, ctx):
     # clamp seed right after input to make it clear what the limits are
     try:
@@ -57,6 +66,7 @@ def seed_clamp(self, ctx):
         pass # will get hashed once generated
 
 attributes = {
+    "backend": EnumProperty(name="Backend", items=backend_options, description="Fill in a few simple options to create interesting images quickly"),
     "model": EnumProperty(name="Model", items=weights_options, description="Specify which weights file to use for inference"),
 
     # Prompt

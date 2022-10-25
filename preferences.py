@@ -52,7 +52,7 @@ class DeleteSelectedWeights(bpy.types.Operator):
         return context.window_manager.invoke_confirm(self, event)
 
     def execute(self, context):
-        os.remove(os.path.join(WEIGHTS_PATH, context.preferences.addons['dream_textures'].preferences.weights[context.preferences.addons['dream_textures'].preferences.active_weights].name))
+        os.remove(os.path.join(WEIGHTS_PATH, context.preferences.addons[__package__].preferences.weights[context.preferences.addons[__package__].preferences.active_weights].name))
         return {"FINISHED"}
 
 class OpenContributors(bpy.types.Operator):

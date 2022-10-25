@@ -14,6 +14,7 @@ from ...operators.open_latest_version import OpenLatestVersion, is_force_show_do
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
 from ...property_groups.dream_prompt import DreamPrompt, backend_options
+from ...generator_process.registrar import BackendTarget
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -41,13 +42,14 @@ def dream_texture_panels():
                 layout = self.layout
                 layout.use_property_split = False
 
-                layout.prop(context.scene.dream_textures_prompt, 'model')
 
                 layout.use_property_split = True
                 layout.use_property_decorate = False
 
                 if len(backend_options(self, context)) > 1:
                     layout.prop(context.scene.dream_textures_prompt, "backend")
+                if context.scene.dream_textures_prompt.backend == BackendTarget.LOCAL.name:
+                    layout.prop(context.scene.dream_textures_prompt, 'model')
 
                 if is_force_show_download():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")

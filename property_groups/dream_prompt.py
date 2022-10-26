@@ -55,7 +55,7 @@ seamless_axes = [
 
 def backend_options(self, context):
     def options():
-        if os.path.exists(absolute_path("stable_diffusion")):
+        if len(os.listdir(absolute_path("stable_diffusion"))) > 0:
             yield (BackendTarget.LOCAL.name, 'Local', 'Run on your own hardware', 1)
         if len(context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key) > 0:
             yield (BackendTarget.STABILITY_SDK.name, 'DreamStudio', 'Run in the cloud with DreamStudio', 2)

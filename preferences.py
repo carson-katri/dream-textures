@@ -83,7 +83,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             missing_sd_box.operator(OpenLatestVersion.bl_idname, text="Download Latest Release")
             return
 
-        has_local = os.path.exists(absolute_path("stable_diffusion"))
+        has_local = len(os.listdir(absolute_path("stable_diffusion"))) > 0
         if has_local:
             dependencies_box = layout.box()
             dependencies_box.label(text="Dependencies Located", icon="CHECKMARK")

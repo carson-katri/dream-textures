@@ -71,7 +71,7 @@ def seed_clamp(self, ctx):
         pass # will get hashed once generated
 
 attributes = {
-    "backend": EnumProperty(name="Backend", items=backend_options, description="Fill in a few simple options to create interesting images quickly"),
+    "backend": EnumProperty(name="Backend", items=backend_options, default=1 if len(os.listdir(absolute_path("stable_diffusion"))) > 0 else 2, description="Fill in a few simple options to create interesting images quickly"),
 
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),

@@ -237,10 +237,11 @@ def prompt_to_image_stability_sdk(self):
                 return shared_init_img
             return None
         shared_init_img = realtime_viewport_init_image()
+        init_img = Image.open(args['init_img']) if args['init_img'] is not None else None
         answers = stability_inference.generate(
             prompt=args['prompt'],
-            init_image=shared_init_img if shared_init_img is not None else (Image.open(args['init_img']) if args['init_img'] is not None else None),
-            # mask_image: Optional[Image.Image] = None,
+            init_image=shared_init_img if shared_init_img is not None else init_img,
+            mask_image=init_img.split()[-1] if init_img is not None else None,
             width=shared_init_img.width if shared_init_img is not None else args['width'],
             height=shared_init_img.height if shared_init_img is not None else args['height'],
             start_schedule=1.0 * args['strength'],

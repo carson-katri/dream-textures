@@ -199,6 +199,9 @@ class HeadlessDreamTexture(bpy.types.Operator):
             headless_prompt.backend = backend_options(self, context)[0]
         generator = GeneratorProcess.shared(backend=BackendTarget[headless_prompt.backend])
 
+        if not generator.backend.color_correction():
+            headless_prompt.use_init_img_color = False
+
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
 

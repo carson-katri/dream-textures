@@ -8,6 +8,34 @@ class BackendTarget(IntEnum):
 
     def __str__(self):
         return self.name
+    
+    def init_img_actions(self):
+        match self:
+            case BackendTarget.LOCAL:
+                return ['modify', 'inpaint', 'outpaint']
+            case BackendTarget.STABILITY_SDK:
+                return ['modify', 'inpaint']
+    
+    def inpaint_mask_sources(self):
+        match self:
+            case BackendTarget.LOCAL:
+                return ['alpha', 'prompt']
+            case BackendTarget.STABILITY_SDK:
+                return ['alpha']
+    
+    def color_correction(self):
+        match self:
+            case BackendTarget.LOCAL:
+                return True
+            case BackendTarget.STABILITY_SDK:
+                return False
+    
+    def negative_prompts(self):
+        match self:
+            case BackendTarget.LOCAL:
+                return True
+            case BackendTarget.STABILITY_SDK:
+                return False
 
 class _GeneratorIntent:
     def __init__(self, func):

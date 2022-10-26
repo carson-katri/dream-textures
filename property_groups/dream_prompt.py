@@ -34,10 +34,18 @@ init_image_actions = [
     ('outpaint', 'Outpaint', 'Extend the image in a specific direction', 'FULLSCREEN_ENTER', 3),
 ]
 
+def init_image_actions_filtered(self, context):
+    available = BackendTarget[self.backend].init_img_actions()
+    return list(filter(lambda x: x[0] in available, init_image_actions))
+
 inpaint_mask_sources = [
     ('alpha', 'Alpha Channel', '', 1),
     ('prompt', 'Prompt', '', 2),
 ]
+
+def inpaint_mask_sources_filtered(self, context):
+    available = BackendTarget[self.backend].inpaint_mask_sources()
+    return list(filter(lambda x: x[0] in available, inpaint_mask_sources))
 
 seamless_axes = [
     ('x', 'X', '', 1),
@@ -92,13 +100,13 @@ attributes = {
     # Init Image
     "use_init_img": BoolProperty(name="Use Init Image", default=False),
     "init_img_src": EnumProperty(name=" ", items=init_image_sources, default="file"),
-    "init_img_action": EnumProperty(name="Action", items=init_image_actions, default="modify"),
+    "init_img_action": EnumProperty(name="Action", items=init_image_actions_filtered, default=1),
     "strength": FloatProperty(name="Noise Strength", description="The ratio of noise:image. A higher value gives more 'creative' results", default=0.75, min=0, max=1, soft_min=0.01, soft_max=0.99),
     "fit": BoolProperty(name="Fit to width/height", default=True),
     "use_init_img_color": BoolProperty(name="Color Correct", default=True),
     
     # Inpaint
-    "inpaint_mask_src": EnumProperty(name="Mask Source", items=inpaint_mask_sources, default="alpha"),
+    "inpaint_mask_src": EnumProperty(name="Mask Source", items=inpaint_mask_sources_filtered, default=1),
     "inpaint_replace": FloatProperty(name="Replace", description="Replaces the masked area with a specified amount of noise, can create more extreme changes. Values of 0 or 1 will give the best results", min=0, max=1, default=0),
     "text_mask": StringProperty(name="Mask Prompt"),
     "text_mask_confidence": FloatProperty(name="Confidence Threshold", description="How confident the segmentation model needs to be", default=0.5, min=0),

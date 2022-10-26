@@ -36,6 +36,13 @@ class BackendTarget(IntEnum):
                 return True
             case BackendTarget.STABILITY_SDK:
                 return False
+    
+    def upscaling(self):
+        match self:
+            case BackendTarget.LOCAL:
+                return True
+            case BackendTarget.STABILITY_SDK:
+                return False
 
 class _GeneratorIntent:
     def __init__(self, func):

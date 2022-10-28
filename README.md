@@ -52,3 +52,10 @@ git submodule update --init --recursive
     * Enable *Interface* > *Display* > *Developer Extras*
     * Then install dependencies for development under *Add-ons* > *Dream Textures* > *Development Tools*
     * This will download all pip dependencies for the selected platform into `.python_dependencies`
+
+### Tips
+
+1. On Apple Silicon, with the `requirements-dream-studio.txt` you may run into an error with gRPC using an incompatible binary. If so, please use the following command to install the correct gRPC version:
+```sh
+pip install --no-binary :all: grpcio --ignore-installed --target .python_dependencies --upgrade
+```

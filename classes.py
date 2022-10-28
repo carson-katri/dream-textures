@@ -6,7 +6,7 @@ from .operators.inpaint_area_brush import InpaintAreaBrushActivated
 from .operators.upscale import Upscale
 from .property_groups.dream_prompt import DreamPrompt
 from .ui.panels import dream_texture, history, upscaling, render_properties
-from .preferences import OpenHuggingFace, OpenWeightsDirectory, OpenContributors, StableDiffusionPreferences, OpenDreamStudio
+from .preferences import OpenHuggingFace, OpenContributors, StableDiffusionPreferences, OpenDreamStudio, ImportWeights, WeightsFile, DeleteSelectedWeights
 
 from .ui.presets import DREAM_PT_AdvancedPresets, DREAM_MT_AdvancedPresets, AddAdvancedPreset, RestoreDefaultPresets
 
@@ -44,10 +44,12 @@ CLASSES = (
 )
 
 PREFERENCE_CLASSES = (
+                      DeleteSelectedWeights,
+                      WeightsFile,
                       DreamPrompt,
                       InstallDependencies,
                       OpenHuggingFace,
-                      OpenWeightsDirectory,
+                      ImportWeights,
                       OpenContributors,
                       RestoreDefaultPresets,
                       OpenDreamStudio,

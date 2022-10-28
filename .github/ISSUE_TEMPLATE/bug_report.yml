@@ -1,0 +1,70 @@
+name: Bug Report
+description: File a bug report
+title: ""
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing a bug report, [search for an existing issue](https://github.com/carson-katri/dream-textures/issues?q=is%3Aissue).
+        
+        Also, ensure you are running the [latest version](https://github.com/carson-katri/dream-textures/releases/latest).
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Provide a clear and concise description of what the bug is.
+      placeholder: Description
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: List the steps needed to reproduce the issue.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Expected Behavior
+      description: Describe what you expected to happen.
+      placeholder: |
+        The 'action' would do 'some amazing thing'.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Unless you are running on an unsupported platform, ensure you downloaded a [packaged release](https://github.com/carson-katri/dream-textures/releases/latest) and not the source code.
+  - type: dropdown
+    id: addon-version
+    attributes:
+      label: Addon Version
+      multiple: false
+      options:
+        - Windows (CUDA)
+        - Windows (DreamStudio-only)
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+        - macOS (Apple Silicon, DreamStudio-only)
+        - Other (Built from source)
+    validations:
+      required: true
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: GPU
+      description: NVIDIA 16 series cards are known to have a difficult time running Stable Diffusion. Please see the other issues regarding these cards.
+      multiple: false
+      options:
+        - NVIDIA
+        - NVIDIA 16 Series
+        - AMD (unsupported for local generation)
+        - Apple Silicon
+        - Other
+    validations:
+      required: true

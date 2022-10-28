@@ -1,7 +1,7 @@
 import bpy
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty
 import os
-from ..absolute_path import absolute_path
+from ..absolute_path import absolute_path, WEIGHTS_PATH
 from ..generator_process.registrar import BackendTarget
 from ..prompt_engineering import *
 
@@ -53,6 +53,9 @@ seamless_axes = [
     ('xy', 'Both', '', 3),
 ]
 
+def weights_options(self, context):
+    return [(f, f, '', i) for i, f in enumerate(filter(lambda f: f.endswith('.ckpt'), os.listdir(WEIGHTS_PATH)))]
+
 def backend_options(self, context):
     def options():
         if len(os.listdir(absolute_path("stable_diffusion"))) > 0:
@@ -72,6 +75,7 @@ def seed_clamp(self, ctx):
 
 attributes = {
     "backend": EnumProperty(name="Backend", items=backend_options, default=1 if len(os.listdir(absolute_path("stable_diffusion"))) > 0 else 2, description="Fill in a few simple options to create interesting images quickly"),
+    "model": EnumProperty(name="Model", items=weights_options, description="Specify which weights file to use for inference"),
 
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),

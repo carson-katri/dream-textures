@@ -136,10 +136,30 @@ def prompt_to_image(self):
             # Reset the step count
             step = 0
 
-            if generator is None or generator.precision != (choose_precision(generator.device) if args['precision'] == 'auto' else args['precision']):
+            if generator is None or generator.precision != (choose_precision(generator.device) if args['precision'] == 'auto' else args['precision']) or generator.model_name != args['model']:
                 self.send_info("Loading Model")
+                from omegaconf import OmegaConf
+                def omegaconf_load(func):
+                    def load(path):
+                        if path == models_config:
+                            return OmegaConf.create({
+                                args['model']: {
+                                    "config": "stable_diffusion/configs/stable-diffusion/v1-inference.yaml",
+                                    "weights": f"weights/stable-diffusion-v1.4/{args['model']}",
+                                    "description": "Stable Diffusion inference model version 1.4",
+                                    "width": 512,
+                                    "height": 512
+                                }
+                            })
+                        else:
+                            return func(path)
+                    load.omegaconf_decorated = True
+                    return load
+                if not getattr(OmegaConf.load, 'omegaconf_decorated', False):
+                    OmegaConf.load = omegaconf_load(OmegaConf.load)
                 generator = Generate(
                     conf=models_config,
+                    model=args['model'],
                     precision=args['precision']
                 )
                 generator.free_gpu_mem = False # Not sure what this is for, and why it isn't a flag but read from Args()?

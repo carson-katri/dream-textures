@@ -1,6 +1,7 @@
 import bpy
 from bpy.types import Panel
 from bpy_extras.io_utils import ImportHelper
+from ...generator_process.registrar import BackendTarget
 from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.upscale import Upscale
@@ -54,6 +55,8 @@ def upscaling_panels():
 
             @classmethod
             def poll(self, context):
+                if not BackendTarget[context.scene.dream_textures_prompt.backend].upscaling():
+                    return False
                 if self.bl_space_type == 'NODE_EDITOR':
                     return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
                 else:

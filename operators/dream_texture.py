@@ -4,6 +4,10 @@ import os
 import numpy as np
 from multiprocessing.shared_memory import SharedMemory
 
+from ..property_groups.dream_prompt import backend_options
+
+from ..generator_process.registrar import BackendTarget
+
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
@@ -191,7 +195,12 @@ class HeadlessDreamTexture(bpy.types.Operator):
         bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info", update=step_progress_update)
         
         info("Waiting For Process")
-        generator = GeneratorProcess.shared()
+        if len(backend_options(self, context)) <= 1:
+            headless_prompt.backend = backend_options(self, context)[0][0]
+        generator = GeneratorProcess.shared(backend=BackendTarget[headless_prompt.backend])
+
+        if not generator.backend.color_correction():
+            headless_prompt.use_init_img_color = False
 
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
@@ -229,6 +238,8 @@ class HeadlessDreamTexture(bpy.types.Operator):
         args['init_img'] = init_img_path
         if headless_prompt.use_init_img_color:
             args['init_color'] = init_img_path
+        if headless_prompt.backend == BackendTarget.STABILITY_SDK.name:
+            args['dream_studio_key'] = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key
 
         def step_callback(step, width=None, height=None, shared_memory_name=None):
             global headless_step_callback
@@ -302,7 +313,7 @@ class CancelGenerator(bpy.types.Operator):
         return timer is not None
 
     def execute(self, context):
-        gen = GeneratorProcess.shared(False)
+        gen = GeneratorProcess.shared(create=False)
         if gen:
             gen.send_stop(Intent.PROMPT_TO_IMAGE)
         return {'FINISHED'}

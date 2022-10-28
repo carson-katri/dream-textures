@@ -1,7 +1,7 @@
 from ..block_in_use import block_in_use
 from ..action import Action
 from ..intent import Intent
-from ..registrar import registrar
+from ..registrar import BackendTarget, registrar
 import sys
 import os
 
@@ -29,7 +29,7 @@ def prompt2image(self, args, step_callback, image_callback, info_callback, excep
         if action in [Action.STOPPED, Action.EXCEPTION]:
             return
 
-@registrar.intent_backend(Intent.PROMPT_TO_IMAGE)
+@registrar.intent_backend(Intent.PROMPT_TO_IMAGE, BackendTarget.LOCAL)
 def prompt_to_image(self):
     args = yield
     self.send_info("Importing Dependencies")
@@ -196,4 +196,77 @@ def prompt_to_image(self):
             pass
         finally:
             sys.stderr = self.stderr
+        args = yield
+
+@registrar.intent_backend(Intent.PROMPT_TO_IMAGE, BackendTarget.STABILITY_SDK)
+def prompt_to_image_stability_sdk(self):
+    args = yield
+    self.send_info("Importing Dependencies")
+
+    from stability_sdk import client, interfaces
+    from PIL import Image
+    import io
+    import random
+    from multiprocessing.shared_memory import SharedMemory
+
+    # Some of these names are abbreviated.
+    algorithms = client.algorithms.copy()
+    algorithms['k_euler_a'] = algorithms['k_euler_ancestral']
+    algorithms['k_dpm_2_a'] = algorithms['k_dpm_2_ancestral']
+
+    stability_inference = client.StabilityInference(key=args['dream_studio_key'])
+
+    def image_writer(image, seed, upscaled=False, first_seed=None):
+        # Only use the non-upscaled texture, as upscaling is a separate step in this addon.
+        if not upscaled:
+            self.send_action(Action.IMAGE, shared_memory_name=self.share_image_memory(image), seed=seed, width=image.width, height=image.height)
+
+    while True:
+        self.check_stop()
+
+        self.send_info("Generating...")
+        
+        seed = random.randrange(0, 4294967295) if args['seed'] is None else args['seed']
+        def realtime_viewport_init_image():
+            return None # Realtime viewport is not currently available.
+            if args['init_img_shared_memory'] is not None:
+                init_img_memory = SharedMemory(args['init_img_shared_memory'])
+                shared_init_img = Image.frombytes('RGBA', (args['init_img_shared_memory_width'], args['init_img_shared_memory_height']), init_img_memory.buf.tobytes())
+                shared_init_img = shared_init_img.resize((512, round(((shared_init_img.height / shared_init_img.width) * 512) / 64)*64))
+                init_img_memory.close()
+                return shared_init_img
+            return None
+        shared_init_img = realtime_viewport_init_image()
+        init_img = Image.open(args['init_img']) if args['init_img'] is not None and args['use_init_img'] else None
+        answers = stability_inference.generate(
+            prompt=args['prompt'],
+            init_image=shared_init_img if shared_init_img is not None and args['use_init_img'] else init_img,
+            mask_image=init_img.split()[-1] if init_img is not None and args['use_init_img'] and args['init_img_action'] == 'inpaint' else None,
+            width=shared_init_img.width if shared_init_img is not None else args['width'],
+            height=shared_init_img.height if shared_init_img is not None else args['height'],
+            start_schedule=1.0 * args['strength'],
+            end_schedule=0.01,
+            cfg_scale=args['cfg_scale'],
+            sampler=algorithms[args['sampler_name']],
+            steps=args['steps'],
+            seed=seed,
+            samples=args['iterations'],
+            # safety: bool = True,
+            # classifiers: Optional[generation.ClassifierParameters] = None,
+            # guidance_preset: generation.GuidancePreset = generation.GUIDANCE_PRESET_NONE,
+            # guidance_cuts: int = 0,
+            # guidance_strength: Optional[float] = None,
+            # guidance_prompt: Union[str, generation.Prompt] = None,
+            # guidance_models: List[str] = None,
+        )
+
+        for answer in answers:
+            for artifact in answer.artifacts:
+                if artifact.finish_reason == interfaces.gooseai.generation.generation_pb2.FILTER:
+                    self.send_exception(False, "Your request activated DreamStudio's safety filter. Please modify your prompt and try again.")
+                if artifact.type == interfaces.gooseai.generation.generation_pb2.ARTIFACT_IMAGE:
+                    response = Image.open(io.BytesIO(artifact.binary))
+                    image_writer(response, artifact.seed)
+        
+        self.send_info("Done")
         args = yield

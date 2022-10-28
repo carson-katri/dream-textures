@@ -5,6 +5,8 @@ import webbrowser
 import os
 import shutil
 
+from ...generator_process.registrar import BackendTarget
+
 from ...absolute_path import CLIPSEG_WEIGHTS_PATH
 from ..presets import DREAM_PT_AdvancedPresets
 from ...pil_to_image import *
@@ -13,7 +15,7 @@ from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGen
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
-from ...property_groups.dream_prompt import DreamPrompt
+from ...property_groups.dream_prompt import DreamPrompt, backend_options
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -40,6 +42,10 @@ def dream_texture_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
+                layout.use_property_decorate = False
+
+                if len(backend_options(self, context)) > 1:
+                    layout.prop(context.scene.dream_textures_prompt, "backend")
 
                 if is_force_show_download():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
@@ -101,9 +107,10 @@ def prompt_panel(sub_panel, space_type, get_prompt):
                     segment_row.prop(get_prompt(context), enum_prop, icon_only=is_custom)
             if get_prompt(context).prompt_structure == file_batch_structure.id:
                 layout.template_ID(context.scene, "dream_textures_prompt_file", open="text.open")
-            layout.prop(get_prompt(context), "seamless")
-            if get_prompt(context).seamless:
-                layout.prop(get_prompt(context), "seamless_axes")
+            if BackendTarget[get_prompt(context).backend].seamless():
+                layout.prop(get_prompt(context), "seamless")
+                if get_prompt(context).seamless:
+                    layout.prop(get_prompt(context), "seamless_axes")
     yield PromptPanel
 
     class NegativePromptPanel(sub_panel):
@@ -114,7 +121,7 @@ def prompt_panel(sub_panel, space_type, get_prompt):
 
         @classmethod
         def poll(self, context):
-            return get_prompt(context).prompt_structure != file_batch_structure.id
+            return get_prompt(context).prompt_structure != file_batch_structure.id and BackendTarget[get_prompt(context).backend].negative_prompts()
 
         def draw_header(self, context):
             layout = self.layout
@@ -226,7 +233,8 @@ def init_image_panels(sub_panel, space_type, get_prompt):
             elif prompt.init_img_action == 'modify':
                 layout.prop(prompt, "fit")
             layout.prop(prompt, "strength")
-            layout.prop(prompt, "use_init_img_color")
+            if BackendTarget[prompt.backend].color_correction():
+                layout.prop(prompt, "use_init_img_color")
     yield InitImagePanel
 
 def advanced_panel(sub_panel, space_type, get_prompt):

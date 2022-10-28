@@ -1,11 +1,10 @@
 import bpy
 import cycles
 import threading
+import threading
 import functools
 import numpy as np
-import math
 import os
-import sys
 from multiprocessing.shared_memory import SharedMemory
 
 from .generator_process import GeneratorProcess

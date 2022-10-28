@@ -37,6 +37,13 @@ class BackendTarget(IntEnum):
             case BackendTarget.STABILITY_SDK:
                 return False
     
+    def seamless(self):
+        match self:
+            case BackendTarget.LOCAL:
+                return True
+            case BackendTarget.STABILITY_SDK:
+                return False
+    
     def upscaling(self):
         match self:
             case BackendTarget.LOCAL:

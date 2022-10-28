@@ -196,7 +196,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
         
         info("Waiting For Process")
         if len(backend_options(self, context)) <= 1:
-            headless_prompt.backend = backend_options(self, context)[0]
+            headless_prompt.backend = backend_options(self, context)[0][0]
         generator = GeneratorProcess.shared(backend=BackendTarget[headless_prompt.backend])
 
         if not generator.backend.color_correction():

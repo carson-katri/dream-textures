@@ -257,10 +257,11 @@ def prompt_to_image_stability_sdk(self):
                 return shared_init_img
             return None
         shared_init_img = realtime_viewport_init_image()
+        init_img = Image.open(args['init_img']) if args['init_img'] is not None and args['use_init_img'] else None
         answers = stability_inference.generate(
             prompt=args['prompt'],
-            init_image=shared_init_img if shared_init_img is not None else (Image.open(args['init_img']) if args['init_img'] is not None else None),
-            # mask_image: Optional[Image.Image] = None,
+            init_image=shared_init_img if shared_init_img is not None and args['use_init_img'] else init_img,
+            mask_image=init_img.split()[-1] if init_img is not None and args['use_init_img'] and args['init_img_action'] == 'inpaint' else None,
             width=shared_init_img.width if shared_init_img is not None else args['width'],
             height=shared_init_img.height if shared_init_img is not None else args['height'],
             start_schedule=1.0 * args['strength'],
@@ -285,7 +286,7 @@ def prompt_to_image_stability_sdk(self):
                     self.send_exception(False, "Your request activated DreamStudio's safety filter. Please modify your prompt and try again.")
                 if artifact.type == interfaces.gooseai.generation.generation_pb2.ARTIFACT_IMAGE:
                     response = Image.open(io.BytesIO(artifact.binary))
-                    image_writer(response, seed)
+                    image_writer(response, artifact.seed)
         
         self.send_info("Done")
         args = yield

@@ -315,7 +315,8 @@ def main():
             # Importing skimage is indirectly loading scipy anyway. Keeping note for future reference.
 
             # Couldn't track down exactly where it was hanging but it's good enough.
-            from skimage import transform
+            if os.path.exists(absolute_path(".python_dependencies/skimage")):
+                from skimage import transform
 
         if args.backend == BackendTarget.LOCAL:
             from ldm.invoke import txt2mask

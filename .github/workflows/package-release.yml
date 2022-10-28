@@ -101,7 +101,7 @@ jobs:
         uses: thedoctor0/zip-release@main
         with:
           type: zip
-          filename: dream_textures-macos-dreamstudio.zip
+          filename: dream_textures-macos-intel-dreamstudio.zip
           exclusions: '*.git*'
       - name: Archive and upload artifact
         uses: actions/upload-artifact@v3

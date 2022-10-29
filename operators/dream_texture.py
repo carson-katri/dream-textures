@@ -233,6 +233,8 @@ class HeadlessDreamTexture(bpy.types.Operator):
 
         args = headless_prompt.generate_args()
         args.update(headless_args)
+        if headless_init_img is not None:
+            args['use_init_img'] = True
         if headless_prompt.prompt_structure == file_batch_structure.id:
             args['prompt'] = [line.body for line in scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
         args['init_img'] = init_img_path

@@ -8,5 +8,5 @@ torch==1.12.1
 torchvision
 realesrgan==0.2.5.0
 opencolorio
-stability-sdk
+stability-sdk==0.2.6
 -e .

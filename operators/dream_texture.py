@@ -53,8 +53,11 @@ class DreamTexture(bpy.types.Operator):
             history_entries = [context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add() for _ in range(context.scene.dream_textures_prompt.iterations)]
         for i, history_entry in enumerate(history_entries):
             for prop in context.scene.dream_textures_prompt.__annotations__.keys():
-                if hasattr(history_entry, prop):
-                    setattr(history_entry, prop, getattr(context.scene.dream_textures_prompt, prop))
+                try:
+                    if hasattr(history_entry, prop):
+                        setattr(history_entry, prop, getattr(context.scene.dream_textures_prompt, prop))
+                except:
+                    continue
             if is_file_batch:
                 history_entry.prompt_structure = custom_structure.id
                 history_entry.prompt_structure_token_subject = file_batch_lines[i].body

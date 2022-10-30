@@ -88,12 +88,12 @@ def prompt_to_image(self):
             self.send_info(f"Loading {model_name}")
 
         def update_decorator(original):
-            def update(self, n=1):
-                result = original(self, n)
+            def update(tqdm_self, n=1):
+                result = original(tqdm_self, n)
                 nonlocal current_model_name
-                frac = self.n / self.total
+                frac = tqdm_self.n / tqdm_self.total
                 percentage = int(frac * 100)
-                if self.n - self.last_print_n >= self.miniters:
+                if tqdm_self.n - tqdm_self.last_print_n >= tqdm_self.miniters:
                     self.send_info(f"Downloading {current_model_name} ({percentage}%)")
                 return result
             return update

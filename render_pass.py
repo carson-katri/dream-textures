@@ -69,29 +69,25 @@ def register_render_pass():
                                 nonlocal target_pixels
                                 nonlocal target_pixels_memory
                                 target_pixels[:] = np.frombuffer(target_pixels_memory.buf, dtype=np.float32).copy().reshape((size_x * size_y, 4))
-                                event.set()
                             def exception_callback(fatal, msg, trace):
                                 print(fatal, msg, trace)
-                                event.set()
                             generator_advance = GeneratorProcess.shared().apply_ocio_transforms(args, functools.partial(image_callback, event), exception_callback)
                             def timer():
                                 try:
                                     next(generator_advance)
                                     return 0.01
                                 except StopIteration:
-                                    pass
+                                    event.set()
                             bpy.app.timers.register(timer)
                         if render_pass.name == "Dream Textures":
                             self.update_stats("Dream Textures", "Starting")
-                            def image_callback(event, set_pixels, shared_memory_name, seed, width, height, upscaled=False):
+                            def image_callback(set_pixels, shared_memory_name, seed, width, height, upscaled=False):
                                 # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
                                 if not upscaled:
                                     shared_memory = SharedMemory(shared_memory_name)
                                     set_pixels(np.frombuffer(shared_memory.buf, dtype=np.float32).copy().reshape((size_x * size_y, 4)))
 
                                     shared_memory.close()
-
-                                    event.set()
                             
                             step_count = int(scene.dream_textures_render_properties_prompt.strength * scene.dream_textures_render_properties_prompt.steps)
                             def step_callback(step, width=None, height=None, shared_memory_name=None):
@@ -124,7 +120,13 @@ def register_render_pass():
                                 nonlocal pixels
                                 pixels = npbuf
                             def do_dream_texture_pass():
-                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, event, set_pixels), combined_pass_image, width=size_x, height=size_y, show_steps=False, use_init_img_color=False)
+                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, set_pixels), combined_pass_image, width=size_x, height=size_y, show_steps=False, use_init_img_color=False)
+                                gen = GeneratorProcess.shared(None, False)
+                                def waiter():
+                                    if gen.in_use:
+                                        return 0.01
+                                    event.set()
+                                bpy.app.timers.register(waiter)
                             bpy.app.timers.register(do_dream_texture_pass)
                             event.wait()
 

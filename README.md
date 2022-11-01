@@ -35,9 +35,12 @@ Convert your low-res generations to 2K, 4K, and higher with Real-ESRGAN built-in
 Recall, export, and import history entries for later use.
 
 # Compatibility
-Dream Textures has been tested with CUDA and Apple Silicon GPUs.
+Dream Textures has been tested with CUDA and Apple Silicon GPUs. Over 4GB of VRAM is recommended.
 
 If you have an issue with a supported GPU, please create an issue.
+
+### Cloud Processing
+If your hardware is unsupported, you can use DreamStudio to process in the cloud. Follow the instructions in the release notes to setup with DreamStudio.
 
 # Contributing
 After cloning the repository, there a few more steps you need to complete to setup your development environment:

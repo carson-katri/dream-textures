@@ -16,7 +16,7 @@ bl_info = {
     "author": "Dream Textures contributors",
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
     "blender": (3, 0, 0),
-    "version": (0, 0, 7),
+    "version": (0, 0, 8),
     "location": "Image Editor -> Sidebar -> Dream",
     "category": "Paint"
 }

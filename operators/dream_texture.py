@@ -53,8 +53,11 @@ class DreamTexture(bpy.types.Operator):
             history_entries = [context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add() for _ in range(context.scene.dream_textures_prompt.iterations)]
         for i, history_entry in enumerate(history_entries):
             for prop in context.scene.dream_textures_prompt.__annotations__.keys():
-                if hasattr(history_entry, prop):
-                    setattr(history_entry, prop, getattr(context.scene.dream_textures_prompt, prop))
+                try:
+                    if hasattr(history_entry, prop):
+                        setattr(history_entry, prop, getattr(context.scene.dream_textures_prompt, prop))
+                except:
+                    continue
             if is_file_batch:
                 history_entry.prompt_structure = custom_structure.id
                 history_entry.prompt_structure_token_subject = file_batch_lines[i].body
@@ -233,12 +236,14 @@ class HeadlessDreamTexture(bpy.types.Operator):
 
         args = headless_prompt.generate_args()
         args.update(headless_args)
-        if headless_prompt.prompt_structure == file_batch_structure.id:
+        if headless_init_img is not None:
+            args['use_init_img'] = True
+        if args['prompt_structure'] == file_batch_structure.id:
             args['prompt'] = [line.body for line in scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
         args['init_img'] = init_img_path
-        if headless_prompt.use_init_img_color:
+        if args['use_init_img_color']:
             args['init_color'] = init_img_path
-        if headless_prompt.backend == BackendTarget.STABILITY_SDK.name:
+        if args['backend'] == BackendTarget.STABILITY_SDK.name:
             args['dream_studio_key'] = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key
 
         def step_callback(step, width=None, height=None, shared_memory_name=None):
@@ -252,7 +257,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
             global headless_image_callback
             info() # clear variable
             nonlocal received_noncolorized
-            if headless_prompt.use_init_img and headless_prompt.use_init_img_color and not received_noncolorized:
+            if args['use_init_img'] and args['use_init_img_color'] and not received_noncolorized:
                 received_noncolorized = True
                 return
             received_noncolorized = False

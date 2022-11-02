@@ -1,7 +1,6 @@
 import bpy
 import os
 import sys
-import importlib
 import sysconfig
 import subprocess
 import requests
@@ -22,12 +21,18 @@ def install_pip():
 
     try:
         # Check if pip is already installed
-        subprocess.run([sys.executable, "-m", "pip", "--version"], check=True)
+        subprocess.run([sys.executable, "-s", "-m", "pip", "--version"], check=True)
     except subprocess.CalledProcessError:
+        no_user = os.environ.get("PYTHONNOUSERSITE", None)
+        os.environ["PYTHONNOUSERSITE"] = "1"
         import ensurepip
 
         ensurepip.bootstrap()
         os.environ.pop("PIP_REQ_TRACKER", None)
+        if no_user:
+            os.environ["PYTHONNOUSERSITE"] = no_user
+        else:
+            del os.environ["PYTHONNOUSERSITE"]
 
 def install_and_import_requirements(requirements_txt=None):
     """

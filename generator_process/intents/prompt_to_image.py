@@ -58,10 +58,6 @@ def prompt_to_image(self):
             self.send_action(Action.STEP_NO_SHOW, step=step)
 
     def preload_models():
-        cert_file = os.environ.get("SSL_CERT_FILE", None)
-        import certifi
-        os.environ["SSL_CERT_FILE"] = certifi.where()
-
         tqdm = None
         try:
             from huggingface_hub.utils.tqdm import tqdm as hfh_tqdm
@@ -115,10 +111,6 @@ def prompt_to_image(self):
         CLIPDensePredT(version='ViT-B/16', reduce_dim=64)
 
         tqdm.update = old_update
-        if cert_file:
-            os.environ["SSL_CERT_FILE"] = cert_file
-        else:
-            del os.environ["SSL_CERT_FILE"]
     
     from transformers.utils.hub import TRANSFORMERS_CACHE
     model_paths = {'bert-base-uncased', 'openai--clip-vit-large-patch14'}

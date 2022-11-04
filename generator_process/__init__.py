@@ -323,6 +323,14 @@ def main():
         if args.backend == BackendTarget.LOCAL:
             from ldm.invoke import txt2mask
             txt2mask.CLIPSEG_WEIGHTS = CLIPSEG_WEIGHTS_PATH
+        
+        try:
+            import certifi
+            os.environ["SSL_CERT_FILE"] = certifi.where()
+            using_certifi = True
+        except ModuleNotFoundError:
+            using_certifi = False
+        print(f"Using certifi: {using_certifi}")
 
         back.thread.start()
         back.main_loop()

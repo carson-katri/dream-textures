@@ -33,7 +33,7 @@ def prompt2image(self, args, step_callback, image_callback, info_callback, excep
 def prompt_to_image(self):
     args = yield
     self.send_info("Importing Dependencies")
-    from absolute_path import absolute_path
+    from absolute_path import absolute_path, INPAINTING_WEIGHTS_PATH
     from stable_diffusion.ldm.generate import Generate
     from stable_diffusion.ldm.invoke.devices import choose_precision
     from io import StringIO
@@ -142,15 +142,18 @@ def prompt_to_image(self):
                 def omegaconf_load(func):
                     def load(path):
                         if path == models_config:
-                            return OmegaConf.create({
+                            config = {
                                 args['model']: {
-                                    "config": "stable_diffusion/configs/stable-diffusion/v1-inference.yaml",
-                                    "weights": f"weights/stable-diffusion-v1.4/{args['model']}",
-                                    "description": "Stable Diffusion inference model version 1.4",
+                                    "config": "stable_diffusion/configs/stable-diffusion/v1-inpainting-inference.yaml" if args['model'].startswith(INPAINTING_WEIGHTS_PATH) else "stable_diffusion/configs/stable-diffusion/v1-inference.yaml",
+                                    "weights": args['model'],
+                                    "description": "Stable Diffusion inference model",
                                     "width": 512,
                                     "height": 512
                                 }
-                            })
+                            }
+                            if args['vae'] != 'default':
+                                config["vae"] = f"weights/vae/{args['vae']}"
+                            return OmegaConf.create(config)
                         else:
                             return func(path)
                     load.omegaconf_decorated = True
@@ -178,7 +181,7 @@ def prompt_to_image(self):
                 else:
                     generator_args['text_mask'] = None
                 if args['use_init_img'] and args['init_img_action'] == 'outpaint':
-                    args['fit'] = False
+                    generator_args['fit'] = False
                     # Extend the image in the specified directions
                     from PIL import Image, ImageFilter
                     init_img = Image.open(args['init_img'])

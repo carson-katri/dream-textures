@@ -43,6 +43,7 @@ from .property_groups.dream_prompt import DreamPrompt
 from .operators.upscale import upscale_options
 from .preferences import StableDiffusionPreferences
 from .ui.presets import register_default_presets
+from .absolute_path import REAL_ESRGAN_WEIGHTS_PATH
 
 requirements_path_items = (
     # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
@@ -82,6 +83,7 @@ def register():
     bpy.types.Scene.dream_textures_viewport_enabled = BoolProperty(name="Viewport Enabled", default=False)
     bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)
     bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
+    bpy.types.Scene.dream_textures_upscale_model = bpy.props.EnumProperty(name="Model", items=lambda self, context: [(f, f, '', i) for i, f in enumerate(filter(lambda f: f.endswith('.pth'), os.listdir(REAL_ESRGAN_WEIGHTS_PATH)))])
     bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
     bpy.types.Scene.dream_textures_upscale_full_precision = bpy.props.BoolProperty(name="Full Precision", default=True)
     bpy.types.Scene.dream_textures_upscale_seamless = bpy.props.BoolProperty(name="Seamless", default=False)

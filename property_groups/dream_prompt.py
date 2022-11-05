@@ -1,7 +1,7 @@
 import bpy
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty
 import os
-from ..absolute_path import absolute_path, WEIGHTS_PATH
+from ..absolute_path import absolute_path, WEIGHTS_PATH, VAE_WEIGHTS_PATH, INPAINTING_WEIGHTS_PATH
 from ..generator_process.registrar import BackendTarget
 from ..prompt_engineering import *
 
@@ -54,7 +54,11 @@ seamless_axes = [
 ]
 
 def weights_options(self, context):
-    return [(f, f, '', i) for i, f in enumerate(filter(lambda f: f.endswith('.ckpt'), os.listdir(WEIGHTS_PATH)))]
+    def options(dir_path):
+        return [(os.path.join(dir_path, f), f, '') for f in filter(lambda f: f.endswith('.ckpt'), os.listdir(dir_path))]
+    return options(WEIGHTS_PATH) + options(INPAINTING_WEIGHTS_PATH)
+def vae_options(self, context):
+    return [('default', 'Default', '', 0)] + [(f, f, '', i + 1) for i, f in enumerate(filter(lambda f: f.endswith('.ckpt'), os.listdir(VAE_WEIGHTS_PATH)))]
 
 def backend_options(self, context):
     def options():
@@ -76,6 +80,7 @@ def seed_clamp(self, ctx):
 attributes = {
     "backend": EnumProperty(name="Backend", items=backend_options, default=1 if len(os.listdir(absolute_path("stable_diffusion"))) > 0 else 2, description="Fill in a few simple options to create interesting images quickly"),
     "model": EnumProperty(name="Model", items=weights_options, description="Specify which weights file to use for inference"),
+    "vae": EnumProperty(name="VAE", items=vae_options, description="Specify which variational autoencoder weights to use"),
 
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
@@ -102,6 +107,7 @@ attributes = {
     "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=False),
 
     # Init Image
+    "use_inpaint_model": BoolProperty(name="Use Inpaint Model", description="Use a model fine-tuned for inpainting, such as the v1.5-inpainting model from RunwayML", default=False),
     "use_init_img": BoolProperty(name="Use Init Image", default=False),
     "init_img_src": EnumProperty(name=" ", items=init_image_sources, default="file"),
     "init_img_action": EnumProperty(name="Action", items=init_image_actions_filtered, default=1),

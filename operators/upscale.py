@@ -121,6 +121,7 @@ class Upscale(bpy.types.Operator):
         generator = GeneratorProcess.shared()
 
         args = {
+            'model': context.scene.dream_textures_upscale_model,
             'input': input_image_path,
             'name': input_image.name,
             'outscale': int(context.scene.dream_textures_upscale_outscale),

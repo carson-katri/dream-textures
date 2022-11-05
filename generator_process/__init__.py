@@ -137,7 +137,8 @@ class Backend():
         self.intent_backends = {}
         self.stdin = sys.stdin.buffer
         self.stdout = sys.stdout.buffer
-        sys.stdout = open(os.devnull, 'w') # prevent stable diffusion logs from breaking ipc
+        # sys.stdout = open(os.devnull, 'w') # prevent stable diffusion logs from breaking ipc
+        sys.stdout = sys.stderr
         self.stderr = sys.stderr
         self.shared_memory = None
         self.stop_requested = False

@@ -73,6 +73,7 @@ def upscaling_panels():
                     layout.operator(OpenRealESRGANWeightsDirectory.bl_idname, icon="IMPORT")
                 layout = layout.column()
                 layout.enabled = os.path.exists(REAL_ESRGAN_WEIGHTS_PATH)
+                layout.prop(context.scene, "dream_textures_upscale_model")
                 layout.prop(context.scene, "dream_textures_upscale_outscale")
                 layout.prop(context.scene, "dream_textures_upscale_full_precision")
                 layout.prop(context.scene, "dream_textures_upscale_seamless")

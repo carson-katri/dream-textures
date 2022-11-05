@@ -35,6 +35,7 @@ def upscale(self):
     from realesrgan import RealESRGANer
     from realesrgan.archs.srvgg_arch import SRVGGNetCompact
     from torch import nn
+    import os
     while True:
         image = cv2.imread(args['input'], cv2.IMREAD_UNCHANGED)
         real_esrgan_model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=32, upscale=4, act_type='prelu')
@@ -46,7 +47,7 @@ def upscale(self):
         self.send_info("Loading Upsampler")
         upsampler = RealESRGANer(
             scale=netscale,
-            model_path=REAL_ESRGAN_WEIGHTS_PATH,
+            model_path=os.path.join(REAL_ESRGAN_WEIGHTS_PATH, args['model']),
             model=real_esrgan_model,
             tile=0,
             tile_pad=10,

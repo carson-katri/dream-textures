@@ -5,11 +5,26 @@ import os
 import webbrowser
 import shutil
 
-from .absolute_path import WEIGHTS_PATH, absolute_path
+from .absolute_path import CLIPSEG_WEIGHTS_PATH, REAL_ESRGAN_WEIGHTS_PATH, VAE_WEIGHTS_PATH, WEIGHTS_PATH, absolute_path, INPAINTING_WEIGHTS_PATH
 from .operators.install_dependencies import InstallDependencies
 from .operators.open_latest_version import OpenLatestVersion
 from .property_groups.dream_prompt import DreamPrompt
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
+
+model_types = [
+    (WEIGHTS_PATH, 'Stable Diffusion', 'Normal Stable Diffusion weights file', 1),
+    (INPAINTING_WEIGHTS_PATH, 'Stable Diffusion Inpainting', 'Inpainting-specific weights file', 2),
+    (VAE_WEIGHTS_PATH, 'VAE', 'Variational autencoder weights file', 3),
+    (REAL_ESRGAN_WEIGHTS_PATH, 'Upscaling', 'Real-ESRGAN weights file', 4),
+    (CLIPSEG_WEIGHTS_PATH, 'Prompt Mask', 'CLIP segmentation weights file', 5),
+]
+model_type_extensions = {
+    WEIGHTS_PATH: 'ckpt',
+    INPAINTING_WEIGHTS_PATH: 'ckpt',
+    VAE_WEIGHTS_PATH: 'ckpt',
+    REAL_ESRGAN_WEIGHTS_PATH: 'pth',
+    CLIPSEG_WEIGHTS_PATH: 'pth',
+}
 
 class OpenHuggingFace(bpy.types.Operator):
     bl_idname = "dream_textures.open_hugging_face"
@@ -24,22 +39,23 @@ class OpenHuggingFace(bpy.types.Operator):
 class ImportWeights(bpy.types.Operator, ImportHelper):
     bl_idname = "dream_textures.import_weights"
     bl_label = "Import Model Weights"
-    filename_ext = ".ckpt"
+    filename_ext = ".ckpt;.pth"
     filter_glob: bpy.props.StringProperty(
-        default="*.ckpt",
+        default="*.ckpt;*.pth",
         options={'HIDDEN'},
         maxlen=255,
     )
+    model_type: bpy.props.EnumProperty(name="Model Type", items=model_types, description="The type of model the checkpoint file is for")
 
     def execute(self, context):
-        path = os.path.dirname(WEIGHTS_PATH)
+        path = os.path.dirname(self.model_type)
         if not os.path.exists(path):
             os.mkdir(path)
         _, extension = os.path.splitext(self.filepath)
-        if extension != '.ckpt':
-            self.report({"ERROR"}, "Select a valid stable diffusion '.ckpt' file.")
+        if extension != f'.{model_type_extensions[self.model_type]}':
+            self.report({"ERROR"}, f"Select a valid '.{model_type_extensions[self.model_type]}' file.")
             return {"FINISHED"}
-        shutil.copy(self.filepath, WEIGHTS_PATH)
+        shutil.copy(self.filepath, self.model_type)
         
         return {"FINISHED"}
 
@@ -52,7 +68,7 @@ class DeleteSelectedWeights(bpy.types.Operator):
         return context.window_manager.invoke_confirm(self, event)
 
     def execute(self, context):
-        os.remove(os.path.join(WEIGHTS_PATH, context.preferences.addons[__package__].preferences.weights[context.preferences.addons[__package__].preferences.active_weights].name))
+        os.remove(context.preferences.addons[__package__].preferences.weights[context.preferences.addons[__package__].preferences.active_weights].path)
         return {"FINISHED"}
 
 class OpenContributors(bpy.types.Operator):
@@ -77,11 +93,13 @@ class WeightsFile(bpy.types.PropertyGroup):
     bl_label = "Weights File"
     bl_idname = "dream_textures.WeightsFile"
 
-    name: bpy.props.StringProperty(name="Path")
+    path: bpy.props.StringProperty(name="Path")
+    model_type: bpy.props.EnumProperty(name="Model Type", items=model_types)
 
 class PREFERENCES_UL_WeightsFileList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
-        layout.label(text=item.name)
+        layout.label(text=os.path.split(item.path)[1])
+        layout.label(text=next(filter(lambda x: x[0] == item.model_type, model_types))[1])
 
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
@@ -97,10 +115,12 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
         layout = self.layout
 
         self.weights.clear()
-        for path in filter(lambda f: f.endswith('.ckpt'), os.listdir(WEIGHTS_PATH)):
-            weights_file = self.weights.add()
-            weights_file.name = path
-        weights_installed = len(self.weights) > 0
+        for model_type in model_types:
+            for path in filter(lambda f: f.endswith('.ckpt') or f.endswith('.pth'), os.listdir(model_type[0])):
+                weights_file = self.weights.add()
+                weights_file.path = os.path.join(model_type[0], path)
+                weights_file.model_type = model_type[0]
+        weights_installed = len(os.listdir(WEIGHTS_PATH)) > 1
 
         if not weights_installed:
             layout.label(text="Complete the following steps to finish setting up the addon:")
@@ -130,7 +150,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                 model_weights_box.operator(OpenHuggingFace.bl_idname, icon="URL")
                 model_weights_box.label(text="2. Select the downloaded weights to install.")
             model_weights_box.operator(ImportWeights.bl_idname, text="Import Model Weights", icon="IMPORT")
-            model_weights_box.template_list("UI_UL_list", "dream_textures_weights", self, "weights", self, "active_weights")
+            model_weights_box.template_list(PREFERENCES_UL_WeightsFileList.__name__, "dream_textures_weights", self, "weights", self, "active_weights")
             model_weights_box.operator(DeleteSelectedWeights.bl_idname, text="Delete Selected Weights", icon="X")
         
         dream_studio_box = layout.box()

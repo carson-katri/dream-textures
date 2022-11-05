@@ -7,7 +7,7 @@ import shutil
 
 from ...generator_process.registrar import BackendTarget
 
-from ...absolute_path import CLIPSEG_WEIGHTS_PATH
+from ...absolute_path import CLIPSEG_WEIGHTS_PATH, INPAINTING_WEIGHTS_PATH
 from ..presets import DREAM_PT_AdvancedPresets
 from ...pil_to_image import *
 from ...prompt_engineering import *
@@ -49,6 +49,11 @@ def dream_texture_panels():
                     layout.prop(context.scene.dream_textures_prompt, "backend")
                 if context.scene.dream_textures_prompt.backend == BackendTarget.LOCAL.name:
                     layout.prop(context.scene.dream_textures_prompt, 'model')
+                    layout.prop(context.scene.dream_textures_prompt, 'vae')
+                    if context.scene.dream_textures_prompt.model.startswith(INPAINTING_WEIGHTS_PATH) and not context.scene.dream_textures_prompt.use_init_img:
+                        box = layout.box()
+                        box.label(text="Inpainting Model Selected", icon="ERROR")
+                        box.label(text="Source image is not enabled, but an inpainting model was selected.")
 
                 if is_force_show_download():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")

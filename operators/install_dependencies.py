@@ -8,7 +8,7 @@ import tarfile
 
 from ..absolute_path import absolute_path
 
-def install_pip():
+def install_pip(user_site=False):
     """
     Installs pip if not already present. Please note that ensurepip.bootstrap() also calls pip, which adds the
     environment variable PIP_REQ_TRACKER. After ensurepip.bootstrap() finishes execution, the directory doesn't exist
@@ -21,39 +21,55 @@ def install_pip():
 
     try:
         # Check if pip is already installed
-        subprocess.run([sys.executable, "-s", "-m", "pip", "--version"], check=True)
+        args = [sys.executable, "-m", "pip", "--version"]
+        if not user_site:
+            args.insert(1,"-s")
+        subprocess.run(args, check=True)
     except subprocess.CalledProcessError:
-        no_user = os.environ.get("PYTHONNOUSERSITE", None)
-        os.environ["PYTHONNOUSERSITE"] = "1"
+        if not user_site:
+            no_user = os.environ.get("PYTHONNOUSERSITE", None)
+            os.environ["PYTHONNOUSERSITE"] = "1"
         import ensurepip
 
-        ensurepip.bootstrap()
-        os.environ.pop("PIP_REQ_TRACKER", None)
-        if no_user:
-            os.environ["PYTHONNOUSERSITE"] = no_user
-        else:
-            del os.environ["PYTHONNOUSERSITE"]
+        try:
+            ensurepip.bootstrap()
+        finally:
+            os.environ.pop("PIP_REQ_TRACKER", None)
+            if not user_site:
+                if no_user:
+                    os.environ["PYTHONNOUSERSITE"] = no_user
+                else:
+                    del os.environ["PYTHONNOUSERSITE"]
 
-def install_and_import_requirements(requirements_txt=None):
+def install_and_import_requirements(requirements_txt=None, user_site=False):
     """
     Installs all modules in the 'requirements.txt' file.
     """
     environ_copy = dict(os.environ)
-    environ_copy["PYTHONNOUSERSITE"] = "1"
-
-    python_devel_tgz_path = absolute_path('python-devel.tgz')
-    response = requests.get(f"https://www.python.org/ftp/python/{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}/Python-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}.tgz")
-    open(python_devel_tgz_path, 'wb').write(response.content)
-    python_devel_tgz = tarfile.open(python_devel_tgz_path)
+    if not user_site:
+        environ_copy["PYTHONNOUSERSITE"] = "1"
     python_include_dir = sysconfig.get_paths()['include']
-    def members(tf):
-        prefix = f"Python-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}/Include/"
-        l = len(prefix)
-        for member in tf.getmembers():
-            if member.path.startswith(prefix):
-                member.path = member.path[l:]
-                yield member
-    python_devel_tgz.extractall(path=python_include_dir, members=members(python_devel_tgz))
+    if not os.path.exists(python_include_dir):
+        try:
+            os.makedirs(python_include_dir)
+        finally:
+            pass
+    if os.access(python_include_dir, os.W_OK):
+        print("downloading additional include files")
+        python_devel_tgz_path = absolute_path('python-devel.tgz')
+        response = requests.get(f"https://www.python.org/ftp/python/{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}/Python-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}.tgz")
+        open(python_devel_tgz_path, 'wb').write(response.content)
+        python_devel_tgz = tarfile.open(python_devel_tgz_path)
+        def members(tf):
+            prefix = f"Python-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}/Include/"
+            l = len(prefix)
+            for member in tf.getmembers():
+                if member.path.startswith(prefix):
+                    member.path = member.path[l:]
+                    yield member
+        python_devel_tgz.extractall(path=python_include_dir, members=members(python_devel_tgz))
+    else:
+        print(f"skipping include files, can't write to {python_include_dir}",file=sys.stderr)
 
     requirements_path = requirements_txt
     if requirements_path is None:
@@ -76,8 +92,15 @@ class InstallDependencies(bpy.types.Operator):
             bpy.ops.wm.console_toggle()
 
         try:
-            install_pip()
-            install_and_import_requirements(requirements_txt=context.scene.dream_textures_requirements_path)
+            force_user_site = False
+            try:
+                install_pip()
+            except subprocess.CalledProcessError:
+                print("ensurepip failed, attempting with user site")
+                force_user_site = True
+                install_pip(force_user_site)
+
+            install_and_import_requirements(requirements_txt=context.scene.dream_textures_requirements_path, user_site=force_user_site)
         except (subprocess.CalledProcessError, ImportError) as err:
             self.report({"ERROR"}, str(err))
             return {"CANCELLED"}

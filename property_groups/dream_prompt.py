@@ -41,6 +41,7 @@ def init_image_actions_filtered(self, context):
 inpaint_mask_sources = [
     ('alpha', 'Alpha Channel', '', 1),
     ('prompt', 'Prompt', '', 2),
+    ('image', 'Image', '', 3),
 ]
 
 def inpaint_mask_sources_filtered(self, context):

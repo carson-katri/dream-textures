@@ -19,9 +19,9 @@ class BackendTarget(IntEnum):
     def inpaint_mask_sources(self):
         match self:
             case BackendTarget.LOCAL:
-                return ['alpha', 'prompt']
+                return ['alpha', 'prompt', 'image']
             case BackendTarget.STABILITY_SDK:
-                return ['alpha']
+                return ['alpha', 'image']
     
     def color_correction(self):
         match self:

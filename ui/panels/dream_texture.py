@@ -226,6 +226,8 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                     else:
                         layout.prop(prompt, "text_mask")
                         layout.prop(prompt, "text_mask_confidence")
+                elif prompt.inpaint_mask_src == 'image':
+                    layout.template_ID(context.scene, "init_mask", open="image.open")
                 layout.prop(prompt, "inpaint_replace")
             elif prompt.init_img_action == 'outpaint':
                 column = layout.column(align=True)

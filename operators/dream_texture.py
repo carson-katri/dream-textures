@@ -236,6 +236,8 @@ class HeadlessDreamTexture(bpy.types.Operator):
         if args['prompt_structure'] == file_batch_structure.id:
             args['prompt'] = [line.body for line in scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
         args['init_img'] = init_img_path
+        if args['use_init_img'] and args['init_img_action'] == 'inpaint' and args['inpaint_mask_src'] == 'image':
+            args['init_mask'] = save_temp_image(scene.init_mask)
         if args['use_init_img_color']:
             args['init_color'] = init_img_path
         if args['backend'] == BackendTarget.STABILITY_SDK.name:

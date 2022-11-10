@@ -40,7 +40,7 @@ def install_pip(method = PipInstall.STANDARD):
                 whl = package.wheel_path
             wheels[name] = whl
         pip_whl = os.path.join(wheels['pip'], 'pip')
-        subprocess.run([sys.executable, pip_whl, "install", *wheels.values(), "--upgrade", "--no-index", "--no-deps", "--no-cache-dir", "--target", absolute_path(".python_dependencies")])
+        subprocess.run([sys.executable, pip_whl, "install", *wheels.values(), "--upgrade", "--no-index", "--no-deps", "--no-cache-dir", "--target", absolute_path(".python_dependencies")], check=True)
         return
     
     # STANDARD or USER_SITE

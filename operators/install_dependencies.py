@@ -93,7 +93,7 @@ def get_pip_install():
         return PipInstall.USER_SITE
 
 
-def install_and_import_requirements(requirements_txt=None, pip_install=False):
+def install_and_import_requirements(requirements_txt=None, pip_install=PipInstall.STANDARD):
     """
     Installs all modules in the 'requirements.txt' file.
     """

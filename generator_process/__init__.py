@@ -137,7 +137,9 @@ class Backend():
         self.intent_backends = {}
         self.stdin = sys.stdin.buffer
         self.stdout = sys.stdout.buffer
-        sys.stdout = open(os.devnull, 'w') # prevent stable diffusion logs from breaking ipc
+        # stdin and stdout are piped for ipc, they should not be accessed through usual methods
+        # stdout can be redirected to stderr so it's still visible within the parent process's console
+        sys.stdout = sys.stderr
         self.stderr = sys.stderr
         self.shared_memory = None
         self.stop_requested = False
@@ -321,6 +323,14 @@ def main():
         if args.backend == BackendTarget.LOCAL:
             from ldm.invoke import txt2mask
             txt2mask.CLIPSEG_WEIGHTS = CLIPSEG_WEIGHTS_PATH
+        
+        try:
+            import certifi
+            os.environ["SSL_CERT_FILE"] = certifi.where()
+            using_certifi = True
+        except ModuleNotFoundError:
+            using_certifi = False
+        print(f"Using certifi: {using_certifi}")
 
         back.thread.start()
         back.main_loop()

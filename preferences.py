@@ -124,56 +124,56 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
         if not weights_installed:
             layout.label(text="Complete the following steps to finish setting up the addon:")
-
-        if len(os.listdir(absolute_path(".python_dependencies"))) < 2:
-            missing_sd_box = layout.box()
-            missing_sd_box.label(text="Dependencies Missing", icon="ERROR")
-            missing_sd_box.label(text="You've likely downloaded source instead of release by accident.")
-            missing_sd_box.label(text="Follow the instructions to install for your platform.")
-            missing_sd_box.operator(OpenLatestVersion.bl_idname, text="Download Latest Release")
-            return
-
-        has_local = len(os.listdir(absolute_path("stable_diffusion"))) > 0
-        if has_local:
-            dependencies_box = layout.box()
-            dependencies_box.label(text="Dependencies Located", icon="CHECKMARK")
-            dependencies_box.label(text="All dependencies (except for model weights) are included in the release.")
-
-            model_weights_box = layout.box()
-            model_weights_box.label(text="Setup Model Weights", icon="SETTINGS")
-            if weights_installed:
-                model_weights_box.label(text="Model weights setup successfully.", icon="CHECKMARK")
-            else:
-                model_weights_box.label(text="The model weights are not distributed with the addon.")
-                model_weights_box.label(text="Follow the steps below to download and install them.")
-                model_weights_box.label(text="1. Download the file 'sd-v1-4.ckpt'")
-                model_weights_box.operator(OpenHuggingFace.bl_idname, icon="URL")
-                model_weights_box.label(text="2. Select the downloaded weights to install.")
-            model_weights_box.operator(ImportWeights.bl_idname, text="Import Model Weights", icon="IMPORT")
-            model_weights_box.template_list(PREFERENCES_UL_WeightsFileList.__name__, "dream_textures_weights", self, "weights", self, "active_weights")
-            model_weights_box.operator(DeleteSelectedWeights.bl_idname, text="Delete Selected Weights", icon="X")
         
-        dream_studio_box = layout.box()
-        dream_studio_box.label(text=f"DreamStudio{' (Optional)' if has_local else ''}", icon="HIDE_OFF")
-        dream_studio_box.label(text=f"Link to your DreamStudio account to run in the cloud{' instead of locally.' if has_local else '.'}")
-        key_row = dream_studio_box.row()
-        key_row.prop(self, "dream_studio_key", text="Key")
-        key_row.operator(OpenDreamStudio.bl_idname, text="Find Your Key", icon="KEYINGSET")
+        has_dependencies = len(os.listdir(absolute_path(".python_dependencies"))) > 2
+        if has_dependencies:
+            has_local = len(os.listdir(absolute_path("stable_diffusion"))) > 0
+            if has_local:
+                dependencies_box = layout.box()
+                dependencies_box.label(text="Dependencies Located", icon="CHECKMARK")
+                dependencies_box.label(text="All dependencies (except for model weights) are included in the release.")
 
-        if weights_installed or len(self.dream_studio_key) > 0:
-            complete_box = layout.box()
-            complete_box.label(text="Addon Setup Complete", icon="CHECKMARK")
-            complete_box.label(text="To locate the interface:")
-            complete_box.label(text="1. Open an Image Editor or Shader Editor space")
-            complete_box.label(text="2. Enable 'View' > 'Sidebar'")
-            complete_box.label(text="3. Select the 'Dream' tab")
-        
-        if default_presets_missing():
-            presets_box = layout.box()
-            presets_box.label(text="Default Presets", icon="PRESET")
-            presets_box.label(text="It looks like you removed some of the default presets.")
-            presets_box.label(text="You can restore them here.")
-            presets_box.operator(RestoreDefaultPresets.bl_idname, icon="RECOVER_LAST")
+                model_weights_box = layout.box()
+                model_weights_box.label(text="Setup Model Weights", icon="SETTINGS")
+                if weights_installed:
+                    model_weights_box.label(text="Model weights setup successfully.", icon="CHECKMARK")
+                else:
+                    model_weights_box.label(text="The model weights are not distributed with the addon.")
+                    model_weights_box.label(text="Follow the steps below to download and install them.")
+                    model_weights_box.label(text="1. Download the file 'sd-v1-4.ckpt'")
+                    model_weights_box.operator(OpenHuggingFace.bl_idname, icon="URL")
+                    model_weights_box.label(text="2. Select the downloaded weights to install.")
+                model_weights_box.operator(ImportWeights.bl_idname, text="Import Model Weights", icon="IMPORT")
+                model_weights_box.template_list(PREFERENCES_UL_WeightsFileList.__name__, "dream_textures_weights", self, "weights", self, "active_weights")
+                model_weights_box.operator(DeleteSelectedWeights.bl_idname, text="Delete Selected Weights", icon="X")
+            
+            dream_studio_box = layout.box()
+            dream_studio_box.label(text=f"DreamStudio{' (Optional)' if has_local else ''}", icon="HIDE_OFF")
+            dream_studio_box.label(text=f"Link to your DreamStudio account to run in the cloud{' instead of locally.' if has_local else '.'}")
+            key_row = dream_studio_box.row()
+            key_row.prop(self, "dream_studio_key", text="Key")
+            key_row.operator(OpenDreamStudio.bl_idname, text="Find Your Key", icon="KEYINGSET")
+
+            if weights_installed or len(self.dream_studio_key) > 0:
+                complete_box = layout.box()
+                complete_box.label(text="Addon Setup Complete", icon="CHECKMARK")
+                complete_box.label(text="To locate the interface:")
+                complete_box.label(text="1. Open an Image Editor or Shader Editor space")
+                complete_box.label(text="2. Enable 'View' > 'Sidebar'")
+                complete_box.label(text="3. Select the 'Dream' tab")
+            
+            if default_presets_missing():
+                presets_box = layout.box()
+                presets_box.label(text="Default Presets", icon="PRESET")
+                presets_box.label(text="It looks like you removed some of the default presets.")
+                presets_box.label(text="You can restore them here.")
+                presets_box.operator(RestoreDefaultPresets.bl_idname, icon="RECOVER_LAST")
+        else:
+            missing_dependencies_box = layout.box()
+            missing_dependencies_box.label(text="Dependencies Missing", icon="ERROR")
+            missing_dependencies_box.label(text="You've likely downloaded source instead of release by accident.")
+            missing_dependencies_box.label(text="Follow the instructions to install for your platform.")
+            missing_dependencies_box.operator(OpenLatestVersion.bl_idname, text="Download Latest Release")
         
         contributors_box = layout.box()
         contributors_box.label(text="Contributors", icon="COMMUNITY")
@@ -185,8 +185,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             developer_box.label(text="Development Tools", icon="CONSOLE")
             developer_box.label(text="This section is for addon development only. You are seeing this because you have 'Developer Extras' enabled.")
             developer_box.label(text="Do not use any operators in this section unless you are setting up a development environment.")
-            already_installed = len(os.listdir(absolute_path(".python_dependencies"))) > 0
-            if already_installed:
+            if has_dependencies:
                 warn_box = developer_box.box()
                 warn_box.label(text="Dependencies already installed. Only install below if you developing the addon", icon="CHECKMARK")
             developer_box.prop(context.scene, 'dream_textures_requirements_path')

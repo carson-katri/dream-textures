@@ -3,6 +3,7 @@
 [![Latest Release](https://flat.badgen.net/github/release/carson-katri/dream-textures)](https://github.com/carson-katri/dream-textures/releases/latest)
 [![Join the Discord](https://flat.badgen.net/badge/icon/discord?icon=discord&label)](https://discord.gg/EmDJ8CaWZ7)
 [![Total Downloads](https://img.shields.io/github/downloads/carson-katri/dream-textures/total?style=flat-square)](https://github.com/carson-katri/dream-textures/releases/latest)
+[![Buy on Blender Market](https://flat.badgen.net/badge/buy/blender%20market/orange)](https://www.blendermarket.com/products/dream-textures)
 
 * Create textures, concept art, background assets, and more with a simple text prompt
 * Use the 'Seamless' option to create textures that tile perfectly with no visible seam

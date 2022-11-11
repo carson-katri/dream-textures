@@ -58,18 +58,6 @@ def prompt_to_image(self):
             self.send_action(Action.STEP_NO_SHOW, step=step)
 
     def preload_models():
-        import urllib
-        import ssl
-        urlopen = urllib.request.urlopen
-        def urlopen_decroator(func):
-            def urlopen(*args, **kwargs):
-                ssl_context = ssl.create_default_context()
-                ssl_context.check_hostname = False
-                ssl_context.verify_mode = ssl.CERT_NONE
-                return func(*args, **kwargs, context=ssl_context)
-            return urlopen
-        urllib.request.urlopen = urlopen_decroator(urllib.request.urlopen)
-
         tqdm = None
         try:
             from huggingface_hub.utils.tqdm import tqdm as hfh_tqdm
@@ -123,7 +111,6 @@ def prompt_to_image(self):
         CLIPDensePredT(version='ViT-B/16', reduce_dim=64)
 
         tqdm.update = old_update
-        urllib.request.urlopen = urlopen
     
     from transformers.utils.hub import TRANSFORMERS_CACHE
     model_paths = {'bert-base-uncased', 'openai--clip-vit-large-patch14'}

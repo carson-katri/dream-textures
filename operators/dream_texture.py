@@ -207,18 +207,21 @@ class HeadlessDreamTexture(bpy.types.Operator):
 
         def save_temp_image(img, path=None):
             path = path if path is not None else tempfile.NamedTemporaryFile().name
-            
-            orig_path = img.filepath_raw
-            orig_format = img.file_format
 
-            img.filepath_raw = path
-            img.file_format = 'PNG'
-            img.save()
+            settings = scene.render.image_settings
+            file_format = settings.file_format
+            mode = settings.color_mode
+            depth = settings.color_depth
 
-            img.filepath_raw = orig_path
-            img.file_format = orig_format
+            settings.file_format = 'PNG'
+            settings.color_mode = 'RGBA'
+            settings.color_depth = '8'
 
-            print(path)
+            img.save_render(path)
+
+            settings.file_format = file_format
+            settings.color_mode = mode
+            settings.color_depth = depth
 
             return path
 

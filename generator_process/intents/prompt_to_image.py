@@ -135,7 +135,8 @@ def prompt_to_image(self):
                                     "weights": args['model'],
                                     "description": "Stable Diffusion inference model",
                                     "width": 512,
-                                    "height": 512
+                                    "height": 512,
+                                    "vae": None if args['vae'] == 'default' else f"weights/vae/{args['vae']}"
                                 }
                             }
                             if args['vae'] != 'default':

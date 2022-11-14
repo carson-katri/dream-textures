@@ -139,8 +139,6 @@ def prompt_to_image(self):
                                     "vae": None if args['vae'] == 'default' else f"weights/vae/{args['vae']}"
                                 }
                             }
-                            if args['vae'] != 'default':
-                                config["vae"] = f"weights/vae/{args['vae']}"
                             return OmegaConf.create(config)
                         else:
                             return func(path)

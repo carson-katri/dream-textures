@@ -218,6 +218,8 @@ class HeadlessDreamTexture(bpy.types.Operator):
             img.filepath_raw = orig_path
             img.file_format = orig_format
 
+            print(path)
+
             return path
 
         if headless_prompt.use_init_img and headless_prompt.init_img_src == 'open_editor':

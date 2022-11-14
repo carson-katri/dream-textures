@@ -303,7 +303,6 @@ def main():
             sys.path.append(absolute_path("stable_diffusion/src/clip"))
             sys.path.append(absolute_path("stable_diffusion/src/k-diffusion"))
             sys.path.append(absolute_path("stable_diffusion/src/taming-transformers"))
-            sys.path.append(absolute_path("stable_diffusion/src/clipseg"))
         site.addsitedir(absolute_path(".python_dependencies"))
         sys.path.extend(paths)
 

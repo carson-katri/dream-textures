@@ -1,7 +1,7 @@
 import bpy
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty
 import os
-from ..absolute_path import absolute_path, WEIGHTS_PATH, VAE_WEIGHTS_PATH, INPAINTING_WEIGHTS_PATH
+from ..absolute_path import absolute_path, WEIGHTS_PATH, VAE_WEIGHTS_PATH, INPAINTING_WEIGHTS_PATH, CLIPSEG_WEIGHTS_PATH
 from ..generator_process.registrar import BackendTarget
 from ..prompt_engineering import *
 
@@ -60,6 +60,8 @@ def weights_options(self, context):
     return options(WEIGHTS_PATH) + options(INPAINTING_WEIGHTS_PATH)
 def vae_options(self, context):
     return [('default', 'Default', '', 0)] + [(f, f, '', i + 1) for i, f in enumerate(filter(lambda f: f.endswith('.ckpt'), os.listdir(VAE_WEIGHTS_PATH)))]
+def clipseg_options(self, context):
+    return [(f, f, '', i) for i, f in enumerate(filter(lambda f: f.endswith('.pth'), os.listdir(CLIPSEG_WEIGHTS_PATH)))]
 
 def backend_options(self, context):
     def options():
@@ -119,6 +121,7 @@ attributes = {
     # Inpaint
     "inpaint_mask_src": EnumProperty(name="Mask Source", items=inpaint_mask_sources_filtered, default=1),
     "inpaint_replace": FloatProperty(name="Replace", description="Replaces the masked area with a specified amount of noise, can create more extreme changes. Values of 0 or 1 will give the best results", min=0, max=1, default=0),
+    "clipseg_model": EnumProperty(name="Prompt Mask Model", items=clipseg_options, default=0, description="Specify which clipseg weights to use"),
     "text_mask": StringProperty(name="Mask Prompt"),
     "text_mask_confidence": FloatProperty(name="Confidence Threshold", description="How confident the segmentation model needs to be", default=0.5, min=0),
 

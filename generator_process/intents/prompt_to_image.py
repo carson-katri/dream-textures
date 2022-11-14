@@ -33,7 +33,7 @@ def prompt2image(self, args, step_callback, image_callback, info_callback, excep
 def prompt_to_image(self):
     args = yield
     self.send_info("Importing Dependencies")
-    from absolute_path import absolute_path, INPAINTING_WEIGHTS_PATH
+    from absolute_path import absolute_path, INPAINTING_WEIGHTS_PATH, CLIPSEG_WEIGHTS_PATH
     from stable_diffusion.ldm.generate import Generate
     from stable_diffusion.ldm.invoke.devices import choose_precision
     from io import StringIO
@@ -122,6 +122,10 @@ def prompt_to_image(self):
             self.check_stop()
             # Reset the step count
             step = 0
+
+            if args['backend'] == BackendTarget.LOCAL.name:
+                from ldm.invoke import txt2mask
+                txt2mask.CLIPSEG_WEIGHTS = absolute_path(os.path.join(CLIPSEG_WEIGHTS_PATH, args['clipseg_model']))
 
             if generator is None or generator.precision != (choose_precision(generator.device) if args['precision'] == 'auto' else args['precision']) or generator.model_name != args['model']:
                 self.send_info("Loading Model")

@@ -319,10 +319,6 @@ def main():
             if os.path.exists(absolute_path(".python_dependencies/skimage")):
                 from skimage import transform
 
-        if args.backend == BackendTarget.LOCAL:
-            from ldm.invoke import txt2mask
-            txt2mask.CLIPSEG_WEIGHTS = CLIPSEG_WEIGHTS_PATH
-        
         try:
             import certifi
             os.environ["SSL_CERT_FILE"] = certifi.where()

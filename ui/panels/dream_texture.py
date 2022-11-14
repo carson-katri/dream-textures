@@ -217,13 +217,14 @@ def init_image_panels(sub_panel, space_type, get_prompt):
             if prompt.init_img_action == 'inpaint':
                 layout.prop(prompt, "inpaint_mask_src")
                 if prompt.inpaint_mask_src == 'prompt':
-                    if not os.path.exists(CLIPSEG_WEIGHTS_PATH):
+                    if len(os.listdir(CLIPSEG_WEIGHTS_PATH)) < 1:
                         layout.label(text="CLIP Segmentation model weights not installed.")
                         layout.label(text="1. Download the file 'rd64-uni.pth'")
                         layout.operator(OpenClipSegDownload.bl_idname, icon="URL")
                         layout.label(text="2. Select the downloaded weights to install.")
                         layout.operator(OpenClipSegWeightsDirectory.bl_idname, icon="IMPORT")
                     else:
+                        layout.prop(prompt, "clipseg_model")
                         layout.prop(prompt, "text_mask")
                         layout.prop(prompt, "text_mask_confidence")
                 elif prompt.inpaint_mask_src == 'image':

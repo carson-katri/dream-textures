@@ -11,6 +11,7 @@ def apply_ocio_transforms(self, args, image_callback, exception_callback):
 
     queue = self.queue
     callbacks = {
+        Action.INFO: lambda *args, **kwargs: None,
         Action.IMAGE: image_callback,
         Action.EXCEPTION: exception_callback,
         Action.STOPPED: lambda: None

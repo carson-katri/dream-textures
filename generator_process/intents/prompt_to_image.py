@@ -123,9 +123,8 @@ def prompt_to_image(self):
             # Reset the step count
             step = 0
 
-            if args['backend'] == BackendTarget.LOCAL.name:
-                from ldm.invoke import txt2mask
-                txt2mask.CLIPSEG_WEIGHTS = absolute_path(os.path.join(CLIPSEG_WEIGHTS_PATH, args['clipseg_model']))
+            from ldm.invoke import txt2mask
+            txt2mask.CLIPSEG_WEIGHTS = absolute_path(os.path.join(CLIPSEG_WEIGHTS_PATH, args['clipseg_model']))
 
             if generator is None or generator.precision != (choose_precision(generator.device) if args['precision'] == 'auto' else args['precision']) or generator.model_name != args['model']:
                 self.send_info("Loading Model")

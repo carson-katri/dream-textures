@@ -121,15 +121,18 @@ class DreamTexture(bpy.types.Operator):
 headless_prompt = None
 headless_step_callback = None
 headless_image_callback = None
+headless_exception_callback = None
 headless_init_img = None
 headless_args = None
-def dream_texture(prompt, step_callback, image_callback, init_img=None, **kwargs):
+def dream_texture(prompt, step_callback, image_callback, exception_callback=None, init_img=None, **kwargs):
     global headless_prompt
     headless_prompt = prompt
     global headless_step_callback
     headless_step_callback = step_callback
     global headless_image_callback
     headless_image_callback = image_callback
+    global headless_exception_callback
+    headless_exception_callback = exception_callback
     global headless_init_img
     headless_init_img = init_img
     global headless_args
@@ -273,7 +276,7 @@ class HeadlessDreamTexture(bpy.types.Operator):
             image_callback=image_callback,
             # a function or method that will recieve messages
             info_callback=info,
-            exception_callback=handle_exception
+            exception_callback=headless_exception_callback or handle_exception
         )
         context.window_manager.modal_handler_add(self)
         global timer

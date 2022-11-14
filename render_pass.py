@@ -119,14 +119,9 @@ def register_render_pass():
                             def set_pixels(npbuf):
                                 nonlocal pixels
                                 pixels = npbuf
+                                event.set()
                             def do_dream_texture_pass():
-                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, set_pixels), combined_pass_image, width=size_x, height=size_y, show_steps=False, use_init_img_color=False)
-                                gen = GeneratorProcess.shared(None, False)
-                                def waiter():
-                                    if gen.in_use:
-                                        return 0.01
-                                    event.set()
-                                bpy.app.timers.register(waiter)
+                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, set_pixels), exception_callback=lambda *args, **kwargs: event.set(), init_img=combined_pass_image, width=size_x, height=size_y, show_steps=False, use_init_img_color=False)
                             bpy.app.timers.register(do_dream_texture_pass)
                             event.wait()
 

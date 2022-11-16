@@ -10,11 +10,13 @@ class SCENE_UL_HistoryList(bpy.types.UIList):
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             if item.prompt_structure_token_subject == "SCENE_UL_HistoryList_header":
                 layout.label(text="Subject")
+                layout.label(text="Seed")
                 layout.label(text="Size")
                 layout.label(text="Steps")
                 layout.label(text="Sampler")
             else:
                 layout.label(text=item.get_prompt_subject(), translate=False, icon_value=icon)
+                layout.label(text=f"{item.seed}", translate=False)
                 layout.label(text=f"{item.width}x{item.height}", translate=False)
                 layout.label(text=f"{item.steps} steps", translate=False)
                 layout.label(text=next(x for x in sampler_options if x[0] == item.sampler_name)[1], translate=False)

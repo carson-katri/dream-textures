@@ -21,94 +21,99 @@ bl_info = {
     "category": "Paint"
 }
 
-import bpy
-from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty
-import sys
-import os
+from multiprocessing import current_process
 
-module_name = os.path.basename(os.path.dirname(__file__))
-def clear_modules():
-    for name in list(sys.modules.keys()):
-        if name.startswith(module_name) and name != module_name:
-            del sys.modules[name]
-clear_modules() # keep before all addon imports
+if current_process().name != "__actor__":
+    import bpy
+    from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty
+    import sys
+    import os
 
-from .render_pass import register_render_pass, unregister_render_pass
-from .prompt_engineering import *
-from .operators.open_latest_version import check_for_updates
-from .classes import CLASSES, PREFERENCE_CLASSES
-from .tools import TOOLS
-from .operators.dream_texture import DreamTexture, kill_generator
-from .property_groups.dream_prompt import DreamPrompt
-from .operators.upscale import upscale_options
-from .preferences import StableDiffusionPreferences
-from .ui.presets import register_default_presets
+    module_name = os.path.basename(os.path.dirname(__file__))
+    def clear_modules():
+        for name in list(sys.modules.keys()):
+            if name.startswith(module_name) and name != module_name:
+                del sys.modules[name]
+    clear_modules() # keep before all addon imports
 
-requirements_path_items = (
-    # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
-    ('requirements-lin-win-colab-CUDA.txt', 'Linux/Windows (CUDA)', 'Linux or Windows with NVIDIA GPU'),
-    ('requirements-mac-MPS-CPU.txt', 'Apple Silicon', 'Apple M1/M2'),
-    ('requirements-lin-AMD.txt', 'Linux (AMD)', 'Linux with AMD GPU'),
-)
+    from .render_pass import register_render_pass, unregister_render_pass
+    from .prompt_engineering import *
+    from .operators.open_latest_version import check_for_updates
+    from .classes import CLASSES, PREFERENCE_CLASSES
+    from .tools import TOOLS
+    from .operators.dream_texture import DreamTexture, kill_generator
+    from .property_groups.dream_prompt import DreamPrompt
+    from .operators.upscale import upscale_options
+    from .preferences import StableDiffusionPreferences
+    from .ui.presets import register_default_presets
 
-def register():
-    dt_op = bpy.ops
-    for name in DreamTexture.bl_idname.split("."):
-        dt_op = getattr(dt_op, name)
-    if hasattr(bpy.types, dt_op.idname()): # objects under bpy.ops are created on the fly, have to check that it actually exists a little differently
-        raise RuntimeError("Another instance of Dream Textures is already running.")
+    requirements_path_items = (
+        # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
+        ('requirements-lin-win-colab-CUDA.txt', 'Linux/Windows (CUDA)', 'Linux or Windows with NVIDIA GPU'),
+        ('requirements-mac-MPS-CPU.txt', 'Apple Silicon', 'Apple M1/M2'),
+        ('requirements-lin-AMD.txt', 'Linux (AMD)', 'Linux with AMD GPU'),
+    )
 
-    bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-lin-win-colab-CUDA.txt')
+    def register():
+        dt_op = bpy.ops
+        for name in DreamTexture.bl_idname.split("."):
+            dt_op = getattr(dt_op, name)
+        if hasattr(bpy.types, dt_op.idname()): # objects under bpy.ops are created on the fly, have to check that it actually exists a little differently
+            raise RuntimeError("Another instance of Dream Textures is already running.")
 
-    for cls in PREFERENCE_CLASSES:
-        bpy.utils.register_class(cls)
+        bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-lin-win-colab-CUDA.txt')
 
-    check_for_updates()
+        for cls in PREFERENCE_CLASSES:
+            bpy.utils.register_class(cls)
 
-    bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
-    bpy.types.Scene.dream_textures_prompt_file = PointerProperty(type=bpy.types.Text)
-    bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
-    bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
-    def get_selection_preview(self):
-        history = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
-        if self.dream_textures_history_selection > 0 and self.dream_textures_history_selection < len(history):
-            return history[self.dream_textures_history_selection].generate_prompt()
-        return ""
-    bpy.types.Scene.dream_textures_history_selection = IntProperty(default=1)
-    bpy.types.Scene.dream_textures_history_selection_preview = bpy.props.StringProperty(name="", default="", get=get_selection_preview, set=lambda _, __: None)
-    bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=0)
-    bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
+        check_for_updates()
 
-    bpy.types.Scene.dream_textures_viewport_enabled = BoolProperty(name="Viewport Enabled", default=False)
-    bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)
-    bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
-    bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
-    bpy.types.Scene.dream_textures_upscale_full_precision = bpy.props.BoolProperty(name="Full Precision", default=True)
-    bpy.types.Scene.dream_textures_upscale_seamless = bpy.props.BoolProperty(name="Seamless", default=False)
+        bpy.types.Scene.dream_textures_prompt = PointerProperty(type=DreamPrompt)
+        bpy.types.Scene.dream_textures_prompt_file = PointerProperty(type=bpy.types.Text)
+        bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
+        bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
+        def get_selection_preview(self):
+            history = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
+            if self.dream_textures_history_selection > 0 and self.dream_textures_history_selection < len(history):
+                return history[self.dream_textures_history_selection].generate_prompt()
+            return ""
+        bpy.types.Scene.dream_textures_history_selection = IntProperty(default=1)
+        bpy.types.Scene.dream_textures_history_selection_preview = bpy.props.StringProperty(name="", default="", get=get_selection_preview, set=lambda _, __: None)
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=0)
+        bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
 
-    for cls in CLASSES:
-        bpy.utils.register_class(cls)
+        bpy.types.Scene.dream_textures_viewport_enabled = BoolProperty(name="Viewport Enabled", default=False)
+        bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)
+        bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
+        bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
+        bpy.types.Scene.dream_textures_upscale_full_precision = bpy.props.BoolProperty(name="Full Precision", default=True)
+        bpy.types.Scene.dream_textures_upscale_seamless = bpy.props.BoolProperty(name="Seamless", default=False)
 
-    for tool in TOOLS:
-        bpy.utils.register_tool(tool)
+        for cls in CLASSES:
+            bpy.utils.register_class(cls)
 
-    # Monkey patch cycles render passes
-    register_render_pass()
+        for tool in TOOLS:
+            bpy.utils.register_tool(tool)
 
-    register_default_presets()
+        # Monkey patch cycles render passes
+        register_render_pass()
 
-def unregister():
-    for cls in PREFERENCE_CLASSES:
-        bpy.utils.unregister_class(cls)
+        register_default_presets()
 
-    for cls in CLASSES:
-        bpy.utils.unregister_class(cls)
-    for tool in TOOLS:
-        bpy.utils.unregister_tool(tool)
-    
-    unregister_render_pass()
+    def unregister():
+        for cls in PREFERENCE_CLASSES:
+            bpy.utils.unregister_class(cls)
 
-    kill_generator()
+        for cls in CLASSES:
+            bpy.utils.unregister_class(cls)
+        for tool in TOOLS:
+            bpy.utils.unregister_tool(tool)
+        
+        # unregister_render_pass()
 
-if __name__ == "__main__":
-    register()
+        kill_generator()
+
+    from .generator_process import Generator
+    from .generator_process.actor import ActorContext
+    gen = Generator(ActorContext.FRONTEND)
+    gen.start()

@@ -1,0 +1,6 @@
+diffusers
+transformers
+huggingface_hub
+torch>=1.13
+stability-sdk==0.2.6
+opencolorio

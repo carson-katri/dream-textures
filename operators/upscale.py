@@ -3,7 +3,7 @@ import tempfile
 from multiprocessing.shared_memory import SharedMemory
 import numpy as np
 import sys
-from ..generator_process import GeneratorProcess
+# from ..generator_process import GeneratorProcess
 
 upscale_options = [
     ("2", "2x", "", 2),

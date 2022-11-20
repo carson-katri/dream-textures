@@ -12,7 +12,8 @@ from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..absolute_path import WEIGHTS_PATH, CLIPSEG_WEIGHTS_PATH
-from ..generator_process import MISSING_DEPENDENCIES_ERROR, GeneratorProcess, Intent
+from ..generator_process import Generator
+from ..generator_process.actions.prompt_to_image import Pipeline, Optimizations
 
 import tempfile
 
@@ -34,7 +35,7 @@ class DreamTexture(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return GeneratorProcess.can_use()
+        return Generator.shared().can_use()
 
     def invoke(self, context, event):
         if weights_are_installed(self.report):
@@ -115,7 +116,12 @@ class DreamTexture(bpy.types.Operator):
                         bpy.data.images.remove(last_data_block)
                     last_data_block = step_image
                     return # Only perform this on the first image editor found.
-        dream_texture(context.scene.dream_textures_prompt, view_step, image_writer)
+        # dream_texture(context.scene.dream_textures_prompt, view_step, image_writer)
+        Generator.shared().prompt_to_image(
+            Pipeline.STABLE_DIFFUSION,
+            optimizations=Optimizations(),
+            **scene.dream_textures_prompt.generate_args(),
+        )
         return {"FINISHED"}
 
 headless_prompt = None
@@ -293,7 +299,7 @@ def modal_stopped(context):
         last_data_block = None
 
 def kill_generator(context=bpy.context):
-    GeneratorProcess.kill_shared()
+    Generator.shared().close()
     modal_stopped(context)
 
 class ReleaseGenerator(bpy.types.Operator):

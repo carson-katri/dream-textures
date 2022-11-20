@@ -1,6 +1,0 @@
-stable-diffusion-1.4:
-  config: stable_diffusion/configs/stable-diffusion/v1-inference.yaml
-  weights: weights/stable-diffusion-v1.4/model.ckpt
-  description: Stable Diffusion inference model version 1.4
-  width: 512
-  height: 512

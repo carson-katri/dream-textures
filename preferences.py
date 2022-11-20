@@ -4,21 +4,26 @@ from bpy_extras.io_utils import ImportHelper
 import os
 import webbrowser
 import shutil
+from concurrent.futures import Future
+import functools
 
 from .absolute_path import WEIGHTS_PATH, absolute_path
 from .operators.install_dependencies import InstallDependencies
 from .operators.open_latest_version import OpenLatestVersion
 from .property_groups.dream_prompt import DreamPrompt
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
+from .generator_process import Generator
+from .generator_process.actions.huggingface_hub import Model
+from typing import List
 
 class OpenHuggingFace(bpy.types.Operator):
     bl_idname = "dream_textures.open_hugging_face"
-    bl_label = "Download Weights from Hugging Face"
-    bl_description = ("Opens huggingface.co to the download page for the model weights.")
+    bl_label = "Get Access Token"
+    bl_description = ("Opens huggingface.co to the tokens page")
     bl_options = {"REGISTER", "INTERNAL"}
 
     def execute(self, context):
-        webbrowser.open("https://huggingface.co/CompVis/stable-diffusion-v-1-4-original")
+        webbrowser.open("https://huggingface.co/settings/tokens")
         return {"FINISHED"}
 
 class ImportWeights(bpy.types.Operator, ImportHelper):
@@ -73,59 +78,121 @@ class OpenDreamStudio(bpy.types.Operator):
         webbrowser.open("https://beta.dreamstudio.ai/membership?tab=apiKeys")
         return {"FINISHED"}
 
-class WeightsFile(bpy.types.PropertyGroup):
-    bl_label = "Weights File"
-    bl_idname = "dream_textures.WeightsFile"
+class Model(bpy.types.PropertyGroup):
+    bl_label = "Model"
+    bl_idname = "dream_textures.Model"
 
-    name: bpy.props.StringProperty(name="Path")
+    model: bpy.props.StringProperty(name="Model")
+    downloads: bpy.props.IntProperty(name="Downloads")
+    likes: bpy.props.IntProperty(name="Likes")
 
-class PREFERENCES_UL_WeightsFileList(bpy.types.UIList):
+class PREFERENCES_UL_ModelList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
-        layout.label(text=item.name)
+        model_name = item.model
+        is_installed = False
+        if os.path.exists(item.model):
+            model_name = os.path.basename(item.model).replace('models--', '').replace('--', '/')
+            is_installed = True
+        split = layout.split(factor=0.75)
+        split.label(text=model_name)
+        if item.downloads != -1:
+            split.label(text=str(item.downloads), icon="IMPORT")
+        if item.downloads != -1:
+            split.label(text=str(item.likes), icon="HEART")
+        layout.operator(InstallModel.bl_idname, text="", icon="FILE_FOLDER" if is_installed else "IMPORT").model = item.model
+
+model_installing = False
+
+@staticmethod
+def set_model_list(model_list: str, future: Future):
+    getattr(bpy.context.preferences.addons[__package__].preferences, model_list).clear()
+    for model in future.result():
+        m = getattr(bpy.context.preferences.addons[__package__].preferences, model_list).add()
+        m.model = model.id
+        m.downloads = model.downloads
+        m.likes = model.likes
+
+class ModelSearch(bpy.types.Operator):
+    bl_idname = "dream_textures.model_search"
+    bl_label = "Search"
+    bl_description = ("Searches HuggingFace Hub for models")
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    def execute(self, context):
+        
+        return {"FINISHED"}
+
+class InstallModel(bpy.types.Operator):
+    bl_idname = "dream_textures.install_model"
+    bl_label = "Install or Open"
+    bl_description = ("Install or open a model from the cache")
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    model: StringProperty(name="Model ID")
+
+    def execute(self, context):
+        if os.path.exists(self.model):
+            webbrowser.open(f"file://{self.model}")
+        else:
+            global model_installing
+            model_installing = True
+            def done_installing(_):
+                global model_installing
+                model_installing = False
+                Generator.shared().hf_list_installed_models().add_done_callback(functools.partial(set_model_list, 'installed_models'))
+            Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token).add_done_callback(done_installing)
+        return {"FINISHED"}
+
+def _model_search(self, context):
+    Generator.shared().hf_list_models(self.model_query).add_done_callback(functools.partial(set_model_list, 'model_results'))
 
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     history: CollectionProperty(type=DreamPrompt)
-    
-    weights: CollectionProperty(type=WeightsFile)
-    active_weights: bpy.props.IntProperty(name="Active Weights", default=0)
 
     dream_studio_key: StringProperty(name="DreamStudio Key")
+
+    model_query: StringProperty(name="Search", update=_model_search)
+    model_results: CollectionProperty(type=Model)
+    active_model_result: bpy.props.IntProperty(name="Active Model", default=0)
+    hf_token: StringProperty(name="HuggingFace Token")
+
+    installed_models: CollectionProperty(type=Model)
+    active_installed_model: bpy.props.IntProperty(name="Active Model", default=0)
+
+    @staticmethod
+    def register():
+        Generator.shared().hf_list_installed_models().add_done_callback(functools.partial(set_model_list, 'installed_models'))
 
     def draw(self, context):
         layout = self.layout
 
-        self.weights.clear()
-        for path in filter(lambda f: f.endswith('.ckpt'), os.listdir(WEIGHTS_PATH)):
-            weights_file = self.weights.add()
-            weights_file.name = path
-        weights_installed = len(self.weights) > 0
+        weights_installed = len(self.installed_models) > 0
 
         if not weights_installed:
             layout.label(text="Complete the following steps to finish setting up the addon:")
-        
+
         has_dependencies = len(os.listdir(absolute_path(".python_dependencies"))) > 2
         if has_dependencies:
-            has_local = len(os.listdir(absolute_path("stable_diffusion"))) > 0
-            if has_local:
-                dependencies_box = layout.box()
-                dependencies_box.label(text="Dependencies Located", icon="CHECKMARK")
-                dependencies_box.label(text="All dependencies (except for model weights) are included in the release.")
+            has_local = os.path.exists(absolute_path(".python_dependencies/diffusers")) > 0
 
-                model_weights_box = layout.box()
-                model_weights_box.label(text="Setup Model Weights", icon="SETTINGS")
-                if weights_installed:
-                    model_weights_box.label(text="Model weights setup successfully.", icon="CHECKMARK")
-                else:
-                    model_weights_box.label(text="The model weights are not distributed with the addon.")
-                    model_weights_box.label(text="Follow the steps below to download and install them.")
-                    model_weights_box.label(text="1. Download the file 'sd-v1-4.ckpt'")
-                    model_weights_box.operator(OpenHuggingFace.bl_idname, icon="URL")
-                    model_weights_box.label(text="2. Select the downloaded weights to install.")
-                model_weights_box.operator(ImportWeights.bl_idname, text="Import Model Weights", icon="IMPORT")
-                model_weights_box.template_list("UI_UL_list", "dream_textures_weights", self, "weights", self, "active_weights")
-                model_weights_box.operator(DeleteSelectedWeights.bl_idname, text="Delete Selected Weights", icon="X")
+            if has_local:        
+                search_box = layout.box()
+                search_box.label(text="Find Models", icon="SETTINGS")
+                search_box.label(text="Search HuggingFace Hub for compatible models.")
+                
+                auth_row = search_box.row()
+                auth_row.prop(self, "hf_token", text="Token")
+                auth_row.operator(OpenHuggingFace.bl_idname, text="Get Your Token", icon="KEYINGSET")
+
+                search_box.prop(self, "model_query", text="", icon="VIEWZOOM")
+                
+                if len(self.model_results) > 0:
+                    search_box.enabled = not model_installing
+                    search_box.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_model_results", self, "model_results", self, "active_model_result")
+
+                layout.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_installed_models", self, "installed_models", self, "active_installed_model")
             
             dream_studio_box = layout.box()
             dream_studio_box.label(text=f"DreamStudio{' (Optional)' if has_local else ''}", icon="HIDE_OFF")

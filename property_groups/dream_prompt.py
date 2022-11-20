@@ -53,12 +53,12 @@ seamless_axes = [
     ('xy', 'Both', '', 3),
 ]
 
-def weights_options(self, context):
+def model_options(self, context):
     return [(f, f, '', i) for i, f in enumerate(filter(lambda f: f.endswith('.ckpt'), os.listdir(WEIGHTS_PATH)))]
 
 def backend_options(self, context):
     def options():
-        if len(os.listdir(absolute_path("stable_diffusion"))) > 0:
+        if os.path.exists(absolute_path(".python_dependencies/diffusers")):
             yield (BackendTarget.LOCAL.name, 'Local', 'Run on your own hardware', 1)
         if len(context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key) > 0:
             yield (BackendTarget.STABILITY_SDK.name, 'DreamStudio', 'Run in the cloud with DreamStudio', 2)
@@ -74,8 +74,8 @@ def seed_clamp(self, ctx):
         pass # will get hashed once generated
 
 attributes = {
-    "backend": EnumProperty(name="Backend", items=backend_options, default=1 if len(os.listdir(absolute_path("stable_diffusion"))) > 0 else 2, description="Fill in a few simple options to create interesting images quickly"),
-    "model": EnumProperty(name="Model", items=weights_options, description="Specify which weights file to use for inference"),
+    "backend": EnumProperty(name="Backend", items=backend_options, default=1 if os.path.exists(absolute_path(".python_dependencies/diffusers")) else 2, description="Fill in a few simple options to create interesting images quickly"),
+    "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference"),
 
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),

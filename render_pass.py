@@ -7,7 +7,7 @@ import numpy as np
 import os
 from multiprocessing.shared_memory import SharedMemory
 
-from .generator_process import GeneratorProcess
+from .generator_process import Generator
 
 from .operators.dream_texture import dream_texture, weights_are_installed
 

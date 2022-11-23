@@ -121,6 +121,9 @@ attributes = {
     "outpaint_bottom": IntProperty(name="Bottom", default=64, step=64, min=0),
     "outpaint_left": IntProperty(name="Left", default=64, step=64, min=0),
     "outpaint_blend": IntProperty(name="Blend", description="Gaussian blur amount to apply to the extended area", default=16, min=0),
+
+    # Resulting image
+    "dream_textures_hash": StringProperty(name="Result Hash"),
 }
 
 def map_structure_token_items(value):

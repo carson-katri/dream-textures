@@ -3,7 +3,7 @@ from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, St
 import os
 import sys
 from typing import _AnnotatedAlias
-from ..absolute_path import absolute_path, WEIGHTS_PATH
+from ..absolute_path import absolute_path
 from ..generator_process.registrar import BackendTarget
 from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler
 from ..generator_process import Generator

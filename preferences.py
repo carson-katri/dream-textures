@@ -101,12 +101,10 @@ class PREFERENCES_UL_ModelList(bpy.types.UIList):
             split.label(text=str(item.likes), icon="HEART")
         layout.operator(InstallModel.bl_idname, text="", icon="FILE_FOLDER" if is_installed else "IMPORT").model = item.model
 
-model_installing = False
-
 @staticmethod
-def set_model_list(model_list: str, future: Future):
+def set_model_list(model_list: str, models: list):
     getattr(bpy.context.preferences.addons[__package__].preferences, model_list).clear()
-    for model in future.result():
+    for model in models:
         m = getattr(bpy.context.preferences.addons[__package__].preferences, model_list).add()
         m.model = model.id
         m.downloads = model.downloads
@@ -134,17 +132,14 @@ class InstallModel(bpy.types.Operator):
         if os.path.exists(self.model):
             webbrowser.open(f"file://{self.model}")
         else:
-            global model_installing
-            model_installing = True
-            def done_installing(_):
-                global model_installing
-                model_installing = False
-                Generator.shared().hf_list_installed_models().add_done_callback(functools.partial(set_model_list, 'installed_models'))
-            Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token).add_done_callback(done_installing)
+            _ = Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token).result()
+            set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
         return {"FINISHED"}
 
 def _model_search(self, context):
-    Generator.shared().hf_list_models(self.model_query).add_done_callback(functools.partial(set_model_list, 'model_results'))
+    def on_done(future):
+        set_model_list('model_results', future.result())
+    Generator.shared().hf_list_models(self.model_query).add_done_callback(on_done)
 
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
@@ -163,7 +158,9 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
     @staticmethod
     def register():
-        Generator.shared().hf_list_installed_models().add_done_callback(functools.partial(set_model_list, 'installed_models'))
+        print("register")
+        set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+        print("done")
 
     def draw(self, context):
         layout = self.layout
@@ -189,7 +186,6 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                 search_box.prop(self, "model_query", text="", icon="VIEWZOOM")
                 
                 if len(self.model_results) > 0:
-                    search_box.enabled = not model_installing
                     search_box.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_model_results", self, "model_results", self, "active_model_result")
 
                 layout.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_installed_models", self, "installed_models", self, "active_installed_model")

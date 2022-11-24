@@ -49,34 +49,6 @@ def register_render_pass():
                         for pass_i in layer.passes:
                             if pass_i.name == original_render_pass.name:
                                 render_pass = pass_i
-                        def do_ocio_transform(event, target_pixels, target_pixels_memory, inverse):
-                            ocio_config_path = os.path.join(bpy.utils.resource_path('LOCAL'), 'datafiles/colormanagement/config.ocio')
-                            args = {
-                                'config_path': ocio_config_path,
-                                'name': target_pixels_memory.name,
-
-                                'exposure': scene.view_settings.exposure,
-                                'gamma': scene.view_settings.gamma,
-                                'view_transform': scene.view_settings.view_transform,
-                                'display_device': scene.display_settings.display_device,
-                                'look': scene.view_settings.look,
-                                
-                                'inverse': inverse
-                            }
-                            def image_callback(event, shared_memory_name, seed, width, height, upscaled=False):
-                                nonlocal target_pixels
-                                nonlocal target_pixels_memory
-                                target_pixels[:] = np.frombuffer(target_pixels_memory.buf, dtype=np.float32).copy().reshape((size_x * size_y, 4))
-                            def exception_callback(fatal, msg, trace):
-                                print(fatal, msg, trace)
-                            generator_advance = GeneratorProcess.shared().apply_ocio_transforms(args, functools.partial(image_callback, event), exception_callback)
-                            def timer():
-                                try:
-                                    next(generator_advance)
-                                    return 0.01
-                                except StopIteration:
-                                    event.set()
-                            bpy.app.timers.register(timer)
                         if render_pass.name == "Dream Textures":
                             self.update_stats("Dream Textures", "Starting")
                             def image_callback(set_pixels, shared_memory_name, seed, width, height, upscaled=False):
@@ -101,32 +73,24 @@ def register_render_pass():
                             combined_pixels = np.empty((size_x * size_y, 4), dtype=np.float32)
                             rect.foreach_get(combined_pixels)
 
-                            event = threading.Event()
-
-                            buf = combined_pixels.tobytes()
-                            combined_pixels_memory = SharedMemory(create=True, size=len(buf))
-                            combined_pixels_memory.buf[:] = buf
-                            bpy.app.timers.register(functools.partial(do_ocio_transform, event, combined_pixels, combined_pixels_memory, False))
-                            event.wait()
+                            combined_pixels = Generator.shared().ocio_transform(
+                                combined_pixels,
+                                config_path=os.path.join(bpy.utils.resource_path('LOCAL'), 'datafiles/colormanagement/config.ocio'),
+                                exposure=scene.view_settings.exposure,
+                                gamma=scene.view_settings.gamma,
+                                view_transform=scene.view_settings.view_transform,
+                                display_device=scene.display_settings.display_device,
+                                look=scene.view_settings.look,
+                                inverse=False
+                            ).get()
                             
                             combined_pass_image.pixels[:] = combined_pixels.ravel()
 
                             self.update_stats("Dream Textures", "Starting...")
-                            event = threading.Event()
-                            pixels = None
-                            def set_pixels(npbuf):
-                                nonlocal pixels
-                                pixels = npbuf
-                            def do_dream_texture_pass():
-                                dream_texture(scene.dream_textures_render_properties_prompt, step_callback, functools.partial(image_callback, set_pixels), combined_pass_image, width=size_x, height=size_y, show_steps=False, use_init_img_color=False)
-                                gen = GeneratorProcess.shared(None, False)
-                                def waiter():
-                                    if gen.in_use:
-                                        return 0.01
-                                    event.set()
-                                bpy.app.timers.register(waiter)
-                            bpy.app.timers.register(do_dream_texture_pass)
-                            event.wait()
+                            
+                            pixels = Generator.shared().prompt_to_image(
+                                **scene.dream_textures_render_properties_prompt.generate_args()
+                            )
 
                             # Perform an inverse transform so when Blender applies its transform everything looks correct.
                             event = threading.Event()

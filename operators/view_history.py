@@ -2,7 +2,7 @@ import bpy
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 import json
 import os
-from ..property_groups.dream_prompt import sampler_options
+from ..property_groups.dream_prompt import scheduler_options
 from ..preferences import StableDiffusionPreferences
     
 class SCENE_UL_HistoryList(bpy.types.UIList):
@@ -19,7 +19,7 @@ class SCENE_UL_HistoryList(bpy.types.UIList):
                 layout.label(text=f"{item.seed}", translate=False)
                 layout.label(text=f"{item.width}x{item.height}", translate=False)
                 layout.label(text=f"{item.steps} steps", translate=False)
-                layout.label(text=next(x for x in sampler_options if x[0] == item.sampler_name)[1], translate=False)
+                layout.label(text=next(x for x in scheduler_options if x[0] == item.scheduler)[1], translate=False)
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)

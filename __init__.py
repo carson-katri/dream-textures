@@ -112,8 +112,3 @@ if current_process().name != "__actor__":
         # unregister_render_pass()
 
         kill_generator()
-
-    from .generator_process import Generator
-    from .generator_process.actor import ActorContext
-    gen = Generator(ActorContext.FRONTEND)
-    gen.start()

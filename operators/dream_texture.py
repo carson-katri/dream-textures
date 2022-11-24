@@ -1,6 +1,7 @@
 import sys
 import bpy
 import os
+import hashlib
 import numpy as np
 from multiprocessing.shared_memory import SharedMemory
 

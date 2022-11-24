@@ -108,15 +108,21 @@ class DreamTexture(bpy.types.Operator):
                     return # Only perform this on the first image editor found.
         # dream_texture(context.scene.dream_textures_prompt, view_step, image_writer)
         def image_done(future):
+            if future.cancelled():
+                del gen._active_generation_future
+                return
             image: NDArray = future.result()
             image = bpy_image("diffusers-image", image.shape[0], image.shape[1], image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = image
-        Generator.shared().prompt_to_image(
+        gen = Generator.shared()
+        f = gen.prompt_to_image(
             Pipeline.STABLE_DIFFUSION,
             **scene.dream_textures_prompt.generate_args(),
-        ).add_done_callback(image_done)
+        )
+        gen._active_generation_future = f
+        f.add_done_callback(image_done)
         return {"FINISHED"}
 
 headless_prompt = None
@@ -315,11 +321,10 @@ class CancelGenerator(bpy.types.Operator):
 
     @classmethod
     def poll(self, context):
-        global timer
-        return timer is not None
+        gen = Generator.shared()
+        return hasattr(gen, "_active_generation_future") and gen._active_generation_future is not None
 
     def execute(self, context):
-        gen = GeneratorProcess.shared(create=False)
-        if gen:
-            gen.send_stop(Intent.PROMPT_TO_IMAGE)
+        gen = Generator.shared()
+        gen._active_generation_future.cancel()
         return {'FINISHED'}

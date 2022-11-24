@@ -28,6 +28,8 @@ class Message():
         self.method_name = method_name
         self.args = args
         self.kwargs = kwargs
+    
+    CANCEL_MESSAGE = "__cancel__"
 
 def _start_backend(cls, message_queue, response_queue):
     cls(
@@ -112,6 +114,8 @@ class Actor():
     
     @classmethod
     def shared_close(cls: Type[T]):
+        if cls._shared_instance is None:
+            return
         cls._shared_instance.close()
         cls._shared_instance = None
     
@@ -135,8 +139,15 @@ class Actor():
             self._receive(self._message_queue.get())
 
     def _receive(self, message: Message):
+        if message.method_name == Message.CANCEL_MESSAGE and self._active_future is not None:
+            self._active_future.cancel()
+            return
         try:
             response = getattr(self, message.method_name)(*message.args, **message.kwargs)
+            if isinstance(response, Future):
+                self._active_future = response
+                response.add_done_callback(lambda future: self._response_queue.put(None if future.cancelled() else (future.exception() or future.result())))
+                return
         except Exception as e:
             trace = traceback.format_exc()
             response = TracedError(e, trace)
@@ -149,6 +160,8 @@ class Actor():
                 response = None
                 while response is None:
                     try:
+                        if future.cancelled():
+                            self._message_queue.put(Message(Message.CANCEL_MESSAGE, (), {}))
                         response = self._response_queue.get(block=False)
                     except queue.Empty:
                         continue

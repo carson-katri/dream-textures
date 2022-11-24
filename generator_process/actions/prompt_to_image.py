@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from contextlib import nullcontext
 import numpy as np
 from numpy.typing import NDArray
+from concurrent.futures import Future
+import threading
 
 class Pipeline(enum.IntEnum):
     STABLE_DIFFUSION = 0
@@ -79,6 +81,17 @@ def choose_device(self) -> str:
     else:
         return "cpu"
 
+class Cancellable:
+    def __init__(self, iterable, future: Future):
+        self.iterable = iterable
+        self.future = future
+
+    def __iter__(self):
+        for i in self.iterable:
+            yield i
+            if self.future.cancelled():
+                return
+
 def prompt_to_image(
     self,
     pipeline: Pipeline,
@@ -99,7 +112,9 @@ def prompt_to_image(
     seamless_axes: list[str],
 
     **kwargs
-) -> Optional[NDArray]:
+) -> Future:
+    future = Future()
+
     match pipeline:
         case Pipeline.STABLE_DIFFUSION:
             import diffusers
@@ -107,6 +122,7 @@ def prompt_to_image(
             from PIL import ImageOps
             from ...absolute_path import WEIGHTS_PATH
 
+            # Top level configuration
             if optimizations.cpu_only:
                 device = "cpu"
             else:
@@ -119,6 +135,7 @@ def prompt_to_image(
             if optimizations.can_use("tf32", device):
                 torch.backends.cuda.matmul.allow_tf32 = True
 
+            # StableDiffusionPipeline w/ caching
             if hasattr(self, "_cached_pipe") and self._cached_pipe[1] == (model, scheduler, optimizations):
                 pipe = self._cached_pipe[0]
             else:
@@ -160,35 +177,47 @@ def prompt_to_image(
                 if device == "mps":
                     _ = pipe(prompt, num_inference_steps=1)
 
+            # RNG
+            generator = None if seed is None else (torch.manual_seed(seed) if device == "mps" else torch.Generator(device=device).manual_seed(seed))
+            
+            # Seamless
             _configure_model_padding(pipe.unet, seamless, seamless_axes)
             _configure_model_padding(pipe.vae, seamless, seamless_axes)
-            
-            generator = None if seed is None else (torch.manual_seed(seed) if device == "mps" else torch.Generator(device=device).manual_seed(seed))
 
-            with (torch.inference_mode() if optimizations.can_use("inference_mode", device) else nullcontext()), \
-                    (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                    i = pipe(
-                        prompt=prompt,
-                        height=height,
-                        width=width,
-                        num_inference_steps=steps,
-                        guidance_scale=7.5,
-                        negative_prompt=None,
-                        num_images_per_prompt=1,
-                        eta=0.0,
-                        generator=generator,
-                        latents=None,
-                        output_type="pil",
-                        return_dict=True,
-                        callback=None,
-                        callback_steps=1
-                    ).images[0]
-                    return np.asarray(ImageOps.flip(i).convert('RGBA'), dtype=np.float32) / 255.
+            # Cancellation
+            pipe.progress_bar = lambda iterable: Cancellable(iterable, future)
+
+            # Inference
+            def inference():
+                with (torch.inference_mode() if optimizations.can_use("inference_mode", device) else nullcontext()), \
+                        (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
+                        i = pipe(
+                            prompt=prompt,
+                            height=height,
+                            width=width,
+                            num_inference_steps=steps,
+                            guidance_scale=7.5,
+                            negative_prompt=None,
+                            num_images_per_prompt=1,
+                            eta=0.0,
+                            generator=generator,
+                            latents=None,
+                            output_type="pil",
+                            return_dict=True,
+                            callback=None,
+                            callback_steps=1
+                        ).images[0]
+                        if not future.cancelled():
+                            future.set_result(np.asarray(ImageOps.flip(i).convert('RGBA'), dtype=np.float32) / 255.)
+            t = threading.Thread(target=inference, daemon=True)
+            t.start()
         case Pipeline.STABILITY_SDK:
             import stability_sdk
             raise NotImplementedError()
         case _:
             raise Exception(f"Unsupported pipeline {pipeline}.")
+    
+    return future
 
 def _conv_forward_asymmetric(self, input, weight, bias):
     import torch.nn as nn

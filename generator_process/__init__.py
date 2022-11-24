@@ -8,3 +8,4 @@ class Generator(Actor):
     from .actions.prompt_to_image import prompt_to_image, choose_device
     from .actions.upscale import upscale
     from .actions.huggingface_hub import hf_snapshot_download, hf_list_models, hf_list_installed_models
+    from .actions.ocio_transform import ocio_transform

@@ -1,6 +1,7 @@
 import sys
 import bpy
 import os
+import hashlib
 import numpy as np
 from multiprocessing.shared_memory import SharedMemory
 
@@ -96,8 +97,14 @@ class DreamTexture(bpy.types.Operator):
                     if area.type == 'IMAGE_EDITOR':
                         area.spaces.active.image = image
                 scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
+                # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
+                # and as custom property of the image. Needs to be a string because the int from the hash function is too large
+                image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
+                image['dream_textures_hash'] = image_hash
+                scene.dream_textures_prompt.hash = image_hash
                 history_entries[iteration].seed = str(seed)
                 history_entries[iteration].random_seed = False
+                history_entries[iteration].hash = image_hash
                 iteration += 1
         
         def view_step(step, width=None, height=None, shared_memory_name=None):

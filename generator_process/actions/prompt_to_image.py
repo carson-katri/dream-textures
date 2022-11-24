@@ -12,9 +12,11 @@ class Pipeline(enum.IntEnum):
     STABILITY_SDK = 1
 
 class Scheduler(enum.Enum):
+    LMS_DISCRETE = "LMS Discrete"
     DDIM = "DDIM"
     PNDM = "PNDM"
-    LMS_DISCRETE = "LMS Discrete"
+    DDPM = "DDPM"
+    DPM_SOLVER_MULTISTEP = "DPM Solver Multistep"
     EULER_DISCRETE = "Euler Discrete"
     EULER_ANCESTRAL_DISCRETE = "Euler Ancestral Discrete"
 
@@ -22,18 +24,22 @@ class Scheduler(enum.Enum):
         import diffusers
         def scheduler_class():
             match self:
+                case Scheduler.LMS_DISCRETE:
+                    return diffusers.LMSDiscreteScheduler
                 case Scheduler.DDIM:
                     return diffusers.DDIMScheduler
                 case Scheduler.PNDM:
                     return diffusers.PNDMScheduler
-                case Scheduler.LMS_DISCRETE:
-                    return diffusers.LMSDiscreteScheduler
+                case Scheduler.DDPM:
+                    return diffusers.DDPMScheduler
+                case Scheduler.DPM_SOLVER_MULTISTEP:
+                    return diffusers.DPMSolverMultistepScheduler
                 case Scheduler.EULER_DISCRETE:
                     return diffusers.EulerDiscreteScheduler
                 case Scheduler.EULER_ANCESTRAL_DISCRETE:
                     return diffusers.EulerAncestralDiscreteScheduler
         if pretrained is not None:
-            return scheduler_class().from_pretrained(pretrained.model_path, subfolder=pretrained.subfolder)
+            return scheduler_class().from_pretrained(pretrained['model_path'], subfolder=pretrained['subfolder'])
         else:
             return scheduler_class().from_config(pipeline.scheduler.config)
         
@@ -50,6 +56,8 @@ class Optimizations:
     sequential_cpu_offload: bool = False
     channels_last_memory_format: bool = False
     # xformers_attention: bool = False # FIXME: xFormers is not currently supported due to a lack of official Windows binaries.
+
+    cpu_only: bool = False
 
     def can_use(self, property, device) -> bool:
         if not getattr(self, property):
@@ -96,7 +104,10 @@ def prompt_to_image(
             from PIL import ImageOps
             from ...absolute_path import WEIGHTS_PATH
 
-            device = self.choose_device()
+            if optimizations.cpu_only:
+                device = "cpu"
+            else:
+                device = self.choose_device()
             optimizations.can_use("amp", device)
             
             if optimizations.can_use("cudnn_benchmark", device):
@@ -119,10 +130,12 @@ def prompt_to_image(
                     snapshot_folder,
                     torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
                 )
-                pipe.scheduler = scheduler.create(pipe, {
+                is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in snapshot_folder
+                pipe.scheduler = (Scheduler.EULER_DISCRETE if is_stable_diffusion_2 else scheduler).create(pipe, {
                     'model_path': snapshot_folder,
                     'subfolder': 'scheduler',
-                } if ('stable-diffusion-2' in snapshot_folder) else None)
+                } if is_stable_diffusion_2 else None)
+
                 pipe = pipe.to(device)
 
                 if optimizations.can_use("attention_slicing", device):

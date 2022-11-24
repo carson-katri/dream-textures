@@ -1,7 +1,12 @@
-diffusers
+git+https://github.com/huggingface/diffusers@fix-sd2-attention-slice#egg=diffusers # SD2 attention slicing fix
 transformers
 accelerate
 huggingface_hub
+
 torch>=1.13
-stability-sdk==0.2.6
-opencolorio
+
+scipy # LMSDiscreteScheduler
+
+stability-sdk==0.2.6 # DreamStudio
+
+opencolorio # color management

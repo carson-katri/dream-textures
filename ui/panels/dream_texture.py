@@ -302,14 +302,19 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             layout.use_property_split = True
             prompt = get_prompt(context)
 
-            layout.prop(prompt, "optimizations_attention_slicing")
+            def optimization(prop):
+                if hasattr(prompt, f"optimizations_{prop}"):
+                    layout.prop(prompt, f"optimizations_{prop}")
+
+            optimization("attention_slicing")
             slice_size_row = layout.row()
             slice_size_row.prop(prompt, "optimizations_attention_slice_size_src")
             if prompt.optimizations_attention_slice_size_src == 'manual':
                 slice_size_row.prop(prompt, "optimizations_attention_slice_size", text="Size")
-            layout.prop(prompt, "optimizations_sequential_cpu_offload")
-            layout.prop(prompt, "optimizations_channels_last_memory_format")
-            # layout.prop(prompt, "optimizations_xformers_attention") # FIXME: xFormers is not currently supported due to a lack of official Windows binaries.
+            optimization("sequential_cpu_offload")
+            optimization("channels_last_memory_format")
+            optimization("cpu_only")
+            # optimization("xformers_attention") # FIXME: xFormers is not currently supported due to a lack of official Windows binaries.
     yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):

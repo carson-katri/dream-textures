@@ -17,6 +17,7 @@ from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
 from ...property_groups.dream_prompt import DreamPrompt, backend_options
 from ...generator_process.registrar import BackendTarget
+from ...generator_process.actions.prompt_to_image import Optimizations
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -63,7 +64,7 @@ def dream_texture_panels():
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, prompt_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, size_panel, get_prompt)
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, init_image_panels, get_prompt)
-        yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
+        yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, actions_panel, get_prompt)
 
 def create_panel(space_type, region_type, parent_id, ctor, get_prompt, use_property_decorate=False):
@@ -255,16 +256,61 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             layout = self.layout
             layout.use_property_split = True
             
-            layout.prop(get_prompt(context), "precision")
             layout.prop(get_prompt(context), "random_seed")
             if not get_prompt(context).random_seed:
                 layout.prop(get_prompt(context), "seed")
             # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
             layout.prop(get_prompt(context), "steps")
             layout.prop(get_prompt(context), "cfg_scale")
-            layout.prop(get_prompt(context), "sampler_name")
+            layout.prop(get_prompt(context), "scheduler")
             layout.prop(get_prompt(context), "show_steps")
-    return AdvancedPanel
+
+    yield AdvancedPanel
+
+    class SpeedOptimizationPanel(sub_panel):
+        """Create a subpanel for speed optimizations"""
+        bl_idname = f"DREAM_PT_dream_panel_speed_optimizations_{space_type}"
+        bl_label = "Speed Optimizations"
+        bl_parent_id = AdvancedPanel.bl_idname
+
+        def draw(self, context):
+            super().draw(context)
+            layout = self.layout
+            layout.use_property_split = True
+            prompt = get_prompt(context)
+
+            def optimization(prop):
+                if hasattr(prompt, f"optimizations_{prop}"):
+                    layout.prop(prompt, f"optimizations_{prop}")
+
+            optimization("inference_mode")
+            optimization("cudnn_benchmark")
+            optimization("tf32")
+            optimization("amp")
+            optimization("half_precision")
+    yield SpeedOptimizationPanel
+
+    class MemoryOptimizationPanel(sub_panel):
+        """Create a subpanel for memory optimizations"""
+        bl_idname = f"DREAM_PT_dream_panel_memory_optimizations_{space_type}"
+        bl_label = "Memory Optimizations"
+        bl_parent_id = AdvancedPanel.bl_idname
+
+        def draw(self, context):
+            super().draw(context)
+            layout = self.layout
+            layout.use_property_split = True
+            prompt = get_prompt(context)
+
+            layout.prop(prompt, "optimizations_attention_slicing")
+            slice_size_row = layout.row()
+            slice_size_row.prop(prompt, "optimizations_attention_slice_size_src")
+            if prompt.optimizations_attention_slice_size_src == 'manual':
+                slice_size_row.prop(prompt, "optimizations_attention_slice_size", text="Size")
+            layout.prop(prompt, "optimizations_sequential_cpu_offload")
+            layout.prop(prompt, "optimizations_channels_last_memory_format")
+            # layout.prop(prompt, "optimizations_xformers_attention") # FIXME: xFormers is not currently supported due to a lack of official Windows binaries.
+    yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):
     class ActionsPanel(sub_panel):

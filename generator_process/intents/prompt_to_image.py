@@ -254,7 +254,7 @@ def prompt_to_image_stability_sdk(self):
             start_schedule=1.0 * args['strength'],
             end_schedule=0.01,
             cfg_scale=args['cfg_scale'],
-            sampler=algorithms[args['sampler_name']],
+            sampler=algorithms[args['scheduler']],
             steps=args['steps'],
             seed=seed,
             samples=args['iterations'],

@@ -1,13 +1,11 @@
 from multiprocessing import Queue, Process
-import subprocess
+import queue
 import enum
+import traceback
 import threading
-import functools
-from typing import Type, TypeVar, Optional
+from typing import Type, TypeVar
 from concurrent.futures import Future
 import site
-import os
-import sys
 
 class ActorContext(enum.IntEnum):
     """
@@ -31,13 +29,17 @@ class Message():
         self.args = args
         self.kwargs = kwargs
 
-
 def _start_backend(cls, message_queue, response_queue):
     cls(
         ActorContext.BACKEND,
         message_queue=message_queue,
         response_queue=response_queue
     ).start()
+
+class TracedError(BaseException):
+    def __init__(self, base: BaseException, trace: str):
+        self.base = base
+        self.trace = trace
 
 T = TypeVar('T', bound='Actor')
 
@@ -82,9 +84,9 @@ class Actor():
 
     @classmethod
     def shared(cls: Type[T]) -> T:
-        return cls._shared_instance or cls(ActorContext.FRONTEND)
+        return cls._shared_instance or cls(ActorContext.FRONTEND).start()
 
-    def start(self):
+    def start(self: T) -> T:
         """
         Start the actor process.
         """
@@ -94,6 +96,7 @@ class Actor():
                 self.process.start()
             case ActorContext.BACKEND:
                 self._backend_loop()
+        return self
     
     def close(self):
         """
@@ -106,6 +109,11 @@ class Actor():
                 self._response_queue.close()
             case ActorContext.BACKEND:
                 pass
+    
+    @classmethod
+    def shared_close(cls: Type[T]):
+        cls._shared_instance.close()
+        cls._shared_instance = None
     
     def is_alive(self):
         match self.context:
@@ -130,19 +138,28 @@ class Actor():
         try:
             response = getattr(self, message.method_name)(*message.args, **message.kwargs)
         except Exception as e:
-            response = e
+            trace = traceback.format_exc()
+            response = TracedError(e, trace)
         self._response_queue.put(response)
 
     def _send(self, name):
         def _send(*args, **kwargs):
             future = Future()
             def wait_for_response(future: Future):
-                response = self._response_queue.get()
-                if isinstance(response, Exception):
+                response = None
+                while response is None:
+                    try:
+                        response = self._response_queue.get(block=False)
+                    except queue.Empty:
+                        continue
+                if isinstance(response, TracedError):
+                    response.base.__cause__ = Exception(response.trace)
+                    future.set_exception(response.base)
+                elif isinstance(response, Exception):
                     future.set_exception(response)
                 else:
                     future.set_result(response)
-            thread = threading.Thread(target=functools.partial(wait_for_response, future))
+            thread = threading.Thread(target=wait_for_response, args=(future,), daemon=True)
             thread.start()
             self._message_queue.put(Message(name, args, kwargs))
             return future

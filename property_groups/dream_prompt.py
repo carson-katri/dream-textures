@@ -1,20 +1,15 @@
 import bpy
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty
 import os
+import sys
+from typing import _AnnotatedAlias
 from ..absolute_path import absolute_path, WEIGHTS_PATH
 from ..generator_process.registrar import BackendTarget
+from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler
+from ..generator_process import Generator
 from ..prompt_engineering import *
 
-sampler_options = [
-    ("ddim", "DDIM", "", 1),
-    ("plms", "PLMS", "", 2),
-    ("k_lms", "KLMS", "", 3),
-    ("k_dpm_2", "KDPM_2", "", 4),
-    ("k_dpm_2_a", "KDPM_2A", "", 5),
-    ("k_euler", "KEULER", "", 6),
-    ("k_euler_a", "KEULER_A", "", 7),
-    ("k_heun", "KHEUN", "", 8),
-]
+scheduler_options = [(scheduler.value, scheduler.value, '') for scheduler in Scheduler]
 
 precision_options = [
     ('auto', 'Automatic', "", 1),
@@ -53,8 +48,13 @@ seamless_axes = [
     ('xy', 'Both', '', 3),
 ]
 
+_model_options = []
+def _on_model_options(future):
+    global _model_options
+    _model_options = future.result()
+Generator.shared().hf_list_installed_models().add_done_callback(_on_model_options)
 def model_options(self, context):
-    return [(f, f, '', i) for i, f in enumerate(filter(lambda f: f.endswith('.ckpt'), os.listdir(WEIGHTS_PATH)))]
+    return [(m.id, os.path.basename(m.id).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(_model_options)]
 
 def backend_options(self, context):
     def options():
@@ -94,11 +94,10 @@ attributes = {
     "show_advanced": BoolProperty(name="", default=False),
     "random_seed": BoolProperty(name="Random Seed", default=True, description="Randomly pick a seed"),
     "seed": StringProperty(name="Seed", default="0", description="Manually pick a seed", update=seed_clamp),
-    "precision": EnumProperty(name="Precision", items=precision_options, default='auto', description="Whether to use full precision or half precision floats. Full precision is slower, but required by some GPUs"),
     "iterations": IntProperty(name="Iterations", default=1, min=1, description="How many images to generate"),
     "steps": IntProperty(name="Steps", default=25, min=1),
     "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, soft_min=1.01, description="How strongly the prompt influences the image"),
-    "sampler_name": EnumProperty(name="Sampler", items=sampler_options, default=3),
+    "scheduler": EnumProperty(name="Scheduler", items=scheduler_options, default=0),
     "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=False),
 
     # Init Image
@@ -122,6 +121,26 @@ attributes = {
     "outpaint_left": IntProperty(name="Left", default=64, step=64, min=0),
     "outpaint_blend": IntProperty(name="Blend", description="Gaussian blur amount to apply to the extended area", default=16, min=0),
 }
+
+default_optimizations = Optimizations()
+for optim in dir(Optimizations):
+    if optim.startswith('_'):
+        continue
+    if hasattr(Optimizations.__annotations__, optim):
+        annotation = Optimizations.__annotations__[optim]
+        if annotation != bool or (annotation is _AnnotatedAlias and annotation.__origin__ != bool):
+            continue
+    default = getattr(default_optimizations, optim, None)
+    if default is not None and not isinstance(getattr(default_optimizations, optim), bool):
+        continue
+    setattr(default_optimizations, optim, True)
+    if default_optimizations.can_use(optim, "mps" if sys.platform == "darwin" else "cuda"):
+        attributes[f"optimizations_{optim}"] = BoolProperty(name=optim.replace('_', ' ').title(), default=default)
+attributes["optimizations_attention_slice_size_src"] = EnumProperty(name="Attention Slice Size", items=(
+    ("auto", "Automatic", "", 1),
+    ("manual", "Manual", "", 2),
+), default=1)
+attributes["optimizations_attention_slice_size"] = IntProperty(name="Attention Slice Size", default=1)
 
 def map_structure_token_items(value):
     return (value[0], value[1], '')
@@ -177,13 +196,26 @@ def get_seed(self):
             h = ~h
         return (h & 0xFFFFFFFF) ^ (h >> 32) # 64 bit hash down to 32 bits
 
+def get_optimizations(self: DreamPrompt):
+    optimizations = Optimizations()
+    for prop in dir(self):
+        split_name = prop.replace('optimizations_', '')
+        if prop.startswith('optimizations_') and hasattr(optimizations, split_name):
+            setattr(optimizations, split_name, getattr(self, prop))
+    if self.optimizations_attention_slice_size_src == 'auto':
+        optimizations.attention_slice_size = 'auto'
+    return optimizations
+
 def generate_args(self):
     args = { key: getattr(self, key) for key in DreamPrompt.__annotations__ }
     args['prompt'] = self.generate_prompt()
     args['seed'] = self.get_seed()
+    args['optimizations'] = self.get_optimizations()
+    args['scheduler'] = Scheduler(args['scheduler'])
     return args
 
 DreamPrompt.generate_prompt = generate_prompt
 DreamPrompt.get_prompt_subject = get_prompt_subject
 DreamPrompt.get_seed = get_seed
+DreamPrompt.get_optimizations = get_optimizations
 DreamPrompt.generate_args = generate_args

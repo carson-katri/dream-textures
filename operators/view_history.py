@@ -41,20 +41,23 @@ class RecallHistoryEntry(bpy.types.Operator):
                 setattr(context.scene.dream_textures_prompt, prop, getattr(selection, prop))
             # when the seed of the promt is found in the available image datablocks, use that one in the open image editor
             # note: when there is more than one image with the seed in it's name, do nothing. Same when no image with that seed is available.
-            if prop == 'seed':
-                seed_string = str(getattr(selection, prop))
-                image_names_no_suffix = [i.name.split('.')[0] for i in bpy.data.images]
-                image_names_no_suffix_seed_count = image_names_no_suffix.count(seed_string)
-                if image_names_no_suffix_seed_count == 1:
-                    print("Image for seed " + seed_string + " is unique. Selecting image datablock.")
+            if prop == 'hash':
+                hash_string = str(getattr(selection, prop))
+                existing_image = None
+                # accessing custom properties for image datablocks in Blender is still a bit cumbersome
+                for i in bpy.data.images:
+                    try:
+                        # this will fail for images without the dream_textures_hash custom property
+                        if i['dream_textures_hash'] == hash_string:
+                            existing_image = i
+                            break
+                    except:
+                        continue
+                if existing_image != None:
                     for area in context.screen.areas:
                         if area.type != 'IMAGE_EDITOR':
                             continue
-                        area.spaces.active.image = bpy.data.images[seed_string]
-                elif image_names_no_suffix_seed_count > 1:
-                    self.report({'INFO'}, "More than one image found for seed " + seed_string + ". Not changing image editor contents.")
-                elif image_names_no_suffix_seed_count == 0:
-                    self.report({'INFO'}, "No image found for seed " + seed_string + ". Not changing image editor contents.")
+                        area.spaces.active.image = existing_image
 
         return {"FINISHED"}
 

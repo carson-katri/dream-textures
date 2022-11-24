@@ -1,6 +1,7 @@
 import sys
 import bpy
 import os
+import hashlib
 import numpy as np
 from numpy.typing import NDArray
 from multiprocessing.shared_memory import SharedMemory
@@ -83,25 +84,45 @@ class DreamTexture(bpy.types.Operator):
         screen = context.screen
         scene = context.scene
 
-        generated_args = scene.dream_textures_prompt.generate_args()
-
-        init_image = None
-        if generated_args['use_init_img']:
-            match generated_args['init_img_src']:
-                case 'file':
-                    init_image = save_temp_image(scene.init_img)
-                case 'open_editor':
-                    for area in screen.areas:
-                        if area.type == 'IMAGE_EDITOR':
-                            if area.spaces.active.image is not None:
-                                init_image = save_temp_image(area.spaces.active.image)
-
-        last_data_block = None
-        def step_callback(_, step_image: ImageGenerationResult):
-            nonlocal last_data_block
-            if last_data_block is not None:
-                bpy.data.images.remove(last_data_block)
-            last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel())
+        iteration = 0
+        def image_writer(shared_memory_name, seed, width, height, upscaled=False):
+            nonlocal iteration
+            global last_data_block
+            # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
+            if not upscaled:
+                if last_data_block is not None:
+                    bpy.data.images.remove(last_data_block)
+                    last_data_block = None
+                generator = GeneratorProcess.shared(create=False)
+                if generator is None or generator.process.poll() or width == 0 or height == 0:
+                    return # process was closed
+                shared_memory = SharedMemory(shared_memory_name)
+                image = bpy_image(f"{seed}", width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+                shared_memory.close()
+                if node_tree is not None:
+                    nodes = node_tree.nodes
+                    texture_node = nodes.new("ShaderNodeTexImage")
+                    texture_node.image = image
+                    nodes.active = texture_node
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        area.spaces.active.image = image
+                scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
+                # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
+                # and as custom property of the image. Needs to be a string because the int from the hash function is too large
+                image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
+                image['dream_textures_hash'] = image_hash
+                scene.dream_textures_prompt.hash = image_hash
+                history_entries[iteration].seed = str(seed)
+                history_entries[iteration].random_seed = False
+                history_entries[iteration].hash = image_hash
+                iteration += 1
+        
+        def view_step(step, width=None, height=None, shared_memory_name=None):
+            scene.dream_textures_progress = step + 1
+            if shared_memory_name is None:
+                return # show steps disabled
+            global last_data_block
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = last_data_block

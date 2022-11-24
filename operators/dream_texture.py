@@ -98,7 +98,7 @@ class DreamTexture(bpy.types.Operator):
                 scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
                 # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
                 # and as custom property of the image. Needs to be a string because the int from the hash function is too large
-                image_hash = str(hash(image))
+                image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
                 image['dream_textures_hash'] = image_hash
                 scene.dream_textures_prompt.hash = image_hash
                 history_entries[iteration].seed = str(seed)

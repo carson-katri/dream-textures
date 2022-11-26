@@ -43,7 +43,6 @@ if current_process().name != "__actor__":
     from .tools import TOOLS
     from .operators.dream_texture import DreamTexture, kill_generator
     from .property_groups.dream_prompt import DreamPrompt
-    from .operators.upscale import upscale_options
     from .preferences import StableDiffusionPreferences
     from .ui.presets import register_default_presets
 
@@ -85,7 +84,7 @@ if current_process().name != "__actor__":
         bpy.types.Scene.dream_textures_viewport_enabled = BoolProperty(name="Viewport Enabled", default=False)
         bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)
         bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
-        bpy.types.Scene.dream_textures_upscale_outscale = bpy.props.EnumProperty(name="Target Size", items=upscale_options)
+        
         bpy.types.Scene.dream_textures_upscale_full_precision = bpy.props.BoolProperty(name="Full Precision", default=True)
         bpy.types.Scene.dream_textures_upscale_seamless = bpy.props.BoolProperty(name="Seamless", default=False)
 

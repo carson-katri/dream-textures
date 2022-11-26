@@ -1,11 +1,120 @@
-from multiprocessing import Queue, Process
-import queue
+from multiprocessing import Queue, Process, Lock
+import multiprocessing.synchronize
 import enum
 import traceback
 import threading
-from typing import Type, TypeVar
-from concurrent.futures import Future
+from typing import Type, TypeVar, Callable, Any, MutableSet, Generator
+# from concurrent.futures import Future
 import site
+
+class Future:
+    """
+    Object that represents a value that has not completed processing, but will in the future.
+
+    Add callbacks to be notified when values become available, or use `.result()` and `.exception()` to wait for the value.
+    """
+    _response_callbacks: MutableSet[Callable[['Future', Any], None]] = set()
+    _exception_callbacks: MutableSet[Callable[['Future', BaseException], None]] = set()
+    _done_callbacks: MutableSet[Callable[['Future'], None]] = set()
+    _responses: list = []
+    _exception: BaseException | None = None
+    done: bool = False
+    cancelled: bool = False
+
+    def __init__(self):
+        self._response_callbacks = set()
+        self._exception_callbacks = set()
+        self._done_callbacks = set()
+        self._responses = []
+        self._exception = None
+        self.done = False
+        self.cancelled = False
+
+    def result(self):
+        """
+        Get the result value (blocking).
+        """
+        def _response():
+            match len(self._responses):
+                case 0:
+                    return None
+                case 1:
+                    return self._responses[0]
+                case _:
+                    return self._responses
+        if self._exception is not None:
+            raise self._exception
+        if self.done:
+            return _response()
+        else:
+            event = threading.Event()
+            def _done(_):
+                event.set()
+            self.add_done_callback(_done)
+            event.wait()
+            if self._exception is not None:
+                raise self._exception
+            return _response()
+    
+    def exception(self):
+        if self.done:
+            return self._exception
+        else:
+            event = threading.Event()
+            def _done(_):
+                event.set()
+            self.add_done_callback(_done)
+            event.wait()
+            return self._exception
+    
+    def cancel(self):
+        self.done = True
+        self._cancelled = True
+        self.set_done()
+
+    def add_response(self, response):
+        """
+        Add a response value and notify all consumers.
+        """
+        self._responses.append(response)
+        for response_callback in self._response_callbacks:
+            response_callback(self, response)
+
+    def set_exception(self, exception: BaseException):
+        """
+        Set the exception.
+        """
+        self._exception = exception
+
+    def set_done(self):
+        """
+        Mark the future as done.
+        """
+        assert not self.done
+        self.done = True
+        for done_callback in self._done_callbacks:
+            done_callback(self)
+
+    def add_response_callback(self, callback: Callable[['Future', Any], None]):
+        """
+        Add a callback to run whenever a response is received.
+        Will be called multiple times by generator functions.
+        """
+        self._response_callbacks.add(callback)
+    
+    def add_exception_callback(self, callback: Callable[['Future', BaseException], None]):
+        """
+        Add a callback to run when the future errors.
+        Will only be called once at the first exception.
+        """
+        self._exception_callbacks.add(callback)
+
+    def add_done_callback(self, callback: Callable[['Future'], None]):
+        """
+        Add a callback to run when the future is marked as done.
+        Will only be called once.
+        """
+        self._done_callbacks.add(callback)
 
 class ActorContext(enum.IntEnum):
     """
@@ -17,7 +126,7 @@ class ActorContext(enum.IntEnum):
     FRONTEND = 0
     BACKEND = 1
 
-class Message():
+class Message:
     """
     Represents a function signature with a method name, positonal arguments, and keyword arguments.
 
@@ -29,7 +138,8 @@ class Message():
         self.args = args
         self.kwargs = kwargs
     
-    CANCEL_MESSAGE = "__cancel__"
+    CANCEL = "__cancel__"
+    END = "__end__"
 
 def _start_backend(cls, message_queue, response_queue):
     cls(
@@ -45,15 +155,19 @@ class TracedError(BaseException):
 
 T = TypeVar('T', bound='Actor')
 
-class Actor():
+class Actor:
     """
     Base class for specialized actors.
     
-    Uses queues to serialize actions from different threads, and automatically dispatches methods to a separate process.
+    Uses queues to send actions to a background process and receive a response.
+    Calls to any method declared by the frontend are automatically dispatched to the backend.
+
+    All function arguments must be picklable.
     """
 
     _message_queue: Queue
     _response_queue: Queue
+    _lock: multiprocessing.synchronize.Lock
 
     _shared_instance = None
 
@@ -66,7 +180,7 @@ class Actor():
         "shared"
     }
 
-    def __init__(self, context: ActorContext, message_queue: Queue = Queue(), response_queue: Queue = Queue()):
+    def __init__(self, context: ActorContext, message_queue: Queue = Queue(maxsize=1), response_queue: Queue = Queue(maxsize=1)):
         self.context = context
         self._message_queue = message_queue
         self._response_queue = response_queue
@@ -79,6 +193,7 @@ class Actor():
         """
         match self.context:
             case ActorContext.FRONTEND:
+                self._lock = Lock()
                 for name in filter(lambda name: callable(getattr(self, name)) and not name.startswith("_") and name not in self._protected_methods, dir(self)):
                     setattr(self, name, self._send(name))
             case ActorContext.BACKEND:
@@ -127,7 +242,9 @@ class Actor():
                 return True
 
     def can_use(self):
-        return self._message_queue.empty() and self._response_queue.empty()
+        if result := self._lock.acquire(block=False):
+            self._lock.release()
+        return result
     
     def _load_dependencies(self):
         from ..absolute_path import absolute_path
@@ -139,42 +256,49 @@ class Actor():
             self._receive(self._message_queue.get())
 
     def _receive(self, message: Message):
-        if message.method_name == Message.CANCEL_MESSAGE and self._active_future is not None:
-            self._active_future.cancel()
-            return
         try:
             response = getattr(self, message.method_name)(*message.args, **message.kwargs)
-            if isinstance(response, Future):
-                self._active_future = response
-                response.add_done_callback(lambda future: self._response_queue.put(None if future.cancelled() else (future.exception() or future.result())))
-                return
+            if isinstance(response, Generator):
+                for res in iter(response):
+                    extra_message = None
+                    try:
+                        self._message_queue.get(block=False)
+                    except:
+                        pass
+                    if extra_message == Message.CANCEL:
+                        break
+                    self._response_queue.put(res)
+            else:
+                self._response_queue.put(response)
         except Exception as e:
             trace = traceback.format_exc()
-            response = TracedError(e, trace)
-        self._response_queue.put(response)
+            self._response_queue.put(TracedError(e, trace))
+        self._response_queue.put(Message.END)
 
     def _send(self, name):
         def _send(*args, **kwargs):
             future = Future()
-            def wait_for_response(future: Future):
-                response = None
-                while response is None:
-                    try:
-                        if future.cancelled():
-                            self._message_queue.put(Message(Message.CANCEL_MESSAGE, (), {}))
-                        response = self._response_queue.get(block=False)
-                    except queue.Empty:
-                        continue
-                if isinstance(response, TracedError):
-                    response.base.__cause__ = Exception(response.trace)
-                    future.set_exception(response.base)
-                elif isinstance(response, Exception):
-                    future.set_exception(response)
-                else:
-                    future.set_result(response)
-            thread = threading.Thread(target=wait_for_response, args=(future,), daemon=True)
+            def _send_thread(future: Future):
+                self._lock.acquire()
+                self._message_queue.put(Message(name, args, kwargs))
+
+                while not future.done:
+                    if future.cancelled:
+                        self._message_queue.put(Message.CANCEL)
+                    response = self._response_queue.get()
+                    if response == Message.END:
+                        future.set_done()
+                    elif isinstance(response, TracedError):
+                        response.base.__cause__ = Exception(response.trace)
+                        future.set_exception(response.base)
+                    elif isinstance(response, Exception):
+                        future.set_exception(response)
+                    else:
+                        future.add_response(response)
+                
+                self._lock.release()
+            thread = threading.Thread(target=_send_thread, args=(future,), daemon=True)
             thread.start()
-            self._message_queue.put(Message(name, args, kwargs))
             return future
         return _send
     

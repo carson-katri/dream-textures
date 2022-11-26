@@ -314,7 +314,7 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             optimization("sequential_cpu_offload")
             optimization("channels_last_memory_format")
             optimization("cpu_only")
-            # optimization("xformers_attention") # FIXME: xFormers is not currently supported due to a lack of official Windows binaries.
+            # optimization("xformers_attention") # FIXME: xFormers is not yet available.
     yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):

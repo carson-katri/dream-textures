@@ -4,8 +4,6 @@ from bpy_extras.io_utils import ImportHelper
 import os
 import webbrowser
 import shutil
-from concurrent.futures import Future
-import functools
 
 from .absolute_path import WEIGHTS_PATH, absolute_path
 from .operators.install_dependencies import InstallDependencies
@@ -13,8 +11,6 @@ from .operators.open_latest_version import OpenLatestVersion
 from .property_groups.dream_prompt import DreamPrompt
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
 from .generator_process import Generator
-from .generator_process.actions.huggingface_hub import Model
-from typing import List
 
 class OpenHuggingFace(bpy.types.Operator):
     bl_idname = "dream_textures.open_hugging_face"
@@ -158,9 +154,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
     @staticmethod
     def register():
-        print("register")
         set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
-        print("done")
 
     def draw(self, context):
         layout = self.layout

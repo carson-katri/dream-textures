@@ -106,12 +106,14 @@ class DreamTexture(bpy.types.Operator):
                         bpy.data.images.remove(last_data_block)
                     last_data_block = step_image
                     return # Only perform this on the first image editor found.
-        # dream_texture(context.scene.dream_textures_prompt, view_step, image_writer)
+        def step_callback(future, step_image):
+            image = bpy_image("diffusers-image", step_image.shape[0], step_image.shape[1], step_image.ravel())
+            for area in screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    area.spaces.active.image = image
         def image_done(future):
-            if future.cancelled():
-                del gen._active_generation_future
-                return
-            image: NDArray = future.result()
+            del gen._active_generation_future
+            image = future.result()[-1]
             image = bpy_image("diffusers-image", image.shape[0], image.shape[1], image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
@@ -122,6 +124,7 @@ class DreamTexture(bpy.types.Operator):
             **scene.dream_textures_prompt.generate_args(),
         )
         gen._active_generation_future = f
+        f.add_response_callback(step_callback)
         f.add_done_callback(image_done)
         return {"FINISHED"}
 

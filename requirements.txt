@@ -1,4 +1,4 @@
-git+https://github.com/huggingface/diffusers@fix-sd2-attention-slice#egg=diffusers # SD2 attention slicing fix
+git+https://github.com/huggingface/diffusers@main#egg=diffusers
 transformers
 accelerate
 huggingface_hub

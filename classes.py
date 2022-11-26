@@ -36,9 +36,6 @@ CLASSES = (
     *upscaling.upscaling_panels(),
     *history.history_panels(),
 
-    upscaling.OpenRealESRGANDownload,
-    upscaling.OpenRealESRGANWeightsDirectory,
-
     dream_texture.OpenClipSegDownload,
     dream_texture.OpenClipSegWeightsDirectory,
 )

@@ -3,21 +3,7 @@ import tempfile
 from multiprocessing.shared_memory import SharedMemory
 import numpy as np
 import sys
-# from ..generator_process import GeneratorProcess
-
-upscale_options = [
-    ("2", "2x", "", 2),
-    ("4", "4x", "", 4),
-]
-
-generator_advance = None
-timer = None
-
-def remove_timer(context):
-    global timer
-    if timer:
-        context.window_manager.event_timer_remove(timer)
-        timer = None
+from ..generator_process import Generator
 
 class Upscale(bpy.types.Operator):
     bl_idname = "shade.dream_textures_upscale"
@@ -27,20 +13,7 @@ class Upscale(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return GeneratorProcess.can_use()
-
-    def modal(self, context, event):
-        if event.type != 'TIMER':
-            return {'PASS_THROUGH'}
-        try:
-            next(generator_advance)
-        except StopIteration:
-            remove_timer(context)
-            return {'FINISHED'}
-        except Exception as e:
-            remove_timer(context)
-            raise e
-        return {'RUNNING_MODAL'}
+        return Generator.shared().can_use()
 
     def execute(self, context):
         scene = context.scene
@@ -103,7 +76,7 @@ class Upscale(bpy.types.Operator):
             scene.dream_textures_info = ""
             shared_memory = SharedMemory(shared_memory_name)
             image = bpy_image(seed + ' (Upscaled)', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
-            for area in context.screen.areas:
+            for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = image
             if active_node is not None:
@@ -118,18 +91,22 @@ class Upscale(bpy.types.Operator):
             if trace:
                 print(trace, file=sys.stderr)
 
-        generator = GeneratorProcess.shared()
+        # args = {
+        #     'input': input_image_path,
+        #     'name': input_image.name,
+        #     'outscale': int(context.scene.dream_textures_upscale_outscale),
+        #     'full_precision': context.scene.dream_textures_upscale_full_precision,
+        #     'seamless': context.scene.dream_textures_upscale_seamless
+        # }
 
-        args = {
-            'input': input_image_path,
-            'name': input_image.name,
-            'outscale': int(context.scene.dream_textures_upscale_outscale),
-            'full_precision': context.scene.dream_textures_upscale_full_precision,
-            'seamless': context.scene.dream_textures_upscale_seamless
-        }
-        global generator_advance
-        generator_advance = generator.upscale(args, image_callback, info_callback, exception_callback)
-        context.window_manager.modal_handler_add(self)
-        self.timer = context.window_manager.event_timer_add(1 / 15, window=context.window)
-
-        return {"RUNNING_MODAL"}
+        def image_done(future):
+            image = future.result()
+            image = bpy_image("diffusers-upscaled", image.shape[0], image.shape[1], image.ravel())
+            for area in screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    area.spaces.active.image = image
+            if active_node is not None:
+                active_node.image = image
+        Generator.shared().upscale(input_image_path, "brick wall", context.scene.dream_textures_upscale_full_precision).add_done_callback(image_done)
+        
+        return {"FINISHED"}

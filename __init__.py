@@ -42,6 +42,7 @@ if current_process().name != "__actor__":
     from .classes import CLASSES, PREFERENCE_CLASSES
     from .tools import TOOLS
     from .operators.dream_texture import DreamTexture, kill_generator
+    from .operators.upscale import upscale_options
     from .property_groups.dream_prompt import DreamPrompt
     from .preferences import StableDiffusionPreferences
     from .ui.presets import register_default_presets
@@ -85,8 +86,8 @@ if current_process().name != "__actor__":
         bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)
         bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
         
-        bpy.types.Scene.dream_textures_upscale_full_precision = bpy.props.BoolProperty(name="Full Precision", default=True)
-        bpy.types.Scene.dream_textures_upscale_seamless = bpy.props.BoolProperty(name="Seamless", default=False)
+        bpy.types.Scene.dream_textures_upscale_prompt = PointerProperty(type=DreamPrompt)
+        bpy.types.Scene.dream_textures_upscale_tile_size = IntProperty(name="Tile Size", default=128, step=64, min=64, max=512)
 
         for cls in CLASSES:
             bpy.utils.register_class(cls)

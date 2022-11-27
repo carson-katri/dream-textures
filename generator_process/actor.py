@@ -68,7 +68,6 @@ class Future:
             return self._exception
     
     def cancel(self):
-        self.done = True
         self._cancelled = True
         self.set_done()
 
@@ -209,7 +208,7 @@ class Actor:
         """
         match self.context:
             case ActorContext.FRONTEND:
-                self.process = Process(target=_start_backend, args=(self.__class__, self._message_queue, self._response_queue), name="__actor__")
+                self.process = Process(target=_start_backend, args=(self.__class__, self._message_queue, self._response_queue), name="__actor__", daemon=True)
                 self.process.start()
             case ActorContext.BACKEND:
                 self._backend_loop()

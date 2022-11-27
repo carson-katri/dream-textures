@@ -1,9 +1,13 @@
 import bpy
 import tempfile
-from multiprocessing.shared_memory import SharedMemory
-import numpy as np
-import sys
+from ..prompt_engineering import custom_structure
 from ..generator_process import Generator
+
+upscale_options = [
+    ("2", "2x", "", 2),
+    ("4", "4x", "", 4),
+    ("8", "8x", "", 8),
+]
 
 class Upscale(bpy.types.Operator):
     bl_idname = "shade.dream_textures_upscale"
@@ -16,7 +20,6 @@ class Upscale(bpy.types.Operator):
         return Generator.shared().can_use()
 
     def execute(self, context):
-        scene = context.scene
         screen = context.screen
         node_tree = context.material.node_tree if hasattr(context, 'material') else None
         active_node = next((node for node in node_tree.nodes if node.select and node.bl_idname == 'ShaderNodeTexImage'), None) if node_tree is not None else None
@@ -72,41 +75,29 @@ class Upscale(bpy.types.Operator):
             image.pack()
             return image
 
-        def image_callback(shared_memory_name, seed, width, height):
-            scene.dream_textures_info = ""
-            shared_memory = SharedMemory(shared_memory_name)
-            image = bpy_image(seed + ' (Upscaled)', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
+        def on_tile_complete(_, tile):
+            image = bpy_image("diffusers-upscaled", tile.shape[0], tile.shape[1], tile.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = image
-            if active_node is not None:
-                active_node.image = image
-            shared_memory.close()
-
-        def info_callback(msg=""):
-            scene.dream_textures_info = msg
-        def exception_callback(fatal, msg, trace):
-            scene.dream_textures_info = ""
-            self.report({'ERROR'}, msg)
-            if trace:
-                print(trace, file=sys.stderr)
-
-        # args = {
-        #     'input': input_image_path,
-        #     'name': input_image.name,
-        #     'outscale': int(context.scene.dream_textures_upscale_outscale),
-        #     'full_precision': context.scene.dream_textures_upscale_full_precision,
-        #     'seamless': context.scene.dream_textures_upscale_seamless
-        # }
 
         def image_done(future):
-            image = future.result()
+            image = future.result()[-1]
             image = bpy_image("diffusers-upscaled", image.shape[0], image.shape[1], image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = image
             if active_node is not None:
                 active_node.image = image
-        Generator.shared().upscale(input_image_path, "brick wall", context.scene.dream_textures_upscale_full_precision).add_done_callback(image_done)
+        gen = Generator.shared()
+        context.scene.dream_textures_upscale_prompt.prompt_structure = custom_structure.id
+        f = gen.upscale(
+            image=input_image_path,
+            tile_size=context.scene.dream_textures_upscale_tile_size,
+            **context.scene.dream_textures_upscale_prompt.generate_args()
+        )
+        f.add_response_callback(on_tile_complete)
+        f.add_done_callback(image_done)
+        gen._active_generation_future = f
         
         return {"FINISHED"}

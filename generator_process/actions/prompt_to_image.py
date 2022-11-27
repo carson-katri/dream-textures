@@ -66,6 +66,41 @@ class Optimizations:
             annotation: _AnnotatedAlias = self.__annotations__[property]
             return annotation.__metadata__ == device
         return True
+    
+    def apply(self, pipeline, device):
+        """
+        Apply the optimizations to a diffusers pipeline.
+
+        All exceptions are ignored to make this more general purpose across different pipelines.
+        """
+        import torch
+
+        torch.backends.cudnn.benchmark = self.can_use("cudnn_benchmark", device)
+        torch.backends.cuda.matmul.allow_tf32 = self.can_use("tf32", device)
+
+        try:
+            if self.can_use("attention_slicing", device):
+                pipeline.enable_attention_slicing(self.attention_slice_size)
+            else:
+                pipeline.disable_attention_slicing()
+        except: pass
+        
+        try:
+            if self.can_use("sequential_cpu_offload", device):
+                pipeline.enable_sequential_cpu_offload()
+        except: pass
+        
+        try:
+            if self.can_use("channels_last_memory_format", device):
+                pipeline.unet.to(memory_format=torch.channels_last)
+            else:
+                pipeline.unet.to(memory_format=torch.contiguous_format)
+        except: pass
+
+        # FIXME: xFormers wheels are not yet available (https://github.com/facebookresearch/xformers/issues/533)
+        # if self.can_use("xformers_attention", device):
+        #     pipeline.enable_xformers_memory_efficient_attention()
+        return pipeline
 
 def choose_device(self) -> str:
     """
@@ -95,8 +130,14 @@ def prompt_to_image(
     height: int,
     seed: int,
 
+    cfg_scale: float,
+    use_negative_prompt: bool,
+    negative_prompt: str,
+    
     seamless: bool,
     seamless_axes: list[str],
+
+    iterations: int,
 
     **kwargs
 ) -> Generator[NDArray, None, None]:
@@ -260,26 +301,7 @@ def prompt_to_image(
             } if is_stable_diffusion_2 else None)
 
             # Optimizations
-            
-            torch.backends.cudnn.benchmark = optimizations.can_use("cudnn_benchmark", device)
-            torch.backends.cuda.matmul.allow_tf32 = optimizations.can_use("tf32", device)
-
-            if optimizations.can_use("attention_slicing", device):
-                pipe.enable_attention_slicing(optimizations.attention_slice_size)
-            else:
-                pipe.disable_attention_slicing()
-            
-            if use_cpu_offload:
-                pipe.enable_sequential_cpu_offload()
-            
-            if optimizations.can_use("channels_last_memory_format", device):
-                pipe.unet.to(memory_format=torch.channels_last)
-            else:
-                pipe.unet.to(memory_format=torch.contiguous_format)
-
-            # FIXME: xFormers wheels are not yet available (https://github.com/facebookresearch/xformers/issues/533)
-            # if optimizations.can_use("xformers_attention", device):
-            #     pipe.enable_xformers_memory_efficient_attention()
+            pipe = optimizations.apply(pipe, device)
 
             # RNG
             generator = None if seed is None else (torch.manual_seed(seed) if device == "mps" else torch.Generator(device=device).manual_seed(seed))
@@ -296,9 +318,9 @@ def prompt_to_image(
                         height=height,
                         width=width,
                         num_inference_steps=steps,
-                        guidance_scale=7.5,
-                        negative_prompt=None,
-                        num_images_per_prompt=1,
+                        guidance_scale=cfg_scale,
+                        negative_prompt=negative_prompt if use_negative_prompt else None,
+                        num_images_per_prompt=iterations,
                         eta=0.0,
                         generator=generator,
                         latents=None,

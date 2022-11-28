@@ -51,19 +51,8 @@ def register_render_pass():
                                 render_pass = pass_i
                         if render_pass.name == "Dream Textures":
                             self.update_stats("Dream Textures", "Starting")
-                            def image_callback(set_pixels, shared_memory_name, seed, width, height, upscaled=False):
-                                # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
-                                if not upscaled:
-                                    shared_memory = SharedMemory(shared_memory_name)
-                                    set_pixels(np.frombuffer(shared_memory.buf, dtype=np.float32).copy().reshape((size_x * size_y, 4)))
-
-                                    shared_memory.close()
                             
                             step_count = int(scene.dream_textures_render_properties_prompt.strength * scene.dream_textures_render_properties_prompt.steps)
-                            def step_callback(step, width=None, height=None, shared_memory_name=None):
-                                self.update_stats("Dream Textures", f"Step {step + 1}/{step_count}")
-                                self.update_progress(step / step_count)
-                                return
                             
                             self.update_stats("Dream Textures", "Creating temporary image")
                             combined_pass_image = bpy.data.images.new("dream_textures_post_processing_temp", width=size_x, height=size_y)
@@ -82,7 +71,7 @@ def register_render_pass():
                                 display_device=scene.display_settings.display_device,
                                 look=scene.view_settings.look,
                                 inverse=False
-                            ).get()
+                            ).result()
                             
                             combined_pass_image.pixels[:] = combined_pixels.ravel()
 
@@ -90,7 +79,7 @@ def register_render_pass():
                             
                             pixels = Generator.shared().prompt_to_image(
                                 **scene.dream_textures_render_properties_prompt.generate_args()
-                            )
+                            ).result()
 
                             # Perform an inverse transform so when Blender applies its transform everything looks correct.
                             event = threading.Event()

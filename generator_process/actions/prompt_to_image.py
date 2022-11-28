@@ -42,7 +42,6 @@ class Scheduler(enum.Enum):
             return scheduler_class().from_pretrained(pretrained['model_path'], subfolder=pretrained['subfolder'])
         else:
             return scheduler_class().from_config(pipeline.scheduler.config)
-        
 
 @dataclass(eq=True)
 class Optimizations:
@@ -102,6 +101,11 @@ class Optimizations:
         #     pipeline.enable_xformers_memory_efficient_attention()
         return pipeline
 
+class StepPreviewMode(enum.Enum):
+    NONE = "None"
+    FAST = "Fast"
+    ACCURATE = "Accurate"
+
 def choose_device(self) -> str:
     """
     Automatically select which PyTorch device to use.
@@ -113,6 +117,31 @@ def choose_device(self) -> str:
         return "mps"
     else:
         return "cpu"
+
+def approximate_decoded_latents(latents):
+    """
+    Approximate the decoded latents without using the VAE.
+    """
+    import torch
+    # origingally adapted from code by @erucipe and @keturn here:
+    # https://discuss.huggingface.co/t/decoding-latents-to-rgb-without-upscaling/23204/7
+
+    # these updated numbers for v1.5 are from @torridgristle
+    v1_5_latent_rgb_factors = torch.tensor([
+        #    R        G        B
+        [ 0.3444,  0.1385,  0.0670], # L1
+        [ 0.1247,  0.4027,  0.1494], # L2
+        [-0.3192,  0.2513,  0.2103], # L3
+        [-0.1307, -0.1874, -0.7445]  # L4
+    ], dtype=latents.dtype, device=latents.device)
+
+    latent_image = latents[0].permute(1, 2, 0) @ v1_5_latent_rgb_factors
+    latents_ubyte = (((latent_image + 1) / 2)
+                    .clamp(0, 1)  # change scale from -1..1 to 0..1
+                    .mul(0xFF)  # to 0..255
+                    .byte()).cpu()
+
+    return latents_ubyte.numpy()
 
 def prompt_to_image(
     self,
@@ -138,6 +167,8 @@ def prompt_to_image(
     seamless_axes: list[str],
 
     iterations: int,
+
+    step_preview_mode: StepPreviewMode,
 
     **kwargs
 ) -> Generator[NDArray, None, None]:
@@ -227,7 +258,16 @@ def prompt_to_image(
                         latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
                         # NOTE: Modified to yield the latents instead of calling a callback.
-                        yield np.asarray(ImageOps.flip(Image.fromarray(self._approximate_decoded_latents(latents))).convert('RGBA'), dtype=np.float32) / 255.
+                        match kwargs['step_preview_mode']:
+                            case StepPreviewMode.NONE:
+                                pass
+                            case StepPreviewMode.FAST:
+                                yield np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.
+                            case StepPreviewMode.ACCURATE:
+                                yield from [
+                                    np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                                    for image in self.numpy_to_pil(self.decode_latents(latents))
+                                ]
 
                     # 8. Post-processing
                     image = self.decode_latents(latents)
@@ -241,31 +281,6 @@ def prompt_to_image(
                         np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
                         for image in self.numpy_to_pil(image)
                     ]
-
-                
-                def _approximate_decoded_latents(self, latents):
-                    """
-                    Approximate the decoded latents without using the VAE.
-                    """
-                    # origingally adapted from code by @erucipe and @keturn here:
-                    # https://discuss.huggingface.co/t/decoding-latents-to-rgb-without-upscaling/23204/7
-
-                    # these updated numbers for v1.5 are from @torridgristle
-                    v1_5_latent_rgb_factors = torch.tensor([
-                        #    R        G        B
-                        [ 0.3444,  0.1385,  0.0670], # L1
-                        [ 0.1247,  0.4027,  0.1494], # L2
-                        [-0.3192,  0.2513,  0.2103], # L3
-                        [-0.1307, -0.1874, -0.7445]  # L4
-                    ], dtype=latents.dtype, device=latents.device)
-
-                    latent_image = latents[0].permute(1, 2, 0) @ v1_5_latent_rgb_factors
-                    latents_ubyte = (((latent_image + 1) / 2)
-                                    .clamp(0, 1)  # change scale from -1..1 to 0..1
-                                    .mul(0xFF)  # to 0..255
-                                    .byte()).cpu()
-
-                    return latents_ubyte.numpy()
             
             if optimizations.cpu_only:
                 device = "cpu"
@@ -327,7 +342,8 @@ def prompt_to_image(
                         output_type="pil",
                         return_dict=True,
                         callback=None,
-                        callback_steps=1
+                        callback_steps=1,
+                        step_preview_mode=step_preview_mode
                     )
         case Pipeline.STABILITY_SDK:
             import stability_sdk

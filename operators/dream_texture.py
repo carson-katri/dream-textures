@@ -22,6 +22,32 @@ generator_advance = None
 last_data_block = None
 timer = None
 
+def save_temp_image(img, path=None):
+    path = path if path is not None else tempfile.NamedTemporaryFile().name
+
+    settings = bpy.context.scene.render.image_settings
+    file_format = settings.file_format
+    mode = settings.color_mode
+    depth = settings.color_depth
+
+    settings.file_format = 'PNG'
+    settings.color_mode = 'RGBA'
+    settings.color_depth = '8'
+
+    img.save_render(path)
+
+    settings.file_format = file_format
+    settings.color_mode = mode
+    settings.color_depth = depth
+
+    return path
+
+def bpy_image(name, width, height, pixels):
+    image = bpy.data.images.new(name, width=width, height=height)
+    image.pixels[:] = pixels
+    image.pack()
+    return image
+
 class DreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture"
     bl_label = "Dream Texture"
@@ -53,79 +79,74 @@ class DreamTexture(bpy.types.Operator):
                 history_entry.prompt_structure = custom_structure.id
                 history_entry.prompt_structure_token_subject = file_batch_lines[i].body
 
-        def bpy_image(name, width, height, pixels):
-            image = bpy.data.images.new(name, width=width, height=height)
-            image.pixels[:] = pixels
-            image.pack()
-            return image
-
-        node_tree = context.material.node_tree if hasattr(context, 'material') else None
+        node_tree = context.material.node_tree if hasattr(context, 'material') and hasattr(context.material, 'node_tree') else None
         screen = context.screen
         scene = context.scene
 
-        iteration = 0
-        def image_writer(shared_memory_name, seed, width, height, upscaled=False):
-            nonlocal iteration
-            global last_data_block
-            # Only use the non-upscaled texture, as upscaling is currently unsupported by the addon.
-            if not upscaled:
-                if last_data_block is not None:
-                    bpy.data.images.remove(last_data_block)
-                    last_data_block = None
-                generator = GeneratorProcess.shared(create=False)
-                if generator is None or generator.process.poll() or width == 0 or height == 0:
-                    return # process was closed
-                shared_memory = SharedMemory(shared_memory_name)
-                image = bpy_image(f"{seed}", width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
-                shared_memory.close()
-                if node_tree is not None:
-                    nodes = node_tree.nodes
-                    texture_node = nodes.new("ShaderNodeTexImage")
-                    texture_node.image = image
-                    nodes.active = texture_node
-                for area in screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
-                        area.spaces.active.image = image
-                scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
-                history_entries[iteration].seed = str(seed)
-                history_entries[iteration].random_seed = False
-                iteration += 1
-        
-        def view_step(step, width=None, height=None, shared_memory_name=None):
-            scene.dream_textures_progress = step + 1
-            if shared_memory_name is None:
-                return # show steps disabled
-            global last_data_block
+        generated_args = scene.dream_textures_prompt.generate_args()
+
+        init_image = None
+        if generated_args['use_init_img']:
+            match generated_args['init_img_src']:
+                case 'file':
+                    init_image = save_temp_image(scene.init_img)
+                case 'open_editor':
+                    for area in screen.areas:
+                        if area.type == 'IMAGE_EDITOR':
+                            if area.spaces.active.image is not None:
+                                init_image = save_temp_image(area.spaces.active.image)
+
+        last_data_block = None
+        def step_callback(_, step_image):
+            nonlocal last_data_block
+            if last_data_block is not None:
+                bpy.data.images.remove(last_data_block)
+            last_data_block = bpy_image("Step", step_image.shape[0], step_image.shape[1], step_image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
-                    shared_memory = SharedMemory(shared_memory_name)
-                    step_image = bpy_image(f'Step {step + 1}/{scene.dream_textures_prompt.steps}', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
-                    shared_memory.close()
-                    area.spaces.active.image = step_image
-                    if last_data_block is not None:
-                        bpy.data.images.remove(last_data_block)
-                    last_data_block = step_image
-                    return # Only perform this on the first image editor found.
-        def step_callback(future, step_image):
-            image = bpy_image("diffusers-image", step_image.shape[0], step_image.shape[1], step_image.ravel())
-            for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    area.spaces.active.image = image
-        def image_done(future):
+                    area.spaces.active.image = last_data_block
+
+        def done_callback(future):
+            nonlocal last_data_block
             del gen._active_generation_future
-            image = future.result()[-1]
-            image = bpy_image("diffusers-image", image.shape[0], image.shape[1], image.ravel())
+            image = future.result()
+            if isinstance(image, list):
+                image = image[-1]
+            if last_data_block is not None:
+                bpy.data.images.remove(last_data_block)
+            last_data_block = bpy_image("Final", image.shape[0], image.shape[1], image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
-                    area.spaces.active.image = image
+                    area.spaces.active.image = last_data_block
+            if node_tree is not None:
+                # TODO: Create Image Texture node.
+                pass
+
         gen = Generator.shared()
-        f = gen.prompt_to_image(
-            Pipeline.STABLE_DIFFUSION,
-            **scene.dream_textures_prompt.generate_args(),
-        )
+        if init_image is not None:
+            match generated_args['init_img_action']:
+                case 'modify':
+                    f = gen.image_to_image(
+                        Pipeline.STABLE_DIFFUSION,
+                        image=init_image,
+                        **generated_args
+                    )
+                case 'inpaint':
+                    f = gen.inpaint(
+                        Pipeline.STABLE_DIFFUSION,
+                        image=init_image,
+                        **generated_args
+                    )
+                case 'outpaint':
+                    pass
+        else:
+            f = gen.prompt_to_image(
+                Pipeline.STABLE_DIFFUSION,
+                **generated_args,
+            )
         gen._active_generation_future = f
         f.add_response_callback(step_callback)
-        f.add_done_callback(image_done)
+        f.add_done_callback(done_callback)
         return {"FINISHED"}
 
 headless_prompt = None
@@ -325,7 +346,7 @@ class CancelGenerator(bpy.types.Operator):
     @classmethod
     def poll(self, context):
         gen = Generator.shared()
-        return hasattr(gen, "_active_generation_future") and gen._active_generation_future is not None
+        return hasattr(gen, "_active_generation_future") and gen._active_generation_future is not None and not gen._active_generation_future.cancelled and not gen._active_generation_future.done
 
     def execute(self, context):
         gen = Generator.shared()

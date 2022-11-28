@@ -5,11 +5,13 @@ import sys
 from typing import _AnnotatedAlias
 from ..absolute_path import absolute_path
 from ..generator_process.registrar import BackendTarget
-from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler
+from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode
 from ..generator_process import Generator
 from ..prompt_engineering import *
 
 scheduler_options = [(scheduler.value, scheduler.value, '') for scheduler in Scheduler]
+
+step_preview_mode_options = [(mode.value, mode.value, '') for mode in StepPreviewMode]
 
 precision_options = [
     ('auto', 'Automatic', "", 1),
@@ -98,7 +100,7 @@ attributes = {
     "steps": IntProperty(name="Steps", default=25, min=1),
     "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, soft_min=1.01, description="How strongly the prompt influences the image"),
     "scheduler": EnumProperty(name="Scheduler", items=scheduler_options, default=0),
-    "show_steps": BoolProperty(name="Show Steps", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", default=False),
+    "step_preview_mode": EnumProperty(name="Step Preview", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", items=step_preview_mode_options, default=1),
 
     # Init Image
     "use_init_img": BoolProperty(name="Use Init Image", default=False),
@@ -212,6 +214,7 @@ def generate_args(self):
     args['seed'] = self.get_seed()
     args['optimizations'] = self.get_optimizations()
     args['scheduler'] = Scheduler(args['scheduler'])
+    args['step_preview_mode'] = StepPreviewMode(args['step_preview_mode'])
     return args
 
 DreamPrompt.generate_prompt = generate_prompt

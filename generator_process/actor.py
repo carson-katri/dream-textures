@@ -275,7 +275,7 @@ class Actor:
         self._response_queue.put(Message.END)
 
     def _send(self, name):
-        def _send(*args, **kwargs):
+        def _send(*args, _block=False, **kwargs):
             future = Future()
             def _send_thread(future: Future):
                 self._lock.acquire()
@@ -296,8 +296,11 @@ class Actor:
                         future.add_response(response)
                 
                 self._lock.release()
-            thread = threading.Thread(target=_send_thread, args=(future,), daemon=True)
-            thread.start()
+            if _block:
+                _send_thread(future)
+            else:
+                thread = threading.Thread(target=_send_thread, args=(future,), daemon=True)
+                thread.start()
             return future
         return _send
     

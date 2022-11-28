@@ -9,4 +9,4 @@ scipy # LMSDiscreteScheduler
 
 stability-sdk==0.2.6 # DreamStudio
 
-opencolorio # color management
+opencolorio==2.1.2 # color management

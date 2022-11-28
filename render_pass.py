@@ -1,15 +1,9 @@
 import bpy
 import cycles
-import threading
-import threading
-import functools
 import numpy as np
 import os
-from multiprocessing.shared_memory import SharedMemory
-
+from .generator_process.actions.prompt_to_image import Pipeline, StepPreviewMode
 from .generator_process import Generator
-
-from .operators.dream_texture import dream_texture
 
 update_render_passes_original = cycles.CyclesRender.update_render_passes
 render_original = cycles.CyclesRender.render
@@ -52,7 +46,7 @@ def register_render_pass():
                         if render_pass.name == "Dream Textures":
                             self.update_stats("Dream Textures", "Starting")
                             
-                            step_count = int(scene.dream_textures_render_properties_prompt.strength * scene.dream_textures_render_properties_prompt.steps)
+                            # step_count = int(scene.dream_textures_render_properties_prompt.strength * scene.dream_textures_render_properties_prompt.steps)
                             
                             self.update_stats("Dream Textures", "Creating temporary image")
                             combined_pass_image = bpy.data.images.new("dream_textures_post_processing_temp", width=size_x, height=size_y)
@@ -62,7 +56,9 @@ def register_render_pass():
                             combined_pixels = np.empty((size_x * size_y, 4), dtype=np.float32)
                             rect.foreach_get(combined_pixels)
 
-                            combined_pixels = Generator.shared().ocio_transform(
+                            gen = Generator.shared()
+                            self.update_stats("Dream Textures", "Applying color management transforms")
+                            combined_pixels = gen.ocio_transform(
                                 combined_pixels,
                                 config_path=os.path.join(bpy.utils.resource_path('LOCAL'), 'datafiles/colormanagement/config.ocio'),
                                 exposure=scene.view_settings.exposure,
@@ -70,23 +66,36 @@ def register_render_pass():
                                 view_transform=scene.view_settings.view_transform,
                                 display_device=scene.display_settings.display_device,
                                 look=scene.view_settings.look,
-                                inverse=False
+                                inverse=False,
+                                _block=True
                             ).result()
-                            
-                            combined_pass_image.pixels[:] = combined_pixels.ravel()
 
-                            self.update_stats("Dream Textures", "Starting...")
+                            self.update_stats("Dream Textures", "Generating...")
                             
-                            pixels = Generator.shared().prompt_to_image(
-                                **scene.dream_textures_render_properties_prompt.generate_args()
+                            generated_args = scene.dream_textures_render_properties_prompt.generate_args()
+                            generated_args['step_preview_mode'] = StepPreviewMode.NONE
+                            generated_args['width'] = size_x
+                            generated_args['height'] = size_y
+                            pixels = gen.image_to_image(
+                                pipeline=Pipeline.STABLE_DIFFUSION,
+                                image=(combined_pixels.reshape((size_x, size_y, 4)) * 255).astype(np.uint8),
+                                **generated_args,
+                                _block=True
                             ).result()
 
                             # Perform an inverse transform so when Blender applies its transform everything looks correct.
-                            event = threading.Event()
-                            buf = pixels.tobytes()
-                            combined_pixels_memory.buf[:] = buf
-                            bpy.app.timers.register(functools.partial(do_ocio_transform, event, pixels, combined_pixels_memory, True))
-                            event.wait()
+                            self.update_stats("Dream Textures", "Applying inverse color management transforms")
+                            pixels = gen.ocio_transform(
+                                pixels,
+                                config_path=os.path.join(bpy.utils.resource_path('LOCAL'), 'datafiles/colormanagement/config.ocio'),
+                                exposure=scene.view_settings.exposure,
+                                gamma=scene.view_settings.gamma,
+                                view_transform=scene.view_settings.view_transform,
+                                display_device=scene.display_settings.display_device,
+                                look=scene.view_settings.look,
+                                inverse=True,
+                                _block=True
+                            ).result()
 
                             reshaped = pixels.reshape((size_x * size_y, 4))
                             render_pass.rect.foreach_set(reshaped)
@@ -95,8 +104,6 @@ def register_render_pass():
                             del pixels
                             del combined_pixels
                             del reshaped
-
-                            combined_pixels_memory.close()
 
                             def cleanup():
                                 bpy.data.images.remove(combined_pass_image)

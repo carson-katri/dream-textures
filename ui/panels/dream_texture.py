@@ -263,7 +263,7 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             layout.prop(get_prompt(context), "steps")
             layout.prop(get_prompt(context), "cfg_scale")
             layout.prop(get_prompt(context), "scheduler")
-            layout.prop(get_prompt(context), "show_steps")
+            layout.prop(get_prompt(context), "step_preview_mode")
 
     yield AdvancedPanel
 

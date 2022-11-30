@@ -1,4 +1,4 @@
-from multiprocessing import Queue, Process, Lock
+from multiprocessing import Queue, Process, Lock, current_process
 import multiprocessing.synchronize
 import enum
 import traceback
@@ -6,6 +6,15 @@ import threading
 from typing import Type, TypeVar, Callable, Any, MutableSet, Generator
 # from concurrent.futures import Future
 import site
+import sys
+
+def _load_dependencies():
+    from ..absolute_path import absolute_path
+    site.addsitedir(absolute_path(".python_dependencies"))
+    deps = sys.path.pop(-1)
+    sys.path.insert(0, deps)
+if current_process().name == "__actor__":
+    _load_dependencies()
 
 class Future:
     """
@@ -244,13 +253,8 @@ class Actor:
         if result := self._lock.acquire(block=False):
             self._lock.release()
         return result
-    
-    def _load_dependencies(self):
-        from ..absolute_path import absolute_path
-        site.addsitedir(absolute_path(".python_dependencies"))
 
     def _backend_loop(self):
-        self._load_dependencies()
         while True:
             self._receive(self._message_queue.get())
 

@@ -31,6 +31,8 @@ def hf_list_models(
 
 def hf_list_installed_models(self) -> list[Model]:
     from diffusers.utils import DIFFUSERS_CACHE
+    if not os.path.exists(DIFFUSERS_CACHE):
+        return []
     return list(
         filter(
             lambda x: os.path.isdir(x.id),

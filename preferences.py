@@ -11,6 +11,7 @@ from .operators.open_latest_version import OpenLatestVersion
 from .property_groups.dream_prompt import DreamPrompt
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
 from .generator_process import Generator
+from .generator_process.registrar import BackendTarget
 
 class OpenHuggingFace(bpy.types.Operator):
     bl_idname = "dream_textures.open_hugging_face"
@@ -154,7 +155,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
     @staticmethod
     def register():
-        set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+        if BackendTarget.local_available():
+            set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
 
     def draw(self, context):
         layout = self.layout
@@ -166,7 +168,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
         has_dependencies = len(os.listdir(absolute_path(".python_dependencies"))) > 2
         if has_dependencies:
-            has_local = os.path.exists(absolute_path(".python_dependencies/diffusers")) > 0
+            has_local = BackendTarget.local_available()
 
             if has_local:        
                 search_box = layout.box()

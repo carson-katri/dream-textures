@@ -1,3 +1,5 @@
+import os
+from ..absolute_path import absolute_path
 from .intent import Intent
 from enum import IntEnum
 
@@ -5,6 +7,10 @@ class BackendTarget(IntEnum):
     """Which generator backend to use"""
     LOCAL = 0
     STABILITY_SDK = 1
+
+    @staticmethod
+    def local_available():
+        return os.path.exists(absolute_path(".python_dependencies/diffusers"))
 
     def __str__(self):
         return self.name

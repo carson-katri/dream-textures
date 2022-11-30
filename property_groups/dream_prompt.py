@@ -54,13 +54,14 @@ _model_options = []
 def _on_model_options(future):
     global _model_options
     _model_options = future.result()
-Generator.shared().hf_list_installed_models().add_done_callback(_on_model_options)
+if BackendTarget.local_available():
+    Generator.shared().hf_list_installed_models().add_done_callback(_on_model_options)
 def model_options(self, context):
     return [(m.id, os.path.basename(m.id).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(_model_options)]
 
 def backend_options(self, context):
     def options():
-        if os.path.exists(absolute_path(".python_dependencies/diffusers")):
+        if BackendTarget.local_available():
             yield (BackendTarget.LOCAL.name, 'Local', 'Run on your own hardware', 1)
         if len(context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key) > 0:
             yield (BackendTarget.STABILITY_SDK.name, 'DreamStudio', 'Run in the cloud with DreamStudio', 2)
@@ -76,7 +77,7 @@ def seed_clamp(self, ctx):
         pass # will get hashed once generated
 
 attributes = {
-    "backend": EnumProperty(name="Backend", items=backend_options, default=1 if os.path.exists(absolute_path(".python_dependencies/diffusers")) else 2, description="Fill in a few simple options to create interesting images quickly"),
+    "backend": EnumProperty(name="Backend", items=backend_options, default=1 if BackendTarget.local_available() else 2, description="Fill in a few simple options to create interesting images quickly"),
     "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference"),
 
     # Prompt

@@ -1,18 +1,12 @@
 git+https://github.com/huggingface/diffusers@main#egg=diffusers
 transformers
-accelerate==0.14.0
+accelerate
 huggingface_hub
 
 torch>=1.13
 
-# Original SD checkpoint conversion
-pytorch-lightning
-tensorboard
-
 scipy # LMSDiscreteScheduler
 
-stability-sdk # DreamStudio
+stability-sdk==0.2.6 # DreamStudio
 
 opencolorio==2.1.2 # color management
-
-tiler # Upscaler tiling

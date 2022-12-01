@@ -6,14 +6,8 @@ huggingface_hub
 --extra-index-url https://download.pytorch.org/whl/rocm5.2/
 torch>=1.13
 
-# Original SD checkpoint conversion
-pytorch-lightning
-tensorboard
-
 scipy # LMSDiscreteScheduler
 
-stability-sdk # DreamStudio
+stability-sdk==0.2.6 # DreamStudio
 
 opencolorio==2.1.2 # color management
-
-tiler # Upscaler tiling

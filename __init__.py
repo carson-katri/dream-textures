@@ -48,10 +48,10 @@ if current_process().name != "__actor__":
     from .ui.presets import register_default_presets
 
     requirements_path_items = (
-        # Use the old version of requirements-win.txt to fix installation issues with Blender + PyTorch 1.12.1
-        ('requirements-lin-win-colab-CUDA.txt', 'Linux/Windows (CUDA)', 'Linux or Windows with NVIDIA GPU'),
-        ('requirements-mac-MPS-CPU.txt', 'Apple Silicon', 'Apple M1/M2'),
-        ('requirements-lin-AMD.txt', 'Linux (AMD)', 'Linux with AMD GPU'),
+        ('requirements/win-linux-cuda.txt', 'Linux/Windows (CUDA)', 'Linux or Windows with NVIDIA GPU'),
+        ('requirements/mac-mps-cpu.txt', 'Apple Silicon', 'Apple M1/M2'),
+        ('requirements/linux-rocm.txt', 'Linux (AMD)', 'Linux with AMD GPU'),
+        ('requirements/dreamstudio.txt', 'DreamStudio', 'Cloud Compute Service')
     )
 
     def register():
@@ -61,7 +61,7 @@ if current_process().name != "__actor__":
         if hasattr(bpy.types, dt_op.idname()): # objects under bpy.ops are created on the fly, have to check that it actually exists a little differently
             raise RuntimeError("Another instance of Dream Textures is already running.")
 
-        bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='requirements-mac-MPS-CPU.txt' if sys.platform == 'darwin' else 'requirements-lin-win-colab-CUDA.txt')
+        bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='requirements/mac-mps-cpu.txt' if sys.platform == 'darwin' else 'requirements/win-linux-cuda.txt')
 
         for cls in PREFERENCE_CLASSES:
             bpy.utils.register_class(cls)

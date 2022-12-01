@@ -1,0 +1,13 @@
+git+https://github.com/huggingface/diffusers@main#egg=diffusers
+transformers
+accelerate
+huggingface_hub
+
+--extra-index-url https://download.pytorch.org/whl/cu117
+torch>=1.13
+
+scipy # LMSDiscreteScheduler
+
+stability-sdk==0.2.6 # DreamStudio
+
+opencolorio==2.1.2 # color management

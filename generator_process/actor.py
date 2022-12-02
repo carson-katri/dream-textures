@@ -38,7 +38,6 @@ class Future:
         self._exception = None
         self.done = False
         self.cancelled = False
-        self.actor = actor
 
     def result(self):
         """

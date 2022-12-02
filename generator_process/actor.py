@@ -38,6 +38,7 @@ class Future:
         self._exception = None
         self.done = False
         self.cancelled = False
+        self.actor = actor
 
     def result(self):
         """
@@ -77,8 +78,7 @@ class Future:
             return self._exception
     
     def cancel(self):
-        self._cancelled = True
-        self.set_done()
+        self.cancelled = True
 
     def add_response(self, response):
         """
@@ -188,10 +188,10 @@ class Actor:
         "shared"
     }
 
-    def __init__(self, context: ActorContext, message_queue: Queue = Queue(maxsize=1), response_queue: Queue = Queue(maxsize=1)):
+    def __init__(self, context: ActorContext, message_queue: Queue = None, response_queue: Queue = None):
         self.context = context
-        self._message_queue = message_queue
-        self._response_queue = response_queue
+        self._message_queue = message_queue if message_queue is not None else Queue(maxsize=1)
+        self._response_queue = response_queue if response_queue is not None else Queue(maxsize=1)
         self._setup()
         self.__class__._shared_instance = self
     
@@ -265,7 +265,7 @@ class Actor:
                 for res in iter(response):
                     extra_message = None
                     try:
-                        self._message_queue.get(block=False)
+                        extra_message = self._message_queue.get(block=False)
                     except:
                         pass
                     if extra_message == Message.CANCEL:

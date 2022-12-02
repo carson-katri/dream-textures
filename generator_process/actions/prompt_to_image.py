@@ -63,7 +63,7 @@ class Optimizations:
             return False
         if isinstance(self.__annotations__.get(property, None), _AnnotatedAlias):
             annotation: _AnnotatedAlias = self.__annotations__[property]
-            return annotation.__metadata__ == device
+            return annotation.__metadata__[0] == device
         return True
     
     def apply(self, pipeline, device):

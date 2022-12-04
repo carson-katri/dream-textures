@@ -225,7 +225,7 @@ def inpaint(
             _configure_model_padding(pipe.vae, seamless, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if optimizations.can_use("inference_mode", device) else nullcontext()), \
+            with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     init_image = Image.open(image) if isinstance(image, str) else Image.fromarray(image)
                     yield from pipe(

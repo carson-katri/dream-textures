@@ -283,11 +283,11 @@ def advanced_panel(sub_panel, space_type, get_prompt):
                 if hasattr(prompt, f"optimizations_{prop}"):
                     layout.prop(prompt, f"optimizations_{prop}")
 
-            optimization("inference_mode")
             optimization("cudnn_benchmark")
             optimization("tf32")
             optimization("amp")
             optimization("half_precision")
+            optimization("channels_last_memory_format")
     yield SpeedOptimizationPanel
 
     class MemoryOptimizationPanel(sub_panel):
@@ -312,7 +312,6 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             if prompt.optimizations_attention_slice_size_src == 'manual':
                 slice_size_row.prop(prompt, "optimizations_attention_slice_size", text="Size")
             optimization("sequential_cpu_offload")
-            optimization("channels_last_memory_format")
             optimization("cpu_only")
             # optimization("xformers_attention") # FIXME: xFormers is not yet available.
     yield MemoryOptimizationPanel

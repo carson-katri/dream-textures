@@ -35,6 +35,7 @@ def upscaling_panels():
                 
                 layout.prop(prompt, "prompt_structure_token_subject")
                 layout.prop(context.scene, "dream_textures_upscale_tile_size")
+                layout.prop(context.scene, "dream_textures_upscale_blend")
 
                 if context.scene.dream_textures_upscale_tile_size > 128:
                     warning_box = layout.box()

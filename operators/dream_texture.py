@@ -1,6 +1,7 @@
 import sys
 import bpy
 import os
+import hashlib
 import numpy as np
 from numpy.typing import NDArray
 from multiprocessing.shared_memory import SharedMemory
@@ -106,47 +107,65 @@ class DreamTexture(bpy.types.Operator):
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = last_data_block
 
+        iteration = 0
         def done_callback(future):
             nonlocal last_data_block
+            nonlocal iteration
             del gen._active_generation_future
-            image: ImageGenerationResult | list = future.result()
-            if isinstance(image, list):
-                image = image[-1]
+            image_result: ImageGenerationResult | list = future.result()
+            if isinstance(image_result, list):
+                image_result = image_result[-1]
             if last_data_block is not None:
                 bpy.data.images.remove(last_data_block)
-            last_data_block = bpy_image(str(image.seed), image.image.shape[1], image.image.shape[0], image.image.ravel())
+            image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel())
+            if node_tree is not None:
+                nodes = node_tree.nodes
+                texture_node = nodes.new("ShaderNodeTexImage")
+                texture_node.image = image
+                nodes.active = texture_node
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
-                    area.spaces.active.image = last_data_block
-            if node_tree is not None:
-                # TODO: Create Image Texture node.
-                pass
+                    area.spaces.active.image = image
+            scene.dream_textures_prompt.seed = str(image_result.seed) # update property in case seed was sourced randomly or from hash
+            # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
+            # and as custom property of the image. Needs to be a string because the int from the hash function is too large
+            image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
+            image['dream_textures_hash'] = image_hash
+            scene.dream_textures_prompt.hash = image_hash
+            history_entries[iteration].seed = str(image_result.seed)
+            history_entries[iteration].random_seed = False
+            history_entries[iteration].hash = image_hash
+            iteration += 1
+            if iteration < generated_args['iterations']:
+                generate_next()
 
         gen = Generator.shared()
-        if init_image is not None:
-            match generated_args['init_img_action']:
-                case 'modify':
-                    f = gen.image_to_image(
-                        Pipeline.STABLE_DIFFUSION,
-                        image=init_image,
-                        **generated_args
-                    )
-                case 'inpaint':
-                    f = gen.inpaint(
-                        Pipeline.STABLE_DIFFUSION,
-                        image=init_image,
-                        **generated_args
-                    )
-                case 'outpaint':
-                    pass
-        else:
-            f = gen.prompt_to_image(
-                Pipeline.STABLE_DIFFUSION,
-                **generated_args,
-            )
-        gen._active_generation_future = f
-        f.add_response_callback(step_callback)
-        f.add_done_callback(done_callback)
+        def generate_next():
+            if init_image is not None:
+                match generated_args['init_img_action']:
+                    case 'modify':
+                        f = gen.image_to_image(
+                            Pipeline.STABLE_DIFFUSION,
+                            image=init_image,
+                            **generated_args
+                        )
+                    case 'inpaint':
+                        f = gen.inpaint(
+                            Pipeline.STABLE_DIFFUSION,
+                            image=init_image,
+                            **generated_args
+                        )
+                    case 'outpaint':
+                        raise NotImplementedError()
+            else:
+                f = gen.prompt_to_image(
+                    Pipeline.STABLE_DIFFUSION,
+                    **generated_args,
+                )
+            gen._active_generation_future = f
+            f.add_response_callback(step_callback)
+            f.add_done_callback(done_callback)
+        generate_next()
         return {"FINISHED"}
 
 headless_prompt = None

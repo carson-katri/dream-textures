@@ -47,7 +47,6 @@ class Scheduler(enum.Enum):
 class Optimizations:
     attention_slicing: bool = True
     attention_slice_size: Union[str, int] = "auto"
-    inference_mode: Annotated[bool, "cuda"] = True
     cudnn_benchmark: Annotated[bool, "cuda"] = False
     tf32: Annotated[bool, "cuda"] = False
     amp: Annotated[bool, "cuda"] = False
@@ -105,6 +104,11 @@ class StepPreviewMode(enum.Enum):
     NONE = "None"
     FAST = "Fast"
     ACCURATE = "Accurate"
+
+@dataclass
+class ImageGenerationOutput:
+    image: NDArray
+    seed: int
 
 def choose_device(self) -> str:
     """
@@ -278,7 +282,7 @@ def prompt_to_image(
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield from [
-                        np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                        ImageGenerationOutput(np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255., generator.initial_seed())
                         for image in self.numpy_to_pil(image)
                     ]
             
@@ -319,15 +323,17 @@ def prompt_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = None if seed is None else (torch.manual_seed(seed) if device == "mps" else torch.Generator(device=device).manual_seed(seed))
+            generator = torch.Generator(device=device)
+            if seed is not None:
+                generator = generator.manual_seed(seed)
             
             # Seamless
             _configure_model_padding(pipe.unet, seamless, seamless_axes)
             _configure_model_padding(pipe.vae, seamless, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if optimizations.can_use("inference_mode", device) else nullcontext()), \
-                    (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
+            with (torch.inference_mode() if device != 'mps' else nullcontext()), \
+                (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     yield from pipe(
                         prompt=prompt,
                         height=height,

@@ -102,6 +102,7 @@ class DreamTexture(bpy.types.Operator):
             nonlocal last_data_block
             if last_data_block is not None:
                 bpy.data.images.remove(last_data_block)
+                last_data_block = None
             last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
@@ -117,6 +118,7 @@ class DreamTexture(bpy.types.Operator):
                 image_result = image_result[-1]
             if last_data_block is not None:
                 bpy.data.images.remove(last_data_block)
+                last_data_block = None
             image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel())
             if node_tree is not None:
                 nodes = node_tree.nodes

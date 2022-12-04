@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
+import random
 
 class Pipeline(enum.IntEnum):
     STABLE_DIFFUSION = 0
@@ -106,9 +107,11 @@ class StepPreviewMode(enum.Enum):
     ACCURATE = "Accurate"
 
 @dataclass
-class ImageGenerationOutput:
+class ImageGenerationResult:
     image: NDArray
     seed: int
+    step: int
+    final: bool
 
 def choose_device(self) -> str:
     """
@@ -175,7 +178,7 @@ def prompt_to_image(
     step_preview_mode: StepPreviewMode,
 
     **kwargs
-) -> Generator[NDArray, None, None]:
+) -> Generator[ImageGenerationResult, None, None]:
     match pipeline:
         case Pipeline.STABLE_DIFFUSION:
             import diffusers
@@ -266,10 +269,20 @@ def prompt_to_image(
                             case StepPreviewMode.NONE:
                                 pass
                             case StepPreviewMode.FAST:
-                                yield np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.
+                                yield ImageGenerationResult(
+                                    np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
+                                    generator.initial_seed(),
+                                    i,
+                                    False
+                                )
                             case StepPreviewMode.ACCURATE:
                                 yield from [
-                                    np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                                    ImageGenerationResult(
+                                        np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
+                                        generator.initial_seed(),
+                                        i,
+                                        False
+                                    )
                                     for image in self.numpy_to_pil(self.decode_latents(latents))
                                 ]
 
@@ -282,7 +295,12 @@ def prompt_to_image(
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield from [
-                        ImageGenerationOutput(np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255., generator.initial_seed())
+                        ImageGenerationResult(
+                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
+                            generator.initial_seed(),
+                            num_inference_steps,
+                            True
+                        )
                         for image in self.numpy_to_pil(image)
                     ]
             
@@ -323,9 +341,10 @@ def prompt_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = torch.Generator(device=device)
-            if seed is not None:
-                generator = generator.manual_seed(seed)
+            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+            if seed is None:
+                seed = random.randrange(0, np.iinfo(np.uint32).max)
+            generator = generator.manual_seed(seed)
             
             # Seamless
             _configure_model_padding(pipe.unet, seamless, seamless_axes)

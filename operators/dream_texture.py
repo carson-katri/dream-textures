@@ -14,7 +14,7 @@ from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..absolute_path import WEIGHTS_PATH, CLIPSEG_WEIGHTS_PATH
 from ..generator_process import Generator
-from ..generator_process.actions.prompt_to_image import Pipeline, Optimizations
+from ..generator_process.actions.prompt_to_image import Pipeline, Optimizations, ImageGenerationResult
 
 import tempfile
 
@@ -97,11 +97,11 @@ class DreamTexture(bpy.types.Operator):
                                 init_image = save_temp_image(area.spaces.active.image)
 
         last_data_block = None
-        def step_callback(_, step_image):
+        def step_callback(_, step_image: ImageGenerationResult):
             nonlocal last_data_block
             if last_data_block is not None:
                 bpy.data.images.remove(last_data_block)
-            last_data_block = bpy_image("Step", step_image.shape[1], step_image.shape[0], step_image.ravel())
+            last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = last_data_block
@@ -109,12 +109,12 @@ class DreamTexture(bpy.types.Operator):
         def done_callback(future):
             nonlocal last_data_block
             del gen._active_generation_future
-            image = future.result()
+            image: ImageGenerationResult | list = future.result()
             if isinstance(image, list):
                 image = image[-1]
             if last_data_block is not None:
                 bpy.data.images.remove(last_data_block)
-            last_data_block = bpy_image("Final", image.shape[1], image.shape[0], image.ravel())
+            last_data_block = bpy_image(str(image.seed), image.image.shape[1], image.image.shape[0], image.image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = last_data_block

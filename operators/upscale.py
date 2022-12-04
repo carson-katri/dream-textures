@@ -12,7 +12,7 @@ upscale_options = [
 class Upscale(bpy.types.Operator):
     bl_idname = "shade.dream_textures_upscale"
     bl_label = "Upscale"
-    bl_description = ("Upscale with Real-ESRGAN")
+    bl_description = ("Upscale with Stable Diffusion x4 Upscaler")
     bl_options = {"REGISTER"}
 
     @classmethod
@@ -94,6 +94,7 @@ class Upscale(bpy.types.Operator):
         f = gen.upscale(
             image=input_image_path,
             tile_size=context.scene.dream_textures_upscale_tile_size,
+            blend=context.scene.dream_textures_upscale_blend,
             **context.scene.dream_textures_upscale_prompt.generate_args()
         )
         f.add_response_callback(on_tile_complete)

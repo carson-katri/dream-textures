@@ -88,6 +88,7 @@ if current_process().name != "__actor__":
         
         bpy.types.Scene.dream_textures_upscale_prompt = PointerProperty(type=DreamPrompt)
         bpy.types.Scene.dream_textures_upscale_tile_size = IntProperty(name="Tile Size", default=128, step=64, min=64, max=512)
+        bpy.types.Scene.dream_textures_upscale_blend = IntProperty(name="Blend", default=32, step=8, min=0, max=512)
 
         for cls in CLASSES:
             bpy.utils.register_class(cls)

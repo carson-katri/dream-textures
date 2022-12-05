@@ -126,7 +126,8 @@ class DreamTexture(bpy.types.Operator):
         def done_callback(future):
             nonlocal last_data_block
             nonlocal iteration
-            del gen._active_generation_future
+            if hasattr(gen, '_active_generation_future'):
+                del gen._active_generation_future
             image_result: ImageGenerationResult | list = future.result()
             if isinstance(image_result, list):
                 image_result = image_result[-1]
@@ -158,6 +159,13 @@ class DreamTexture(bpy.types.Operator):
                 scene.dream_textures_info = ""
                 scene.dream_textures_progress = 0
 
+        def exception_callback(_, exception):
+            scene.dream_textures_info = ""
+            scene.dream_textures_progress = 0
+            if hasattr(gen, '_active_generation_future'):
+                del gen._active_generation_future
+            self.report({'ERROR'}, str(exception))
+
         gen = Generator.shared()
         def generate_next():
             if init_image is not None:
@@ -182,7 +190,9 @@ class DreamTexture(bpy.types.Operator):
                     **generated_args,
                 )
             gen._active_generation_future = f
+            f.call_done_on_exception = False
             f.add_response_callback(step_callback)
+            f.add_exception_callback(exception_callback)
             f.add_done_callback(done_callback)
         generate_next()
         return {"FINISHED"}

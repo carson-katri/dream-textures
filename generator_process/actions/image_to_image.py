@@ -222,7 +222,7 @@ def image_to_image(
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         negative_prompt=negative_prompt if use_negative_prompt else None,
-                        num_images_per_prompt=iterations,
+                        num_images_per_prompt=1,
                         eta=0.0,
                         generator=generator,
                         output_type="pil",

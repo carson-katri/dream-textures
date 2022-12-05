@@ -108,7 +108,7 @@ class StepPreviewMode(enum.Enum):
 
 @dataclass
 class ImageGenerationResult:
-    image: NDArray
+    image: NDArray | None
     seed: int
     step: int
     final: bool
@@ -267,7 +267,12 @@ def prompt_to_image(
                         # NOTE: Modified to yield the latents instead of calling a callback.
                         match kwargs['step_preview_mode']:
                             case StepPreviewMode.NONE:
-                                pass
+                                yield ImageGenerationResult(
+                                    None,
+                                    generator.initial_seed(),
+                                    i,
+                                    False
+                                )
                             case StepPreviewMode.FAST:
                                 yield ImageGenerationResult(
                                     np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,

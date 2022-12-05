@@ -6,7 +6,7 @@ from numpy.typing import NDArray
 
 @dataclass
 class ImageUpscaleResult:
-    image: NDArray
+    image: NDArray | None
     tile: int
     total: int
     final: bool
@@ -57,7 +57,6 @@ def upscale(
     generator = generator.manual_seed(seed)
     initial_seed = generator.initial_seed()
 
-    # final = Image.new('RGB', (low_res_image.size[0] * 4, low_res_image.size[1] * 4))
     tiler = Tiler(
         data_shape=(low_res_image.size[0], low_res_image.size[1], len(low_res_image.getbands())),
         tile_shape=(tile_size, tile_size, len(low_res_image.getbands())),
@@ -81,12 +80,12 @@ def upscale(
         ).images[0]))
         if step_preview_mode != StepPreviewMode.NONE:
             step = Image.fromarray(merger.merge().astype(np.uint8))
-            yield ImageUpscaleResult(
-                np.asarray(ImageOps.flip(step).convert('RGBA'), dtype=np.float32) / 255.,
-                id + 1,
-                tiler.n_tiles,
-                (id + 1) == tiler.n_tiles
-            )
+        yield ImageUpscaleResult(
+            (np.asarray(ImageOps.flip(step).convert('RGBA'), dtype=np.float32) / 255.) if step is not None else None,
+            id + 1,
+            tiler.n_tiles,
+            (id + 1) == tiler.n_tiles
+        )
     if step_preview_mode == StepPreviewMode.NONE:
         final = Image.fromarray(merger.merge().astype(np.uint8))
         yield ImageUpscaleResult(

@@ -3,6 +3,7 @@ from ...generator_process.registrar import BackendTarget
 from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.upscale import Upscale
+from ...operators.dream_texture import CancelGenerator, ReleaseGenerator
 from .dream_texture import create_panel, advanced_panel
 from ..space_types import SPACE_TYPES
 
@@ -65,22 +66,31 @@ def upscaling_panels():
             def draw(self, context):
                 layout = self.layout
                 layout.use_property_split = True
+                layout.use_property_decorate = False
                 
-                if context.scene.dream_textures_info != "":
-                    layout.label(text=context.scene.dream_textures_info, icon="INFO")
+                image = None
+                for area in context.screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        image = area.spaces.active.image
+                row = layout.row()
+                row.scale_y = 1.5
+                if context.scene.dream_textures_progress <= 0:
+                    if context.scene.dream_textures_info != "":
+                        row.label(text=context.scene.dream_textures_info, icon="INFO")
+                    else:
+                        row.operator(
+                            Upscale.bl_idname,
+                            text=f"Upscale to {image.size[0] * 4}x{image.size[1] * 4}" if image is not None else "Upscale",
+                            icon="FULLSCREEN_ENTER"
+                        )
                 else:
-                    image = None
-                    for area in context.screen.areas:
-                        if area.type == 'IMAGE_EDITOR':
-                            image = area.spaces.active.image
-                    
-                    row = layout.row()
-                    row.scale_y = 1.5
-                    row.operator(
-                        Upscale.bl_idname,
-                        text=f"Upscale to {image.size[0] * 4}x{image.size[1] * 4}" if image is not None else "Upscale",
-                        icon="FULLSCREEN_ENTER"
-                    )
+                    disabled_row = row.row()
+                    disabled_row.use_property_split = True
+                    disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
+                    disabled_row.enabled = False
+                if CancelGenerator.poll(context):
+                    row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
+                row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
         yield UpscalingPanel
         advanced_panels = [*create_panel(space_type, 'UI', UpscalingPanel.bl_idname, advanced_panel, lambda context: context.scene.dream_textures_upscale_prompt)]
         outer_panel = advanced_panels[0]

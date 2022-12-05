@@ -98,7 +98,13 @@ class DreamTexture(bpy.types.Operator):
                                 init_image = save_temp_image(area.spaces.active.image)
 
         # Setup the progress indicator
-        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args['steps'])
+        def step_progress_update(self, context):
+            if hasattr(context.area, "regions"):
+                for region in context.area.regions:
+                    if region.type == "UI":
+                        region.tag_redraw()
+            return None
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args['steps'], update=step_progress_update)
         scene.dream_textures_info = "Starting..."
 
         last_data_block = None
@@ -107,12 +113,14 @@ class DreamTexture(bpy.types.Operator):
             if last_data_block is not None:
                 bpy.data.images.remove(last_data_block)
                 last_data_block = None
-            scene.dream_textures_progress = step_image.step
-            if step_image.image is not None:
-                last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel())
-                for area in screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
-                        area.spaces.active.image = last_data_block
+            def update_progress():
+                scene.dream_textures_progress = step_image.step
+                if step_image.image is not None:
+                    last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel())
+                    for area in screen.areas:
+                        if area.type == 'IMAGE_EDITOR':
+                            area.spaces.active.image = last_data_block
+            bpy.app.timers.register(update_progress)
 
         iteration = 0
         def done_callback(future):
@@ -181,6 +189,11 @@ class DreamTexture(bpy.types.Operator):
 
 def kill_generator(context=bpy.context):
     Generator.shared_close()
+    try:
+        context.scene.dream_textures_info = ""
+        context.scene.dream_textures_progress = 0
+    except:
+        pass
 
 class ReleaseGenerator(bpy.types.Operator):
     bl_idname = "shade.dream_textures_release_generator"
@@ -206,4 +219,6 @@ class CancelGenerator(bpy.types.Operator):
     def execute(self, context):
         gen = Generator.shared()
         gen._active_generation_future.cancel()
+        context.scene.dream_textures_info = ""
+        context.scene.dream_textures_progress = 0
         return {'FINISHED'}

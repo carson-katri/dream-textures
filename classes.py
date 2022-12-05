@@ -5,6 +5,7 @@ from .operators.view_history import SCENE_UL_HistoryList, RecallHistoryEntry, Cl
 from .operators.inpaint_area_brush import InpaintAreaBrushActivated
 from .operators.upscale import Upscale
 from .property_groups.dream_prompt import DreamPrompt
+from .property_groups.seamless_result import SeamlessResult
 from .ui.panels import dream_texture, history, upscaling, render_properties
 from .preferences import OpenHuggingFace, OpenContributors, StableDiffusionPreferences, OpenDreamStudio, ImportWeights, Model, DeleteSelectedWeights, ModelSearch, InstallModel, PREFERENCES_UL_ModelList
 
@@ -47,6 +48,7 @@ PREFERENCE_CLASSES = (
                       DeleteSelectedWeights,
                       Model,
                       DreamPrompt,
+                      SeamlessResult,
                       InstallDependencies,
                       OpenHuggingFace,
                       ImportWeights,

@@ -99,12 +99,12 @@ class Upscale(bpy.types.Operator):
                 bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=tile.tile, min=0, max=tile.total, update=step_progress_update)
             if tile.final:
                 return
-            def update_progress():
-                scene.dream_textures_progress = tile.tile
-                last_data_block = bpy_image(f"Tile {tile.tile}/{tile.total}", tile.image.shape[0], tile.image.shape[1], tile.image.ravel())
-                for area in screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
-                        area.spaces.active.image = last_data_block
+            
+            scene.dream_textures_progress = tile.tile
+            last_data_block = bpy_image(f"Tile {tile.tile}/{tile.total}", tile.image.shape[0], tile.image.shape[1], tile.image.ravel())
+            for area in screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    area.spaces.active.image = last_data_block
             bpy.app.timers.register(update_progress)
 
         def image_done(future):

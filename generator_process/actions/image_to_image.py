@@ -3,7 +3,8 @@ import os
 from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, approximate_decoded_latents, _configure_model_padding
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
+import random
 
 def image_to_image(
     self,
@@ -42,6 +43,7 @@ def image_to_image(
             import diffusers
             import torch
             from PIL import Image, ImageOps
+            import PIL.Image
             from ...absolute_path import WEIGHTS_PATH
 
             # Mostly copied from `diffusers.StableDiffusionImg2ImgPipeline`, with slight modifications to yield the latents at each step.
@@ -50,7 +52,7 @@ def image_to_image(
                 def __call__(
                     self,
                     prompt: Union[str, List[str]],
-                    init_image: Union[torch.FloatTensor, Image.Image],
+                    image: Union[torch.FloatTensor, PIL.Image.Image],
                     strength: float = 0.8,
                     num_inference_steps: Optional[int] = 50,
                     guidance_scale: Optional[float] = 7.5,
@@ -64,6 +66,8 @@ def image_to_image(
                     callback_steps: Optional[int] = 1,
                     **kwargs,
                 ):
+                    image = init_image or image
+
                     # 1. Check inputs
                     self.check_inputs(prompt, strength, callback_steps)
 
@@ -81,50 +85,67 @@ def image_to_image(
                     )
 
                     # 4. Preprocess image
-                    if isinstance(init_image, Image.Image):
-                        init_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.preprocess(init_image)
+                    if isinstance(image, PIL.Image.Image):
+                        image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.preprocess(image)
 
                     # 5. set timesteps
                     self.scheduler.set_timesteps(num_inference_steps, device=device)
-                    timesteps = self.get_timesteps(num_inference_steps, strength, device)
+                    timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, strength, device)
                     latent_timestep = timesteps[:1].repeat(batch_size * num_images_per_prompt)
 
                     # 6. Prepare latent variables
                     latents = self.prepare_latents(
-                        init_image, latent_timestep, batch_size, num_images_per_prompt, text_embeddings.dtype, device, generator
+                        image, latent_timestep, batch_size, num_images_per_prompt, text_embeddings.dtype, device, generator
                     )
 
                     # 7. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
                     extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
 
                     # 8. Denoising loop
-                    for i, t in enumerate(self.progress_bar(timesteps)):
-                        # expand the latents if we are doing classifier free guidance
-                        latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                        latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                    num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+                    with self.progress_bar(total=num_inference_steps) as progress_bar:
+                        for i, t in enumerate(timesteps):
+                            # expand the latents if we are doing classifier free guidance
+                            latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+                            latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                        # predict the noise residual
-                        noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+                            # predict the noise residual
+                            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
 
-                        # perform guidance
-                        if do_classifier_free_guidance:
-                            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                            noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+                            # perform guidance
+                            if do_classifier_free_guidance:
+                                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                                noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
-                        # compute the previous noisy sample x_t -> x_t-1
-                        latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
+                            # compute the previous noisy sample x_t -> x_t-1
+                            latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
-                        # NOTE: Modified to yield the latents instead of calling a callback.
-                        match kwargs['step_preview_mode']:
-                            case StepPreviewMode.NONE:
-                                pass
-                            case StepPreviewMode.FAST:
-                                yield np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.
-                            case StepPreviewMode.ACCURATE:
-                                yield from [
-                                    np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                                    for image in self.numpy_to_pil(self.decode_latents(latents))
-                                ]
+                            # NOTE: Modified to yield the latents instead of calling a callback.
+                            match kwargs['step_preview_mode']:
+                                case StepPreviewMode.NONE:
+                                    yield ImageGenerationResult(
+                                        None,
+                                        generator.initial_seed(),
+                                        i,
+                                        False
+                                    )
+                                case StepPreviewMode.FAST:
+                                    yield ImageGenerationResult(
+                                        np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
+                                        generator.initial_seed(),
+                                        i,
+                                        False
+                                    )
+                                case StepPreviewMode.ACCURATE:
+                                    yield from [
+                                        ImageGenerationResult(
+                                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
+                                            generator.initial_seed(),
+                                            i,
+                                            False
+                                        )
+                                        for image in self.numpy_to_pil(self.decode_latents(latents))
+                                    ]
 
                     # 9. Post-processing
                     image = self.decode_latents(latents)
@@ -135,7 +156,12 @@ def image_to_image(
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield from [
-                        np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                        ImageGenerationResult(
+                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
+                            generator.initial_seed(),
+                            num_inference_steps,
+                            True
+                        )
                         for image in self.numpy_to_pil(image)
                     ]
             
@@ -176,7 +202,10 @@ def image_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = None if seed is None else (torch.manual_seed(seed) if device == "mps" else torch.Generator(device=device).manual_seed(seed))
+            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+            if seed is None:
+                seed = random.randrange(0, np.iinfo(np.uint32).max)
+            generator = generator.manual_seed(seed)
             
             # Seamless
             _configure_model_padding(pipe.unet, seamless, seamless_axes)
@@ -186,23 +215,16 @@ def image_to_image(
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     init_image = (Image.open(image) if isinstance(image, str) else Image.fromarray(image)).convert('RGB')
-                    print(fit)
-                    print(width, height)
-                    print(init_image)
-                    print(init_image.size)
                     yield from pipe(
                         prompt=prompt,
-                        init_image=init_image,
+                        image=init_image if fit else init_image.resize((width, height)),
                         strength=strength,
-                        height=init_image.size[1] if fit else height,
-                        width=init_image.size[0] if fit else width,
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         negative_prompt=negative_prompt if use_negative_prompt else None,
                         num_images_per_prompt=iterations,
                         eta=0.0,
                         generator=generator,
-                        latents=None,
                         output_type="pil",
                         return_dict=True,
                         callback=None,

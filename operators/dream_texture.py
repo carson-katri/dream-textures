@@ -113,14 +113,14 @@ class DreamTexture(bpy.types.Operator):
             if last_data_block is not None:
                 bpy.data.images.remove(last_data_block)
                 last_data_block = None
-            def update_progress():
-                scene.dream_textures_progress = step_image.step
-                if step_image.image is not None:
-                    last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel())
-                    for area in screen.areas:
-                        if area.type == 'IMAGE_EDITOR':
-                            area.spaces.active.image = last_data_block
-            bpy.app.timers.register(update_progress)
+            if step_image.final:
+                return
+            scene.dream_textures_progress = step_image.step
+            if step_image.image is not None:
+                last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel())
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        area.spaces.active.image = last_data_block
 
         iteration = 0
         def done_callback(future):

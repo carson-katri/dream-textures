@@ -209,7 +209,19 @@ def init_image_panels(sub_panel, space_type, get_prompt):
             layout.prop(prompt, "init_img_action", expand=True)
             
             layout.use_property_split = True
-            
+
+            init_image = None
+            match prompt.init_img_src:
+                case 'file':
+                    init_image = context.scene.init_img
+                case 'open_editor':
+                    for area in context.screen.areas:
+                        if area.type == 'IMAGE_EDITOR':
+                            if area.spaces.active.image is not None:
+                                init_image = area.spaces.active.image
+            context.scene.seamless_result.check(init_image)
+            layout.prop(context.scene.seamless_result, "result")
+
             if prompt.init_img_action == 'inpaint':
                 layout.prop(prompt, "inpaint_mask_src")
                 if prompt.inpaint_mask_src == 'prompt':

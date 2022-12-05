@@ -1,6 +1,15 @@
 import numpy as np
-from .prompt_to_image import Optimizations, Scheduler
+from .prompt_to_image import Optimizations, Scheduler, StepPreviewMode
 import random
+from dataclasses import dataclass
+from numpy.typing import NDArray
+
+@dataclass
+class ImageUpscaleResult:
+    image: NDArray
+    tile: int
+    total: int
+    final: bool
 
 def upscale(
     self,
@@ -16,6 +25,8 @@ def upscale(
     blend: int,
 
     optimizations: Optimizations,
+
+    step_preview_mode: StepPreviewMode,
 
     **kwargs
 ):
@@ -68,8 +79,19 @@ def upscale(
             generator=torch.manual_seed(initial_seed),
             guidance_scale=cfg_scale,
         ).images[0]))
+        if step_preview_mode != StepPreviewMode.NONE:
+            step = Image.fromarray(merger.merge().astype(np.uint8))
+            yield ImageUpscaleResult(
+                np.asarray(ImageOps.flip(step).convert('RGBA'), dtype=np.float32) / 255.,
+                id + 1,
+                tiler.n_tiles,
+                (id + 1) == tiler.n_tiles
+            )
+    if step_preview_mode == StepPreviewMode.NONE:
         final = Image.fromarray(merger.merge().astype(np.uint8))
-        yield np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.
-
-    # final = Image.fromarray(merger.merge().astype(np.uint8))
-    # yield np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.
+        yield ImageUpscaleResult(
+            np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.,
+            tiler.n_tiles,
+            tiler.n_tiles,
+            True
+        )

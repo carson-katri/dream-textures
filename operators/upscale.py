@@ -2,6 +2,7 @@ import bpy
 import tempfile
 from ..prompt_engineering import custom_structure
 from ..generator_process import Generator
+from ..generator_process.actions.upscale import ImageUpscaleResult
 
 upscale_options = [
     ("2", "2x", "", 2),
@@ -75,15 +76,28 @@ class Upscale(bpy.types.Operator):
             image.pack()
             return image
 
-        def on_tile_complete(_, tile):
-            image = bpy_image("diffusers-upscaled", tile.shape[0], tile.shape[1], tile.ravel())
+        last_data_block = None
+        def on_tile_complete(_, tile: ImageUpscaleResult):
+            nonlocal last_data_block
+            if last_data_block is not None:
+                bpy.data.images.remove(last_data_block)
+                last_data_block = None
+            if tile.final:
+                return
+            last_data_block = bpy_image(f"Tile {tile.tile}/{tile.total}", tile.image.shape[0], tile.image.shape[1], tile.image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
-                    area.spaces.active.image = image
+                    area.spaces.active.image = last_data_block
 
         def image_done(future):
-            image = future.result()[-1]
-            image = bpy_image("diffusers-upscaled", image.shape[0], image.shape[1], image.ravel())
+            nonlocal last_data_block
+            if last_data_block is not None:
+                bpy.data.images.remove(last_data_block)
+                last_data_block = None
+            tile: ImageUpscaleResult = future.result()
+            if isinstance(tile, list):
+                tile = tile[-1]
+            image = bpy_image(f"{input_image.name} (Upscaled)", tile.image.shape[0], tile.image.shape[1], tile.image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = image

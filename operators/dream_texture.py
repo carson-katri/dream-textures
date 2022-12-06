@@ -41,10 +41,15 @@ def save_temp_image(img, path=None):
 
     return path
 
-def bpy_image(name, width, height, pixels):
-    image = bpy.data.images.new(name, width=width, height=height)
+def bpy_image(name, width, height, pixels, existing_image):
+    if existing_image is None:
+        image = bpy.data.images.new(name, width=width, height=height)
+    else:
+        image = existing_image
+        image.name = name
     image.pixels[:] = pixels
     image.pack()
+    image.update()
     return image
 
 class DreamTexture(bpy.types.Operator):
@@ -108,14 +113,11 @@ class DreamTexture(bpy.types.Operator):
         last_data_block = None
         def step_callback(_, step_image: ImageGenerationResult):
             nonlocal last_data_block
-            if last_data_block is not None:
-                bpy.data.images.remove(last_data_block)
-                last_data_block = None
             if step_image.final:
                 return
             scene.dream_textures_progress = step_image.step
             if step_image.image is not None:
-                last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel())
+                last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel(), last_data_block)
                 for area in screen.areas:
                     if area.type == 'IMAGE_EDITOR':
                         area.spaces.active.image = last_data_block
@@ -129,10 +131,7 @@ class DreamTexture(bpy.types.Operator):
             image_result: ImageGenerationResult | list = future.result()
             if isinstance(image_result, list):
                 image_result = image_result[-1]
-            if last_data_block is not None:
-                bpy.data.images.remove(last_data_block)
-                last_data_block = None
-            image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel())
+            image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel(), last_data_block)
             if node_tree is not None:
                 nodes = node_tree.nodes
                 texture_node = nodes.new("ShaderNodeTexImage")

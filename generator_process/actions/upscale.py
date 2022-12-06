@@ -54,8 +54,6 @@ def upscale(
     generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
     if seed is None:
         seed = random.randrange(0, np.iinfo(np.uint32).max)
-    generator = generator.manual_seed(seed)
-    initial_seed = generator.initial_seed()
 
     tiler = Tiler(
         data_shape=(low_res_image.size[0], low_res_image.size[1], len(low_res_image.getbands())),
@@ -75,7 +73,7 @@ def upscale(
             prompt=prompt,
             image=Image.fromarray(tile),
             num_inference_steps=steps,
-            generator=torch.manual_seed(initial_seed),
+            generator=generator.manual_seed(seed),
             guidance_scale=cfg_scale,
         ).images[0]))
         if step_preview_mode != StepPreviewMode.NONE:

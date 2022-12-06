@@ -105,7 +105,6 @@ class Upscale(bpy.types.Operator):
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = last_data_block
-            bpy.app.timers.register(update_progress)
 
         def image_done(future):
             nonlocal last_data_block

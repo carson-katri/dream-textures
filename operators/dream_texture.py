@@ -6,9 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 from multiprocessing.shared_memory import SharedMemory
 
-from ..property_groups.dream_prompt import backend_options
-
-from ..generator_process.registrar import BackendTarget
+from ..property_groups.dream_prompt import pipeline_options
 
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
@@ -173,13 +171,11 @@ class DreamTexture(bpy.types.Operator):
                 match generated_args['init_img_action']:
                     case 'modify':
                         f = gen.image_to_image(
-                            Pipeline.STABLE_DIFFUSION,
                             image=init_image,
                             **generated_args
                         )
                     case 'inpaint':
                         f = gen.inpaint(
-                            Pipeline.STABLE_DIFFUSION,
                             image=init_image,
                             **generated_args
                         )
@@ -187,7 +183,6 @@ class DreamTexture(bpy.types.Operator):
                         raise NotImplementedError()
             else:
                 f = gen.prompt_to_image(
-                    Pipeline.STABLE_DIFFUSION,
                     **generated_args,
                 )
             gen._active_generation_future = f

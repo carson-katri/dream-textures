@@ -3,14 +3,18 @@ import gpu
 import numpy as np
 
 from .view_history import ImportPromptFile
-from ..property_groups.dream_prompt import backend_options
-from ..generator_process.registrar import BackendTarget
+from ..property_groups.dream_prompt import pipeline_options
 from .open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 
 from ..ui.panels.dream_texture import advanced_panel, create_panel, prompt_panel, size_panel
 
 from ..generator_process import Generator
 from ..generator_process.actions.prompt_to_image import Pipeline
+
+framebuffer_arguments = [
+    ('depth', 'Depth', 'Only provide the scene depth as input'),
+    ('color', 'Depth and Color', 'Provide the scene depth and color as input'),
+]
 
 def dream_texture_projection_panels():
     class DREAM_PT_dream_panel_projection(bpy.types.Panel):
@@ -38,11 +42,6 @@ def dream_texture_projection_panels():
             layout.use_property_split = True
             layout.use_property_decorate = False
 
-            if len(backend_options(self, context)) > 1:
-                layout.prop(context.scene.dream_textures_project_prompt, "backend")
-            if context.scene.dream_textures_project_prompt.backend == BackendTarget.LOCAL.name:
-                layout.prop(context.scene.dream_textures_project_prompt, 'model')
-
             if is_force_show_download():
                 layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
             elif new_version_available():
@@ -67,8 +66,9 @@ def dream_texture_projection_panels():
                 layout = self.layout
                 layout.use_property_split = True
 
-                layout.prop(get_prompt(context), "strength")
-                # layout.prop(context.scene, "dream_textures_projection_orbit_steps")
+                layout.prop(context.scene, "dream_textures_project_framebuffer_arguments")
+                if context.scene.dream_textures_project_framebuffer_arguments == 'color':
+                    layout.prop(get_prompt(context), "strength")
 
                 row = layout.row()
                 row.scale_y = 1.5
@@ -82,6 +82,10 @@ def draw(context, image_texture_node, cleanup):
         viewport = gpu.state.viewport_get()
         width, height = viewport[2], viewport[3]
         depth = np.asarray(framebuffer.read_depth(0, 0, width, height).to_list())
+        if context.scene.dream_textures_project_framebuffer_arguments == 'color':
+            color = np.asarray(framebuffer.read_color(0, 0, width, height, 4, 0, 'UBYTE').to_list())
+        else:
+            color = None
 
         depth = 1 - np.interp(depth, [depth.min(), depth.max()], [0, 1])
 
@@ -90,32 +94,31 @@ def draw(context, image_texture_node, cleanup):
         factor = max(width // scaled_width, height // scaled_height)
 
         depth = depth[::factor, ::factor]
+        if color is not None:
+            color = color[::factor, ::factor]
 
         texture = None
 
         def on_response(_, response):
             nonlocal texture
-            if texture is not None:
-                bpy.data.images.remove(texture)
-            texture = bpy.data.images.new(name="diffused-image-texture", width=response.shape[1], height=response.shape[0])
-            texture.pixels[:] = response.ravel()
+            if texture is None:
+                texture = bpy.data.images.new(name="diffused-image-texture", width=response.image.shape[1], height=response.image.shape[0])
+            texture.pixels[:] = response.image.ravel()
             image_texture_node.image = texture
 
         def on_done(future):
             nonlocal texture
-            if texture is not None:
-                bpy.data.images.remove(texture)
-
             generated = future.result()
             if isinstance(generated, list):
                 generated = generated[-1]
-            texture = bpy.data.images.new(name="diffused-image-texture", width=generated.shape[1], height=generated.shape[0])
-            texture.pixels[:] = generated.ravel()
+            if texture is None:
+                texture = bpy.data.images.new(name="diffused-image-texture", width=generated.image.shape[1], height=generated.image.shape[0])
+            texture.pixels[:] = generated.image.ravel()
             image_texture_node.image = texture
         
         future = Generator.shared().depth_to_image(
-            Pipeline.STABLE_DIFFUSION,
             depth=depth,
+            image=color,
             **context.scene.dream_textures_project_prompt.generate_args()
         )
         future.add_response_callback(on_response)

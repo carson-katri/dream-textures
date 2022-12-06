@@ -39,6 +39,7 @@ if current_process().name != "__actor__":
     from .render_pass import register_render_pass, unregister_render_pass
     from .prompt_engineering import *
     from .operators.open_latest_version import check_for_updates
+    from .operators.project import framebuffer_arguments
     from .classes import CLASSES, PREFERENCE_CLASSES
     from .tools import TOOLS
     from .operators.dream_texture import DreamTexture, kill_generator
@@ -91,6 +92,7 @@ if current_process().name != "__actor__":
         bpy.types.Scene.dream_textures_upscale_blend = IntProperty(name="Blend", default=32, step=8, min=0, max=512)
         
         bpy.types.Scene.dream_textures_project_prompt = PointerProperty(type=DreamPrompt)
+        bpy.types.Scene.dream_textures_project_framebuffer_arguments = EnumProperty(name="Inputs", items=framebuffer_arguments)
 
         for cls in CLASSES:
             bpy.utils.register_class(cls)

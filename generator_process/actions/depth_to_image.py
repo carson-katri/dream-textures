@@ -3,7 +3,8 @@ import os
 from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, approximate_decoded_latents, _configure_model_padding
+import random
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, approximate_decoded_latents, ImageGenerationResult
 
 def depth_to_image(
     self,
@@ -16,6 +17,8 @@ def depth_to_image(
     optimizations: Optimizations,
 
     depth: NDArray | str,
+    image: NDArray | str | None,
+    strength: float,
     prompt: str,
     steps: int,
     seed: int,
@@ -43,8 +46,6 @@ def depth_to_image(
                     depth = np.array(depth.convert("L"))
                     depth = depth.astype(np.float32) / 255.0
                 depth = depth[None, None]
-                depth[depth < 0.5] = 0
-                depth[depth >= 0.5] = 1
                 depth = torch.from_numpy(depth)
                 return depth
 
@@ -233,12 +234,27 @@ def depth_to_image(
                             # call the callback, if provided
                             match kwargs['step_preview_mode']:
                                 case StepPreviewMode.NONE:
-                                    pass
+                                    yield ImageGenerationResult(
+                                        None,
+                                        generator.initial_seed(),
+                                        i,
+                                        False
+                                    )
                                 case StepPreviewMode.FAST:
-                                    yield np.asarray(PIL.ImageOps.flip(PIL.Image.fromarray(approximate_decoded_latents(latents))).resize(final_size, PIL.Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.
+                                    yield ImageGenerationResult(
+                                        np.asarray(PIL.ImageOps.flip(PIL.Image.fromarray(approximate_decoded_latents(latents))).resize(final_size, PIL.Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
+                                        generator.initial_seed(),
+                                        i,
+                                        False
+                                    )
                                 case StepPreviewMode.ACCURATE:
                                     yield from [
-                                        np.asarray(PIL.ImageOps.flip(image).resize(final_size).convert('RGBA'), dtype=np.float32) / 255.
+                                        ImageGenerationResult(
+                                            np.asarray(PIL.ImageOps.flip(image).resize(final_size).convert('RGBA'), dtype=np.float32) / 255.,
+                                            generator.initial_seed(),
+                                            i,
+                                            False
+                                        )
                                         for image in self.numpy_to_pil(self.decode_latents(latents))
                                     ]
 
@@ -251,7 +267,12 @@ def depth_to_image(
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield from [
-                        np.asarray(PIL.ImageOps.flip(image).resize(final_size).convert('RGBA'), dtype=np.float32) / 255.
+                        ImageGenerationResult(
+                            np.asarray(PIL.ImageOps.flip(image).resize(final_size).convert('RGBA'), dtype=np.float32) / 255.,
+                            generator.initial_seed(),
+                            num_inference_steps,
+                            True
+                        )
                         for image in self.numpy_to_pil(image)
                     ]
             
@@ -292,34 +313,40 @@ def depth_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = None if seed is None else (torch.manual_seed(seed) if device == "mps" else torch.Generator(device=device).manual_seed(seed))
+            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+            if seed is None:
+                seed = random.randrange(0, np.iinfo(np.uint32).max)
+            generator = generator.manual_seed(seed)
 
             # Inference
             rounded_size = (
                 int(8 * (depth.shape[1] // 8)),
                 int(8 * (depth.shape[0] // 8)),
             )
-            with (torch.inference_mode() if optimizations.can_use("inference_mode", device) else nullcontext()), \
-                    (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                    PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255), 'L')).resize(rounded_size).save('test.png')
-                    yield from pipe(
-                        prompt=prompt,
-                        depth_image=PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255), 'L')).resize(rounded_size),
-                        width=rounded_size[0],
-                        height=rounded_size[1],
-                        num_inference_steps=steps,
-                        guidance_scale=cfg_scale,
-                        negative_prompt=negative_prompt if use_negative_prompt else None,
-                        num_images_per_prompt=1,
-                        eta=0.0,
-                        generator=generator,
-                        latents=None,
-                        output_type="pil",
-                        return_dict=True,
-                        callback=None,
-                        callback_steps=1,
-                        step_preview_mode=step_preview_mode
-                    )
+            with (torch.inference_mode() if device != 'mps' else nullcontext()), \
+                (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
+                depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255), 'L')).resize(rounded_size)
+                init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image)).convert('RGB')
+                yield from pipe(
+                    prompt=prompt,
+                    depth_image=depth_image,
+                    image=init_image,
+                    strength=strength,
+                    width=rounded_size[0],
+                    height=rounded_size[1],
+                    num_inference_steps=steps,
+                    guidance_scale=cfg_scale,
+                    negative_prompt=negative_prompt if use_negative_prompt else None,
+                    num_images_per_prompt=1,
+                    eta=0.0,
+                    generator=generator,
+                    latents=None,
+                    output_type="pil",
+                    return_dict=True,
+                    callback=None,
+                    callback_steps=1,
+                    step_preview_mode=step_preview_mode
+                )
         case Pipeline.STABILITY_SDK:
             import stability_sdk
             raise NotImplementedError()

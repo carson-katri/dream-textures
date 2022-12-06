@@ -8,7 +8,7 @@ torch>=1.13
 
 scipy # LMSDiscreteScheduler
 
-stability-sdk==0.2.6 # DreamStudio
+stability-sdk # DreamStudio
 
 opencolorio==2.1.2 # color management
 

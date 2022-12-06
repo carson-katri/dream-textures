@@ -1,2 +1,2 @@
-stability-sdk==0.2.6
+stability-sdk
 opencolorio

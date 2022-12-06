@@ -173,7 +173,8 @@ class ProjectDreamTexture(bpy.types.Operator):
             if not hasattr(obj, "data") or not hasattr(obj.data, "materials"):
                 continue
             if obj.data.materials:
-                obj.data.materials[0] = material
+                for slot in range(len(obj.data.materials)):
+                    obj.data.materials[slot] = material
             else:
                 obj.data.materials.append(material)
 

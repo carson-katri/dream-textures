@@ -69,14 +69,13 @@ def upscale(
     ))
     input_array = np.array(low_res_image)
     for id, tile in tiler(input_array, progress_bar=True):
-        with torch.no_grad():
-            merger.add(id, np.array(pipe(
-                prompt=prompt,
-                image=Image.fromarray(tile),
-                num_inference_steps=steps,
-                generator=generator.manual_seed(seed),
-                guidance_scale=cfg_scale,
-            ).images[0]))
+        merger.add(id, np.array(pipe(
+            prompt=prompt,
+            image=Image.fromarray(tile),
+            num_inference_steps=steps,
+            generator=generator.manual_seed(seed),
+            guidance_scale=cfg_scale,
+        ).images[0]))
         if step_preview_mode != StepPreviewMode.NONE:
             step = Image.fromarray(merger.merge().astype(np.uint8))
         yield ImageUpscaleResult(

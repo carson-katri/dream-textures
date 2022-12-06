@@ -1,7 +1,7 @@
 import bpy
 from .dream_texture import create_panel, prompt_panel, advanced_panel
-from ...property_groups.dream_prompt import backend_options
-from ...generator_process.registrar import BackendTarget
+from ...property_groups.dream_prompt import pipeline_options
+from ...generator_process.actions.prompt_to_image import Pipeline
 
 class RenderPropertiesPanel(bpy.types.Panel):
     """Panel for Dream Textures render properties"""
@@ -25,9 +25,9 @@ class RenderPropertiesPanel(bpy.types.Panel):
         layout.use_property_decorate = False
         layout.active = context.scene.dream_textures_render_properties_enabled
 
-        if len(backend_options(self, context)) > 1:
-            layout.prop(context.scene.dream_textures_render_properties_prompt, "backend")
-        if context.scene.dream_textures_render_properties_prompt.backend == BackendTarget.LOCAL.name:
+        if len(pipeline_options(self, context)) > 1:
+            layout.prop(context.scene.dream_textures_render_properties_prompt, "pipeline")
+        if Pipeline[context.scene.dream_textures_render_properties_prompt.pipeline].model():
             layout.prop(context.scene.dream_textures_render_properties_prompt, 'model')
         layout.prop(context.scene.dream_textures_render_properties_prompt, "strength")
 

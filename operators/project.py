@@ -9,7 +9,7 @@ from .open_latest_version import OpenLatestVersion, is_force_show_download, new_
 from ..ui.panels.dream_texture import advanced_panel, create_panel, prompt_panel, size_panel
 
 from ..generator_process import Generator
-from ..generator_process.actions.prompt_to_image import Pipeline
+import tempfile
 
 framebuffer_arguments = [
     ('depth', 'Depth', 'Only provide the scene depth as input'),
@@ -76,16 +76,12 @@ def dream_texture_projection_panels():
         return ActionsPanel
     yield create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, actions_panel, get_prompt)
 
-def draw(context, image_texture_node, cleanup):
+def draw(context, init_img_path, image_texture_node, material, cleanup):
     try:
         framebuffer = gpu.state.active_framebuffer_get()
         viewport = gpu.state.viewport_get()
         width, height = viewport[2], viewport[3]
         depth = np.asarray(framebuffer.read_depth(0, 0, width, height).to_list())
-        if context.scene.dream_textures_project_framebuffer_arguments == 'color':
-            color = np.asarray(framebuffer.read_color(0, 0, width, height, 4, 0, 'UBYTE').to_list())
-        else:
-            color = None
 
         depth = 1 - np.interp(depth, [depth.min(), depth.max()], [0, 1])
 
@@ -94,16 +90,16 @@ def draw(context, image_texture_node, cleanup):
         factor = max(width // scaled_width, height // scaled_height)
 
         depth = depth[::factor, ::factor]
-        if color is not None:
-            color = color[::factor, ::factor]
 
         texture = None
 
         def on_response(_, response):
             nonlocal texture
             if texture is None:
-                texture = bpy.data.images.new(name="diffused-image-texture", width=response.image.shape[1], height=response.image.shape[0])
+                texture = bpy.data.images.new(name="Step", width=response.image.shape[1], height=response.image.shape[0])
+            texture.name = f"Step {response.step}/{context.scene.dream_textures_project_prompt.steps}"
             texture.pixels[:] = response.image.ravel()
+            texture.update()
             image_texture_node.image = texture
 
         def on_done(future):
@@ -112,13 +108,16 @@ def draw(context, image_texture_node, cleanup):
             if isinstance(generated, list):
                 generated = generated[-1]
             if texture is None:
-                texture = bpy.data.images.new(name="diffused-image-texture", width=generated.image.shape[1], height=generated.image.shape[0])
+                texture = bpy.data.images.new(name=str(generated.seed), width=generated.image.shape[1], height=generated.image.shape[0])
+            texture.name = str(generated.seed)
+            material.name = str(generated.seed)
             texture.pixels[:] = generated.image.ravel()
+            texture.update()
             image_texture_node.image = texture
         
         future = Generator.shared().depth_to_image(
             depth=depth,
-            image=color,
+            image=init_img_path,
             **context.scene.dream_textures_project_prompt.generate_args()
         )
         future.add_response_callback(on_response)
@@ -138,6 +137,32 @@ class ProjectDreamTexture(bpy.types.Operator):
         return Generator.shared().can_use()
 
     def execute(self, context):
+        # Render the viewport
+        if context.scene.dream_textures_project_framebuffer_arguments == 'color':
+            res_x, res_y = context.scene.render.resolution_x, context.scene.render.resolution_y
+            view3d_spaces = []
+            for area in context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    for region in area.regions:
+                        if region.type == 'WINDOW':
+                            context.scene.render.resolution_x, context.scene.render.resolution_y = region.width, region.height
+                    for space in area.spaces:
+                        if space.type == 'VIEW_3D':
+                            if space.overlay.show_overlays:
+                                view3d_spaces.append(space)
+                                space.overlay.show_overlays = False
+            init_img_path = tempfile.NamedTemporaryFile(suffix='.png').name
+            render_filepath, file_format = context.scene.render.filepath, context.scene.render.image_settings.file_format
+            context.scene.render.image_settings.file_format = 'PNG'
+            context.scene.render.filepath = init_img_path
+            bpy.ops.render.opengl(write_still=True, view_context=True)
+            for space in view3d_spaces:
+                space.overlay.show_overlays = True
+            context.scene.render.resolution_x, context.scene.render.resolution_y = res_x, res_y
+            context.scene.render.filepath, context.scene.render.image_settings.file_format = render_filepath, file_format
+        else:
+            init_img_path = None
+
         bpy.ops.uv.project_from_view()
         
         material = bpy.data.materials.new(name="diffused-material")
@@ -148,10 +173,8 @@ class ProjectDreamTexture(bpy.types.Operator):
             if not hasattr(obj, "data") or not hasattr(obj.data, "materials"):
                 continue
             if obj.data.materials:
-                print("Set mat slot")
                 obj.data.materials[0] = material
             else:
-                print("Append mat")
                 obj.data.materials.append(material)
 
         handle = None
@@ -159,7 +182,9 @@ class ProjectDreamTexture(bpy.types.Operator):
             draw,
             (
                 context,
+                init_img_path,
                 image_texture_node,
+                material,
                 lambda: bpy.types.SpaceView3D.draw_handler_remove(handle, 'WINDOW'),
             ),
             'WINDOW',

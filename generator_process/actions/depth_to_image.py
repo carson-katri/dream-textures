@@ -66,38 +66,34 @@ def depth_to_image(
                     depth = torch.cat([depth] * 2) if do_classifier_free_guidance else depth
                     return depth
 
-                def prepare_img2img_latents(self, image, timestep, batch_size, num_images_per_prompt, dtype, device, generator=None):
-                    image = image.to(device=device, dtype=dtype)
-                    init_latent_dist = self.vae.encode(image).latent_dist
-                    init_latents = init_latent_dist.sample(generator=generator)
-                    init_latents = 0.18215 * init_latents
-
-                    if batch_size > init_latents.shape[0] and batch_size % init_latents.shape[0] == 0:
-                        # expand init_latents for batch_size
-                        deprecation_message = (
-                            f"You have passed {batch_size} text prompts (`prompt`), but only {init_latents.shape[0]} initial"
-                            " images (`image`). Initial images are now duplicating to match the number of text prompts. Note"
-                            " that this behavior is deprecated and will be removed in a version 1.0.0. Please make sure to update"
-                            " your script to pass as many initial images as text prompts to suppress this warning."
-                        )
-                        deprecate("len(prompt) != len(image)", "1.0.0", deprecation_message, standard_warn=False)
-                        additional_image_per_prompt = batch_size // init_latents.shape[0]
-                        init_latents = torch.cat([init_latents] * additional_image_per_prompt * num_images_per_prompt, dim=0)
-                    elif batch_size > init_latents.shape[0] and batch_size % init_latents.shape[0] != 0:
-                        raise ValueError(
-                            f"Cannot duplicate `image` of batch size {init_latents.shape[0]} to {batch_size} text prompts."
-                        )
+                def prepare_img2img_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None, image=None, timestep=None):
+                    shape = (batch_size, num_channels_latents, height // self.vae_scale_factor, width // self.vae_scale_factor)
+                    if latents is None:
+                        if device.type == "mps":
+                            # randn does not work reproducibly on mps
+                            latents = torch.randn(shape, generator=generator, device="cpu", dtype=dtype).to(device)
+                        else:
+                            latents = torch.randn(shape, generator=generator, device=device, dtype=dtype)
                     else:
-                        init_latents = torch.cat([init_latents] * num_images_per_prompt, dim=0)
+                        if latents.shape != shape:
+                            raise ValueError(f"Unexpected latents shape, got {latents.shape}, expected {shape}")
+                        latents = latents.to(device)
 
-                    # add noise to latents using the timesteps
-                    noise = torch.randn(init_latents.shape, generator=generator, device=device, dtype=dtype)
+                    # scale the initial noise by the standard deviation required by the scheduler
+                    latents = latents * self.scheduler.init_noise_sigma
 
-                    # get latents
-                    init_latents = self.scheduler.add_noise(init_latents, noise, timestep)
-                    latents = init_latents
+                    if image is not None:
+                        image = image.to(device=device, dtype=dtype)
+                        image_latents = self.vae.encode(image).latent_dist.sample(generator=generator)
+                        image_latents = torch.nn.functional.interpolate(
+                            image_latents, size=(height // self.vae_scale_factor, width // self.vae_scale_factor)
+                        )
+                        image_latents = 0.18215 * image_latents
+                        noise = torch.randn(image_latents.shape, generator=generator, device=device, dtype=dtype)
+                        latents = self.scheduler.add_noise(image_latents, noise, timestep)
 
                     return latents
+
 
                 def get_timesteps(self, num_inference_steps, strength, device):
                     # get the original timestep using init_timestep
@@ -170,18 +166,28 @@ def depth_to_image(
                     if image is not None:
                         latent_timestep = timesteps[:1].repeat(batch_size * num_images_per_prompt)
                         latents = self.prepare_img2img_latents(
-                            image, latent_timestep, batch_size, num_images_per_prompt, text_embeddings.dtype, device, generator
+                            batch_size * num_images_per_prompt,
+                            num_channels_latents,
+                            height,
+                            width,
+                            text_embeddings.dtype,
+                            device,
+                            generator,
+                            latents,
+                            image,
+                            latent_timestep
                         )
-                    latents = self.prepare_latents(
-                        batch_size * num_images_per_prompt,
-                        num_channels_latents,
-                        height,
-                        width,
-                        text_embeddings.dtype,
-                        device,
-                        generator,
-                        latents,
-                    )
+                    else:
+                        latents = self.prepare_latents(
+                            batch_size * num_images_per_prompt,
+                            num_channels_latents,
+                            height,
+                            width,
+                            text_embeddings.dtype,
+                            device,
+                            generator,
+                            latents,
+                        )
 
                     # 7. Prepare mask latent variables
                     depth = self.prepare_depth_latents(
@@ -326,7 +332,7 @@ def depth_to_image(
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                 (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                 depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255), 'L')).resize(rounded_size)
-                init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image)).convert('RGB')
+                init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
                 yield from pipe(
                     prompt=prompt,
                     depth_image=depth_image,

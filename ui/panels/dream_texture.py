@@ -222,6 +222,22 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                 layout.prop(prompt, "inpaint_replace")
             elif prompt.init_img_action == 'outpaint':
                 layout.prop(prompt, "outpaint_origin")
+                def _outpaint_warning_box(warning):
+                    box = layout.box()
+                    box.label(text="Warning", icon="ERROR")
+                    box.label(text=warning)
+                if prompt.outpaint_origin[0] <= -prompt.width or prompt.outpaint_origin[1] <= -prompt.height:
+                    _outpaint_warning_box("Outpaint has no overlap, so the result will not blend")
+                init_img = context.scene.init_img.width if prompt.init_img_src == 'file' else None
+                if init_img is None:
+                    for area in context.screen.areas:
+                        if area.type == 'IMAGE_EDITOR':
+                            if area.spaces.active.image is not None:
+                                init_img = area.spaces.active.image
+                if init_img is not None:
+                    if prompt.outpaint_origin[0] >= init_img.size[0] or \
+                        prompt.outpaint_origin[1] >= init_img.size[1]:
+                        _outpaint_warning_box("Outpaint has no overlap, so the result will not blend")
             elif prompt.init_img_action == 'modify':
                 layout.prop(prompt, "fit")
             layout.prop(prompt, "strength")

@@ -39,7 +39,6 @@ def outpaint(
             0 if outpaint_origin[1] > 0 else -outpaint_origin[1],
         )
     )
-    outpaint_bounds.save('outpaint_bounds.png')
     offset_origin = (
         max(outpaint_origin[0], 0), # left
         max(outpaint_origin[1], 0), # upper
@@ -52,7 +51,6 @@ def outpaint(
             offset_origin[1] + height, # lower
         )
     )
-    inpaint_tile.save('inpaint_tile.png')
 
     def process(step: ImageGenerationResult):
         image = outpaint_bounds.copy()

@@ -6,9 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 from multiprocessing.shared_memory import SharedMemory
 
-from ..property_groups.dream_prompt import backend_options
-
-from ..generator_process.registrar import BackendTarget
+from ..property_groups.dream_prompt import pipeline_options
 
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
@@ -43,10 +41,15 @@ def save_temp_image(img, path=None):
 
     return path
 
-def bpy_image(name, width, height, pixels):
-    image = bpy.data.images.new(name, width=width, height=height)
+def bpy_image(name, width, height, pixels, existing_image):
+    if existing_image is None:
+        image = bpy.data.images.new(name, width=width, height=height)
+    else:
+        image = existing_image
+        image.name = name
     image.pixels[:] = pixels
     image.pack()
+    image.update()
     return image
 
 class DreamTexture(bpy.types.Operator):
@@ -97,27 +100,38 @@ class DreamTexture(bpy.types.Operator):
                             if area.spaces.active.image is not None:
                                 init_image = save_temp_image(area.spaces.active.image)
 
+        # Setup the progress indicator
+        def step_progress_update(self, context):
+            if hasattr(context.area, "regions"):
+                for region in context.area.regions:
+                    if region.type == "UI":
+                        region.tag_redraw()
+            return None
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args['steps'], update=step_progress_update)
+        scene.dream_textures_info = "Starting..."
+
         last_data_block = None
         def step_callback(_, step_image: ImageGenerationResult):
             nonlocal last_data_block
-            if last_data_block is not None:
-                bpy.data.images.remove(last_data_block)
-                last_data_block = None
-            last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel())
-            for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    area.spaces.active.image = last_data_block
+            if step_image.final:
+                return
+            scene.dream_textures_progress = step_image.step
+            if step_image.image is not None:
+                last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel(), last_data_block)
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        area.spaces.active.image = last_data_block
 
+        iteration = 0
         def done_callback(future):
             nonlocal last_data_block
-            del gen._active_generation_future
-            image: ImageGenerationResult | list = future.result()
-            if isinstance(image, list):
-                image = image[-1]
-            if last_data_block is not None:
-                bpy.data.images.remove(last_data_block)
-                last_data_block = None
-            image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel())
+            nonlocal iteration
+            if hasattr(gen, '_active_generation_future'):
+                del gen._active_generation_future
+            image_result: ImageGenerationResult | list = future.result()
+            if isinstance(image_result, list):
+                image_result = image_result[-1]
+            image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel(), last_data_block)
             if node_tree is not None:
                 nodes = node_tree.nodes
                 texture_node = nodes.new("ShaderNodeTexImage")
@@ -125,215 +139,66 @@ class DreamTexture(bpy.types.Operator):
                 nodes.active = texture_node
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
-                    area.spaces.active.image = last_data_block
-            if node_tree is not None:
-                # TODO: Create Image Texture node.
-                pass
+                    area.spaces.active.image = image
+            scene.dream_textures_prompt.seed = str(image_result.seed) # update property in case seed was sourced randomly or from hash
+            # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
+            # and as custom property of the image. Needs to be a string because the int from the hash function is too large
+            image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
+            image['dream_textures_hash'] = image_hash
+            scene.dream_textures_prompt.hash = image_hash
+            history_entries[iteration].seed = str(image_result.seed)
+            history_entries[iteration].random_seed = False
+            history_entries[iteration].hash = image_hash
+            iteration += 1
+            if iteration < generated_args['iterations']:
+                generate_next()
+            else:
+                scene.dream_textures_info = ""
+                scene.dream_textures_progress = 0
+
+        def exception_callback(_, exception):
+            scene.dream_textures_info = ""
+            scene.dream_textures_progress = 0
+            if hasattr(gen, '_active_generation_future'):
+                del gen._active_generation_future
+            self.report({'ERROR'}, str(exception))
+            raise exception
 
         gen = Generator.shared()
-        if init_image is not None:
-            match generated_args['init_img_action']:
-                case 'modify':
-                    f = gen.image_to_image(
-                        Pipeline.STABLE_DIFFUSION,
-                        image=init_image,
-                        **generated_args
-                    )
-                case 'inpaint':
-                    f = gen.inpaint(
-                        Pipeline.STABLE_DIFFUSION,
-                        image=init_image,
-                        **generated_args
-                    )
-                case 'outpaint':
-                    pass
-        else:
-            f = gen.prompt_to_image(
-                Pipeline.STABLE_DIFFUSION,
-                **generated_args,
-            )
-        gen._active_generation_future = f
-        f.add_response_callback(step_callback)
-        f.add_done_callback(done_callback)
+        def generate_next():
+            if init_image is not None:
+                match generated_args['init_img_action']:
+                    case 'modify':
+                        f = gen.image_to_image(
+                            image=init_image,
+                            **generated_args
+                        )
+                    case 'inpaint':
+                        f = gen.inpaint(
+                            image=init_image,
+                            **generated_args
+                        )
+                    case 'outpaint':
+                        raise NotImplementedError()
+            else:
+                f = gen.prompt_to_image(
+                    **generated_args,
+                )
+            gen._active_generation_future = f
+            f.call_done_on_exception = False
+            f.add_response_callback(step_callback)
+            f.add_exception_callback(exception_callback)
+            f.add_done_callback(done_callback)
+        generate_next()
         return {"FINISHED"}
-
-headless_prompt = None
-headless_step_callback = None
-headless_image_callback = None
-headless_init_img = None
-headless_args = None
-def dream_texture(prompt, step_callback, image_callback, init_img=None, **kwargs):
-    global headless_prompt
-    headless_prompt = prompt
-    global headless_step_callback
-    headless_step_callback = step_callback
-    global headless_image_callback
-    headless_image_callback = image_callback
-    global headless_init_img
-    headless_init_img = init_img
-    global headless_args
-    headless_args = kwargs
-    bpy.ops.shade.dream_texture_headless()
-
-class HeadlessDreamTexture(bpy.types.Operator):
-    bl_idname = "shade.dream_texture_headless"
-    bl_label = "Headless Dream Texture"
-    bl_description = "Generate a texture with AI"
-    bl_options = {'REGISTER'}
-
-    @classmethod
-    def poll(cls, context):
-        return GeneratorProcess.can_use()
-
-    def modal(self, context, event):
-        if event.type != 'TIMER':
-            return {'PASS_THROUGH'}
-        try:
-            next(generator_advance)
-        except StopIteration:
-            modal_stopped(context)
-            return {'FINISHED'}
-        except Exception as e:
-            modal_stopped(context)
-            raise e
-        return {'RUNNING_MODAL'}
-
-    def execute(self, context):
-        global headless_prompt
-        screen = context.screen
-        scene = context.scene
-
-        global headless_init_img
-        init_img = headless_init_img or (scene.init_img if headless_prompt.use_init_img and headless_prompt.init_img_src == 'file' else None)
-
-        def info(msg=""):
-            scene.dream_textures_info = msg
-        
-        def handle_exception(fatal, msg, trace):
-            info() # clear variable
-            if fatal:
-                kill_generator()
-            self.report({'ERROR'},msg)
-            if trace:
-                print(trace, file=sys.stderr)
-            if msg == MISSING_DEPENDENCIES_ERROR:
-                from .open_latest_version import do_force_show_download
-                do_force_show_download()
-
-        def step_progress_update(self, context):
-            if hasattr(context.area, "regions"):
-                for region in context.area.regions:
-                    if region.type == "UI":
-                        region.tag_redraw()
-            return None
-
-        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(
-            name="",
-            default=0,
-            min=0,
-            max=(int(headless_prompt.strength * headless_prompt.steps) if init_img is not None else headless_prompt.steps) + 1,
-            update=step_progress_update
-        )
-        bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info", update=step_progress_update)
-        
-        info("Waiting For Process")
-        if len(backend_options(self, context)) <= 1:
-            headless_prompt.backend = backend_options(self, context)[0][0]
-        generator = GeneratorProcess.shared(backend=BackendTarget[headless_prompt.backend])
-
-        if not generator.backend.color_correction():
-            headless_prompt.use_init_img_color = False
-
-        def save_temp_image(img, path=None):
-            path = path if path is not None else tempfile.NamedTemporaryFile().name
-
-            settings = scene.render.image_settings
-            file_format = settings.file_format
-            mode = settings.color_mode
-            depth = settings.color_depth
-
-            settings.file_format = 'PNG'
-            settings.color_mode = 'RGBA'
-            settings.color_depth = '8'
-
-            img.save_render(path)
-
-            settings.file_format = file_format
-            settings.color_mode = mode
-            settings.color_depth = depth
-
-            return path
-
-        if headless_prompt.use_init_img and headless_prompt.init_img_src == 'open_editor':
-            for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    if area.spaces.active.image is not None:
-                        init_img = area.spaces.active.image
-        init_img_path = None
-        if init_img is not None:
-            init_img_path = save_temp_image(init_img)
-
-        args = headless_prompt.generate_args()
-        args.update(headless_args)
-        if headless_init_img is not None:
-            args['use_init_img'] = True
-        if args['prompt_structure'] == file_batch_structure.id:
-            args['prompt'] = [line.body for line in scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
-        args['init_img'] = init_img_path
-        if args['use_init_img_color']:
-            args['init_color'] = init_img_path
-        if args['backend'] == BackendTarget.STABILITY_SDK.name:
-            args['dream_studio_key'] = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key
-
-        def step_callback(step, width=None, height=None, shared_memory_name=None):
-            global headless_step_callback
-            info() # clear variable
-            scene.dream_textures_progress = step + 1
-            headless_step_callback(step, width, height, shared_memory_name)
-
-        received_noncolorized = False
-        def image_callback(shared_memory_name, seed, width, height, upscaled=False):
-            global headless_image_callback
-            info() # clear variable
-            nonlocal received_noncolorized
-            if args['use_init_img'] and args['use_init_img_color'] and not received_noncolorized:
-                received_noncolorized = True
-                return
-            received_noncolorized = False
-            headless_image_callback(shared_memory_name, seed, width, height, upscaled)
-
-        global generator_advance
-        generator_advance = generator.prompt2image(args,
-            # a function or method that will be called each step
-            step_callback=step_callback,
-            # a function or method that will be called each time an image is generated
-            image_callback=image_callback,
-            # a function or method that will recieve messages
-            info_callback=info,
-            exception_callback=handle_exception
-        )
-        context.window_manager.modal_handler_add(self)
-        global timer
-        timer = context.window_manager.event_timer_add(1 / 15, window=context.window)
-        return {'RUNNING_MODAL'}
-
-def modal_stopped(context):
-    global timer
-    if timer:
-        context.window_manager.event_timer_remove(timer)
-        timer = None
-    if not hasattr(context,'scene'):
-        context = bpy.context # modal context is sometimes missing scene?
-    context.scene.dream_textures_progress = 0
-    context.scene.dream_textures_info = ""
-    global last_data_block
-    if last_data_block is not None:
-        bpy.data.images.remove(last_data_block)
-        last_data_block = None
 
 def kill_generator(context=bpy.context):
     Generator.shared_close()
-    modal_stopped(context)
+    try:
+        context.scene.dream_textures_info = ""
+        context.scene.dream_textures_progress = 0
+    except:
+        pass
 
 class ReleaseGenerator(bpy.types.Operator):
     bl_idname = "shade.dream_textures_release_generator"
@@ -352,11 +217,13 @@ class CancelGenerator(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     @classmethod
-    def poll(self, context):
+    def poll(cls, context):
         gen = Generator.shared()
         return hasattr(gen, "_active_generation_future") and gen._active_generation_future is not None and not gen._active_generation_future.cancelled and not gen._active_generation_future.done
 
     def execute(self, context):
         gen = Generator.shared()
         gen._active_generation_future.cancel()
+        context.scene.dream_textures_info = ""
+        context.scene.dream_textures_progress = 0
         return {'FINISHED'}

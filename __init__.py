@@ -44,7 +44,6 @@ if current_process().name != "__actor__":
     from .operators.dream_texture import DreamTexture, kill_generator
     from .operators.upscale import upscale_options
     from .property_groups.dream_prompt import DreamPrompt
-    from .property_groups.seamless_result import SeamlessResult
     from .preferences import StableDiffusionPreferences
     from .ui.presets import register_default_presets
 
@@ -73,7 +72,6 @@ if current_process().name != "__actor__":
         bpy.types.Scene.dream_textures_prompt_file = PointerProperty(type=bpy.types.Text)
         bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
         bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
-        bpy.types.Scene.seamless_result = PointerProperty(type=SeamlessResult)
         def get_selection_preview(self):
             history = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
             if self.dream_textures_history_selection > 0 and self.dream_textures_history_selection < len(history):

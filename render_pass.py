@@ -77,7 +77,6 @@ def register_render_pass():
                             generated_args['width'] = size_x
                             generated_args['height'] = size_y
                             pixels = gen.image_to_image(
-                                pipeline=Pipeline.STABLE_DIFFUSION,
                                 image=(combined_pixels.reshape((size_x, size_y, 4)) * 255).astype(np.uint8),
                                 **generated_args,
                                 _block=True

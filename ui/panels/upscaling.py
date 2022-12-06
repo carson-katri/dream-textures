@@ -1,9 +1,9 @@
 from bpy.types import Panel
-from ...generator_process.registrar import BackendTarget
 from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.upscale import Upscale
 from ...operators.dream_texture import CancelGenerator, ReleaseGenerator
+from ...generator_process.actions.prompt_to_image import Pipeline
 from .dream_texture import create_panel, advanced_panel
 from ..space_types import SPACE_TYPES
 
@@ -20,7 +20,7 @@ def upscaling_panels():
 
             @classmethod
             def poll(cls, context):
-                if not BackendTarget[context.scene.dream_textures_prompt.backend].upscaling():
+                if not Pipeline[context.scene.dream_textures_prompt.pipeline].upscaling():
                     return False
                 if cls.bl_space_type == 'NODE_EDITOR':
                     return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
@@ -56,7 +56,7 @@ def upscaling_panels():
 
             @classmethod
             def poll(cls, context):
-                if not BackendTarget[context.scene.dream_textures_prompt.backend].upscaling():
+                if not Pipeline[context.scene.dream_textures_prompt.pipeline].upscaling():
                     return False
                 if cls.bl_space_type == 'NODE_EDITOR':
                     return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"

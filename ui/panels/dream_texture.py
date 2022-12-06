@@ -5,8 +5,6 @@ import webbrowser
 import os
 import shutil
 
-from ...generator_process.registrar import BackendTarget
-
 from ...absolute_path import CLIPSEG_WEIGHTS_PATH
 from ..presets import DREAM_PT_AdvancedPresets
 from ...pil_to_image import *
@@ -15,8 +13,8 @@ from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGen
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
-from ...property_groups.dream_prompt import DreamPrompt, backend_options
-from ...generator_process.registrar import BackendTarget
+from ...property_groups.dream_prompt import DreamPrompt, pipeline_options
+from ...generator_process.actions.prompt_to_image import Optimizations, Pipeline
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -45,9 +43,9 @@ def dream_texture_panels():
                 layout.use_property_split = True
                 layout.use_property_decorate = False
 
-                if len(backend_options(self, context)) > 1:
-                    layout.prop(context.scene.dream_textures_prompt, "backend")
-                if context.scene.dream_textures_prompt.backend == BackendTarget.LOCAL.name:
+                if len(pipeline_options(self, context)) > 1:
+                    layout.prop(context.scene.dream_textures_prompt, "pipeline")
+                if Pipeline[context.scene.dream_textures_prompt.pipeline].model():
                     layout.prop(context.scene.dream_textures_prompt, 'model')
 
                 if is_force_show_download():
@@ -63,7 +61,7 @@ def dream_texture_panels():
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, prompt_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, size_panel, get_prompt)
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, init_image_panels, get_prompt)
-        yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
+        yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, actions_panel, get_prompt)
 
 def create_panel(space_type, region_type, parent_id, ctor, get_prompt, use_property_decorate=False):
@@ -110,7 +108,7 @@ def prompt_panel(sub_panel, space_type, get_prompt):
                     segment_row.prop(get_prompt(context), enum_prop, icon_only=is_custom)
             if get_prompt(context).prompt_structure == file_batch_structure.id:
                 layout.template_ID(context.scene, "dream_textures_prompt_file", open="text.open")
-            if BackendTarget[get_prompt(context).backend].seamless():
+            if Pipeline[get_prompt(context).pipeline].seamless():
                 layout.prop(get_prompt(context), "seamless")
                 if get_prompt(context).seamless:
                     layout.prop(get_prompt(context), "seamless_axes")
@@ -124,7 +122,7 @@ def prompt_panel(sub_panel, space_type, get_prompt):
 
         @classmethod
         def poll(self, context):
-            return get_prompt(context).prompt_structure != file_batch_structure.id and BackendTarget[get_prompt(context).backend].negative_prompts()
+            return get_prompt(context).prompt_structure != file_batch_structure.id and Pipeline[get_prompt(context).pipeline].negative_prompts()
 
         def draw_header(self, context):
             layout = self.layout
@@ -236,7 +234,7 @@ def init_image_panels(sub_panel, space_type, get_prompt):
             elif prompt.init_img_action == 'modify':
                 layout.prop(prompt, "fit")
             layout.prop(prompt, "strength")
-            if BackendTarget[prompt.backend].color_correction():
+            if Pipeline[prompt.pipeline].color_correction():
                 layout.prop(prompt, "use_init_img_color")
     yield InitImagePanel
 
@@ -255,16 +253,65 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             layout = self.layout
             layout.use_property_split = True
             
-            layout.prop(get_prompt(context), "precision")
             layout.prop(get_prompt(context), "random_seed")
             if not get_prompt(context).random_seed:
                 layout.prop(get_prompt(context), "seed")
             # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
             layout.prop(get_prompt(context), "steps")
             layout.prop(get_prompt(context), "cfg_scale")
-            layout.prop(get_prompt(context), "sampler_name")
-            layout.prop(get_prompt(context), "show_steps")
-    return AdvancedPanel
+            layout.prop(get_prompt(context), "scheduler")
+            layout.prop(get_prompt(context), "step_preview_mode")
+
+    yield AdvancedPanel
+
+    class SpeedOptimizationPanel(sub_panel):
+        """Create a subpanel for speed optimizations"""
+        bl_idname = f"DREAM_PT_dream_panel_speed_optimizations_{space_type}"
+        bl_label = "Speed Optimizations"
+        bl_parent_id = AdvancedPanel.bl_idname
+
+        def draw(self, context):
+            super().draw(context)
+            layout = self.layout
+            layout.use_property_split = True
+            prompt = get_prompt(context)
+
+            def optimization(prop):
+                if hasattr(prompt, f"optimizations_{prop}"):
+                    layout.prop(prompt, f"optimizations_{prop}")
+
+            optimization("cudnn_benchmark")
+            optimization("tf32")
+            optimization("amp")
+            optimization("half_precision")
+            optimization("channels_last_memory_format")
+    yield SpeedOptimizationPanel
+
+    class MemoryOptimizationPanel(sub_panel):
+        """Create a subpanel for memory optimizations"""
+        bl_idname = f"DREAM_PT_dream_panel_memory_optimizations_{space_type}"
+        bl_label = "Memory Optimizations"
+        bl_parent_id = AdvancedPanel.bl_idname
+
+        def draw(self, context):
+            super().draw(context)
+            layout = self.layout
+            layout.use_property_split = True
+            prompt = get_prompt(context)
+
+            def optimization(prop):
+                if hasattr(prompt, f"optimizations_{prop}"):
+                    layout.prop(prompt, f"optimizations_{prop}")
+
+            optimization("attention_slicing")
+            slice_size_row = layout.row()
+            slice_size_row.prop(prompt, "optimizations_attention_slice_size_src")
+            if prompt.optimizations_attention_slice_size_src == 'manual':
+                slice_size_row.prop(prompt, "optimizations_attention_slice_size", text="Size")
+            optimization("sequential_cpu_offload")
+            optimization("cpu_only")
+            # optimization("xformers_attention") # FIXME: xFormers is not yet available.
+    yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):
     class ActionsPanel(sub_panel):

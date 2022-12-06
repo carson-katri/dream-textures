@@ -1,0 +1,278 @@
+from typing import Union, Generator, Callable, List, Optional
+import os
+from contextlib import nullcontext
+from numpy.typing import NDArray
+import numpy as np
+import random
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
+
+def inpaint(
+    self,
+    pipeline: Pipeline,
+    
+    model: str,
+
+    scheduler: Scheduler,
+
+    optimizations: Optimizations,
+
+    image: NDArray | str,
+    fit: bool,
+    strength: float,
+    prompt: str,
+    steps: int,
+    width: int,
+    height: int,
+    seed: int,
+
+    cfg_scale: float,
+    use_negative_prompt: bool,
+    negative_prompt: str,
+    
+    seamless: bool,
+    seamless_axes: list[str],
+
+    iterations: int,
+
+    step_preview_mode: StepPreviewMode,
+
+    **kwargs
+) -> Generator[NDArray, None, None]:
+    match pipeline:
+        case Pipeline.STABLE_DIFFUSION:
+            import diffusers
+            import torch
+            from PIL import Image, ImageOps
+            import PIL.Image
+            from ...absolute_path import WEIGHTS_PATH
+
+            # Mostly copied from `diffusers.StableDiffusionInpaintPipeline`, with slight modifications to yield the latents at each step.
+            class GeneratorPipeline(diffusers.StableDiffusionInpaintPipeline):
+                @torch.no_grad()
+                def __call__(
+                    self,
+                    prompt: Union[str, List[str]],
+                    image: Union[torch.FloatTensor, PIL.Image.Image],
+                    mask_image: Union[torch.FloatTensor, PIL.Image.Image],
+                    height: Optional[int] = None,
+                    width: Optional[int] = None,
+                    num_inference_steps: int = 50,
+                    guidance_scale: float = 7.5,
+                    negative_prompt: Optional[Union[str, List[str]]] = None,
+                    num_images_per_prompt: Optional[int] = 1,
+                    eta: float = 0.0,
+                    generator: Optional[torch.Generator] = None,
+                    latents: Optional[torch.FloatTensor] = None,
+                    output_type: Optional[str] = "pil",
+                    return_dict: bool = True,
+                    callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
+                    callback_steps: Optional[int] = 1,
+                    **kwargs,
+                ):
+                    # 0. Default height and width to unet
+                    height = height or self.unet.config.sample_size * self.vae_scale_factor
+                    width = width or self.unet.config.sample_size * self.vae_scale_factor
+
+                    # 1. Check inputs
+                    self.check_inputs(prompt, height, width, callback_steps)
+
+                    # 2. Define call parameters
+                    batch_size = 1 if isinstance(prompt, str) else len(prompt)
+                    device = self._execution_device
+                    # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
+                    # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
+                    # corresponds to doing no classifier free guidance.
+                    do_classifier_free_guidance = guidance_scale > 1.0
+
+                    # 3. Encode input prompt
+                    text_embeddings = self._encode_prompt(
+                        prompt, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt
+                    )
+
+                    # 4. Preprocess mask and image
+                    if isinstance(image, PIL.Image.Image) and isinstance(mask_image, PIL.Image.Image):
+                        mask, masked_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint.prepare_mask_and_masked_image(image, mask_image)
+
+                    # 5. set timesteps
+                    self.scheduler.set_timesteps(num_inference_steps, device=device)
+                    timesteps = self.scheduler.timesteps
+
+                    # 6. Prepare latent variables
+                    num_channels_latents = self.vae.config.latent_channels
+                    latents = self.prepare_latents(
+                        batch_size * num_images_per_prompt,
+                        num_channels_latents,
+                        height,
+                        width,
+                        text_embeddings.dtype,
+                        device,
+                        generator,
+                        latents,
+                    )
+
+                    # 7. Prepare mask latent variables
+                    mask, masked_image_latents = self.prepare_mask_latents(
+                        mask,
+                        masked_image,
+                        batch_size * num_images_per_prompt,
+                        height,
+                        width,
+                        text_embeddings.dtype,
+                        device,
+                        generator,
+                        do_classifier_free_guidance,
+                    )
+
+                    # 8. Check that sizes of mask, masked image and latents match
+                    num_channels_mask = mask.shape[1]
+                    num_channels_masked_image = masked_image_latents.shape[1]
+                    if num_channels_latents + num_channels_mask + num_channels_masked_image != self.unet.config.in_channels:
+                        raise ValueError(
+                            f"Select an inpainting model, such as 'stabilityai/stable-diffusion-2-inpainting'"
+                        )
+
+                    # 9. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
+                    extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
+
+                    # 10. Denoising loop
+                    num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
+                    with self.progress_bar(total=num_inference_steps) as progress_bar:
+                        for i, t in enumerate(timesteps):
+                            # expand the latents if we are doing classifier free guidance
+                            latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+
+                            # concat latents, mask, masked_image_latents in the channel dimension
+                            latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                            latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents], dim=1)
+
+                            # predict the noise residual
+                            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+
+                            # perform guidance
+                            if do_classifier_free_guidance:
+                                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                                noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+                            # compute the previous noisy sample x_t -> x_t-1
+                            latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
+
+                            # NOTE: Modified to yield the latents instead of calling a callback.
+                            match kwargs['step_preview_mode']:
+                                case StepPreviewMode.NONE:
+                                    yield ImageGenerationResult(
+                                        None,
+                                        generator.initial_seed(),
+                                        i,
+                                        False
+                                    )
+                                case StepPreviewMode.FAST:
+                                    yield ImageGenerationResult(
+                                        np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
+                                        generator.initial_seed(),
+                                        i,
+                                        False
+                                    )
+                                case StepPreviewMode.ACCURATE:
+                                    yield from [
+                                        ImageGenerationResult(
+                                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
+                                            generator.initial_seed(),
+                                            i,
+                                            False
+                                        )
+                                        for image in self.numpy_to_pil(self.decode_latents(latents))
+                                    ]
+
+                    # 11. Post-processing
+                    image = self.decode_latents(latents)
+
+                    # TODO: Add UI to enable this
+                    # 10. Run safety checker
+                    # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
+
+                    # NOTE: Modified to yield the decoded image as a numpy array.
+                    yield from [
+                        ImageGenerationResult(
+                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
+                            generator.initial_seed(),
+                            num_inference_steps,
+                            True
+                        )
+                        for image in self.numpy_to_pil(image)
+                    ]
+            
+            if optimizations.cpu_only:
+                device = "cpu"
+            else:
+                device = self.choose_device()
+
+            use_cpu_offload = optimizations.can_use("sequential_cpu_offload", device)
+
+            # StableDiffusionPipeline w/ caching
+            if hasattr(self, "_cached_img2img_pipe") and self._cached_img2img_pipe[1] == model and use_cpu_offload == self._cached_img2img_pipe[2]:
+                pipe = self._cached_img2img_pipe[0]
+            else:
+                storage_folder = os.path.join(WEIGHTS_PATH, model)
+                revision = "main"
+                ref_path = os.path.join(storage_folder, "refs", revision)
+                with open(ref_path) as f:
+                    commit_hash = f.read()
+
+                snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+                pipe = GeneratorPipeline.from_pretrained(
+                    snapshot_folder,
+                    revision="fp16" if optimizations.can_use("half_precision", device) else None,
+                    torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
+                )
+                pipe = pipe.to(device)
+                setattr(self, "_cached_img2img_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
+
+            # Scheduler
+            is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in model
+            pipe.scheduler = scheduler.create(pipe, {
+                'model_path': self._cached_img2img_pipe[3],
+                'subfolder': 'scheduler',
+            } if is_stable_diffusion_2 else None)
+
+            # Optimizations
+            pipe = optimizations.apply(pipe, device)
+
+            # RNG
+            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+            if seed is None:
+                seed = random.randrange(0, np.iinfo(np.uint32).max)
+            generator = generator.manual_seed(seed)
+            
+            # Seamless
+            _configure_model_padding(pipe.unet, seamless, seamless_axes)
+            _configure_model_padding(pipe.vae, seamless, seamless_axes)
+
+            # Inference
+            with (torch.inference_mode() if device != 'mps' else nullcontext()), \
+                    (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
+                    init_image = Image.open(image) if isinstance(image, str) else Image.fromarray(image)
+                    yield from pipe(
+                        prompt=prompt,
+                        image=init_image.convert('RGB'),
+                        mask_image=ImageOps.invert(init_image.getchannel('A')),
+                        strength=strength,
+                        height=init_image.size[1] if fit else height,
+                        width=init_image.size[0] if fit else width,
+                        num_inference_steps=steps,
+                        guidance_scale=cfg_scale,
+                        negative_prompt=negative_prompt if use_negative_prompt else None,
+                        num_images_per_prompt=1,
+                        eta=0.0,
+                        generator=generator,
+                        latents=None,
+                        output_type="pil",
+                        return_dict=True,
+                        callback=None,
+                        callback_steps=1,
+                        step_preview_mode=step_preview_mode
+                    )
+        case Pipeline.STABILITY_SDK:
+            import stability_sdk
+            raise NotImplementedError()
+        case _:
+            raise Exception(f"Unsupported pipeline {pipeline}.")

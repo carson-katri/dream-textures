@@ -1,50 +1,28 @@
 import bpy
 import tempfile
-from multiprocessing.shared_memory import SharedMemory
-import numpy as np
-import sys
-from ..generator_process import GeneratorProcess
+from ..prompt_engineering import custom_structure
+from ..generator_process import Generator
+from ..generator_process.actions.upscale import ImageUpscaleResult
 
 upscale_options = [
     ("2", "2x", "", 2),
     ("4", "4x", "", 4),
+    ("8", "8x", "", 8),
 ]
-
-generator_advance = None
-timer = None
-
-def remove_timer(context):
-    global timer
-    if timer:
-        context.window_manager.event_timer_remove(timer)
-        timer = None
 
 class Upscale(bpy.types.Operator):
     bl_idname = "shade.dream_textures_upscale"
     bl_label = "Upscale"
-    bl_description = ("Upscale with Real-ESRGAN")
+    bl_description = ("Upscale with Stable Diffusion x4 Upscaler")
     bl_options = {"REGISTER"}
 
     @classmethod
     def poll(cls, context):
-        return GeneratorProcess.can_use()
-
-    def modal(self, context, event):
-        if event.type != 'TIMER':
-            return {'PASS_THROUGH'}
-        try:
-            next(generator_advance)
-        except StopIteration:
-            remove_timer(context)
-            return {'FINISHED'}
-        except Exception as e:
-            remove_timer(context)
-            raise e
-        return {'RUNNING_MODAL'}
+        return Generator.shared().can_use()
 
     def execute(self, context):
-        scene = context.scene
         screen = context.screen
+        scene = context.scene
         node_tree = context.material.node_tree if hasattr(context, 'material') else None
         active_node = next((node for node in node_tree.nodes if node.select and node.bl_idname == 'ShaderNodeTexImage'), None) if node_tree is not None else None
 
@@ -99,37 +77,61 @@ class Upscale(bpy.types.Operator):
             image.pack()
             return image
 
-        def image_callback(shared_memory_name, seed, width, height):
-            scene.dream_textures_info = ""
-            shared_memory = SharedMemory(shared_memory_name)
-            image = bpy_image(seed + ' (Upscaled)', width, height, np.frombuffer(shared_memory.buf,dtype=np.float32))
-            for area in context.screen.areas:
+        generated_args = context.scene.dream_textures_upscale_prompt.generate_args()
+
+        # Setup the progress indicator
+        def step_progress_update(self, context):
+            if hasattr(context.area, "regions"):
+                for region in context.area.regions:
+                    if region.type == "UI":
+                        region.tag_redraw()
+            return None
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args['steps'], update=step_progress_update)
+        scene.dream_textures_info = "Starting..."
+
+        last_data_block = None
+        def on_tile_complete(_, tile: ImageUpscaleResult):
+            nonlocal last_data_block
+            if last_data_block is not None:
+                bpy.data.images.remove(last_data_block)
+                last_data_block = None
+            else:
+                bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=tile.tile, min=0, max=tile.total, update=step_progress_update)
+            if tile.final:
+                return
+            
+            scene.dream_textures_progress = tile.tile
+            last_data_block = bpy_image(f"Tile {tile.tile}/{tile.total}", tile.image.shape[0], tile.image.shape[1], tile.image.ravel())
+            for area in screen.areas:
+                if area.type == 'IMAGE_EDITOR':
+                    area.spaces.active.image = last_data_block
+
+        def image_done(future):
+            nonlocal last_data_block
+            if last_data_block is not None:
+                bpy.data.images.remove(last_data_block)
+                last_data_block = None
+            tile: ImageUpscaleResult = future.result()
+            if isinstance(tile, list):
+                tile = tile[-1]
+            image = bpy_image(f"{input_image.name} (Upscaled)", tile.image.shape[0], tile.image.shape[1], tile.image.ravel())
+            for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = image
             if active_node is not None:
                 active_node.image = image
-            shared_memory.close()
-
-        def info_callback(msg=""):
-            scene.dream_textures_info = msg
-        def exception_callback(fatal, msg, trace):
             scene.dream_textures_info = ""
-            self.report({'ERROR'}, msg)
-            if trace:
-                print(trace, file=sys.stderr)
-
-        generator = GeneratorProcess.shared()
-
-        args = {
-            'input': input_image_path,
-            'name': input_image.name,
-            'outscale': int(context.scene.dream_textures_upscale_outscale),
-            'full_precision': context.scene.dream_textures_upscale_full_precision,
-            'seamless': context.scene.dream_textures_upscale_seamless
-        }
-        global generator_advance
-        generator_advance = generator.upscale(args, image_callback, info_callback, exception_callback)
-        context.window_manager.modal_handler_add(self)
-        self.timer = context.window_manager.event_timer_add(1 / 15, window=context.window)
-
-        return {"RUNNING_MODAL"}
+            scene.dream_textures_progress = 0
+        gen = Generator.shared()
+        context.scene.dream_textures_upscale_prompt.prompt_structure = custom_structure.id
+        f = gen.upscale(
+            image=input_image_path,
+            tile_size=context.scene.dream_textures_upscale_tile_size,
+            blend=context.scene.dream_textures_upscale_blend,
+            **generated_args
+        )
+        f.add_response_callback(on_tile_complete)
+        f.add_done_callback(image_done)
+        gen._active_generation_future = f
+        
+        return {"FINISHED"}

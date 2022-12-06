@@ -112,27 +112,22 @@ def install_and_import_requirements(requirements_txt=None, pip_install=PipInstal
         print("downloading additional include files")
         python_devel_tgz_path = absolute_path('python-devel.tgz')
         response = requests.get(f"https://www.python.org/ftp/python/{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}/Python-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}.tgz")
-        open(python_devel_tgz_path, 'wb').write(response.content)
-        python_devel_tgz = tarfile.open(python_devel_tgz_path)
-        def members(tf):
-            prefix = f"Python-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}/Include/"
-            l = len(prefix)
-            for member in tf.getmembers():
-                if member.path.startswith(prefix):
-                    member.path = member.path[l:]
-                    yield member
-        python_devel_tgz.extractall(path=python_include_dir, members=members(python_devel_tgz))
+        with open(python_devel_tgz_path, 'wb') as f:
+            f.write(response.content)
+        with tarfile.open(python_devel_tgz_path) as python_devel_tgz:
+            def members(tf):
+                prefix = f"Python-{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}/Include/"
+                l = len(prefix)
+                for member in tf.getmembers():
+                    if member.path.startswith(prefix):
+                        member.path = member.path[l:]
+                        yield member
+            python_devel_tgz.extractall(path=python_include_dir, members=members(python_devel_tgz))
+        os.remove(python_devel_tgz_path)
     else:
         print(f"skipping include files, can't write to {python_include_dir}",file=sys.stderr)
 
-    requirements_path = requirements_txt
-    if requirements_path is None:
-        if sys.platform == 'darwin': # Use MPS dependencies list on macOS
-            requirements_path = 'stable_diffusion/requirements-mac-MPS-CPU.txt'
-        else: # Use CUDA dependencies by default on Linux/Windows.
-            # These are not the submodule dependencies from the `development` branch, but use the `main` branch deps for PyTorch 1.11.0.
-            requirements_path = 'requirements-win-torch-1-11-0.txt'
-    subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path(requirements_path), "--upgrade", "--no-cache-dir", "--target", absolute_path('.python_dependencies')], check=True, env=environ_copy, cwd=absolute_path("stable_diffusion/"))
+    subprocess.run([sys.executable, "-m", "pip", "install", "-r", absolute_path(requirements_txt), "--upgrade", "--no-cache-dir", "--target", absolute_path('.python_dependencies')], check=True, env=environ_copy, cwd=absolute_path(""))
 
 class InstallDependencies(bpy.types.Operator):
     bl_idname = "stable_diffusion.install_dependencies"

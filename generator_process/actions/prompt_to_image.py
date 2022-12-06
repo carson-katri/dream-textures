@@ -5,11 +5,65 @@ from dataclasses import dataclass
 from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
+import random
 
 class Pipeline(enum.IntEnum):
     STABLE_DIFFUSION = 0
 
     STABILITY_SDK = 1
+
+    @staticmethod
+    def local_available():
+        from ...absolute_path import absolute_path
+        return os.path.exists(absolute_path(".python_dependencies/diffusers"))
+
+    def __str__(self):
+        return self.name
+    
+    def model(self):
+        return True
+
+    def init_img_actions(self):
+        match self:
+            case Pipeline.STABLE_DIFFUSION:
+                return ['modify', 'inpaint', 'outpaint']
+            case Pipeline.STABILITY_SDK:
+                return ['modify', 'inpaint']
+    
+    def inpaint_mask_sources(self):
+        match self:
+            case Pipeline.STABLE_DIFFUSION:
+                return ['alpha', 'prompt']
+            case Pipeline.STABILITY_SDK:
+                return ['alpha']
+    
+    def color_correction(self):
+        match self:
+            case Pipeline.STABLE_DIFFUSION:
+                return True
+            case Pipeline.STABILITY_SDK:
+                return False
+    
+    def negative_prompts(self):
+        match self:
+            case Pipeline.STABLE_DIFFUSION:
+                return True
+            case Pipeline.STABILITY_SDK:
+                return False
+    
+    def seamless(self):
+        match self:
+            case Pipeline.STABLE_DIFFUSION:
+                return True
+            case Pipeline.STABILITY_SDK:
+                return False
+    
+    def upscaling(self):
+        match self:
+            case Pipeline.STABLE_DIFFUSION:
+                return True
+            case Pipeline.STABILITY_SDK:
+                return False
 
 class Scheduler(enum.Enum):
     LMS_DISCRETE = "LMS Discrete"
@@ -47,7 +101,6 @@ class Scheduler(enum.Enum):
 class Optimizations:
     attention_slicing: bool = True
     attention_slice_size: Union[str, int] = "auto"
-    inference_mode: Annotated[bool, "cuda"] = True
     cudnn_benchmark: Annotated[bool, "cuda"] = False
     tf32: Annotated[bool, "cuda"] = False
     amp: Annotated[bool, "cuda"] = False
@@ -105,6 +158,13 @@ class StepPreviewMode(enum.Enum):
     NONE = "None"
     FAST = "Fast"
     ACCURATE = "Accurate"
+
+@dataclass
+class ImageGenerationResult:
+    image: NDArray | None
+    seed: int
+    step: int
+    final: bool
 
 def choose_device(self) -> str:
     """
@@ -171,7 +231,7 @@ def prompt_to_image(
     step_preview_mode: StepPreviewMode,
 
     **kwargs
-) -> Generator[NDArray, None, None]:
+) -> Generator[ImageGenerationResult, None, None]:
     match pipeline:
         case Pipeline.STABLE_DIFFUSION:
             import diffusers
@@ -260,12 +320,27 @@ def prompt_to_image(
                         # NOTE: Modified to yield the latents instead of calling a callback.
                         match kwargs['step_preview_mode']:
                             case StepPreviewMode.NONE:
-                                pass
+                                yield ImageGenerationResult(
+                                    None,
+                                    generator.initial_seed(),
+                                    i,
+                                    False
+                                )
                             case StepPreviewMode.FAST:
-                                yield np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.
+                                yield ImageGenerationResult(
+                                    np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
+                                    generator.initial_seed(),
+                                    i,
+                                    False
+                                )
                             case StepPreviewMode.ACCURATE:
                                 yield from [
-                                    np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                                    ImageGenerationResult(
+                                        np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
+                                        generator.initial_seed(),
+                                        i,
+                                        False
+                                    )
                                     for image in self.numpy_to_pil(self.decode_latents(latents))
                                 ]
 
@@ -278,7 +353,12 @@ def prompt_to_image(
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield from [
-                        np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                        ImageGenerationResult(
+                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
+                            generator.initial_seed(),
+                            num_inference_steps,
+                            True
+                        )
                         for image in self.numpy_to_pil(image)
                     ]
             
@@ -319,15 +399,18 @@ def prompt_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = None if seed is None else (torch.manual_seed(seed) if device == "mps" else torch.Generator(device=device).manual_seed(seed))
+            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+            if seed is None:
+                seed = random.randrange(0, np.iinfo(np.uint32).max)
+            generator = generator.manual_seed(seed)
             
             # Seamless
             _configure_model_padding(pipe.unet, seamless, seamless_axes)
             _configure_model_padding(pipe.vae, seamless, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if optimizations.can_use("inference_mode", device) else nullcontext()), \
-                    (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
+            with (torch.inference_mode() if device != 'mps' else nullcontext()), \
+                (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     yield from pipe(
                         prompt=prompt,
                         height=height,
@@ -335,7 +418,7 @@ def prompt_to_image(
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         negative_prompt=negative_prompt if use_negative_prompt else None,
-                        num_images_per_prompt=iterations,
+                        num_images_per_prompt=1,
                         eta=0.0,
                         generator=generator,
                         latents=None,

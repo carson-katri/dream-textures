@@ -29,6 +29,7 @@ class Future:
     _exception: BaseException | None = None
     done: bool = False
     cancelled: bool = False
+    call_done_on_exception: bool = True
 
     def __init__(self):
         self._response_callbacks = set()
@@ -38,7 +39,7 @@ class Future:
         self._exception = None
         self.done = False
         self.cancelled = False
-        self.actor = actor
+        self.call_done_on_exception = True
 
     def result(self):
         """
@@ -93,6 +94,8 @@ class Future:
         Set the exception.
         """
         self._exception = exception
+        for exception_callback in self._exception_callbacks:
+            exception_callback(self, exception)
 
     def set_done(self):
         """
@@ -100,8 +103,9 @@ class Future:
         """
         assert not self.done
         self.done = True
-        for done_callback in self._done_callbacks:
-            done_callback(self)
+        if self._exception is None or self.call_done_on_exception:
+            for done_callback in self._done_callbacks:
+                done_callback(self)
 
     def add_response_callback(self, callback: Callable[['Future', Any], None]):
         """

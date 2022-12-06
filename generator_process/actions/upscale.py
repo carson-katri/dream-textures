@@ -1,5 +1,15 @@
 import numpy as np
-from .prompt_to_image import Optimizations, Scheduler
+from .prompt_to_image import Optimizations, Scheduler, StepPreviewMode
+import random
+from dataclasses import dataclass
+from numpy.typing import NDArray
+
+@dataclass
+class ImageUpscaleResult:
+    image: NDArray | None
+    tile: int
+    total: int
+    final: bool
 
 def upscale(
     self,
@@ -12,14 +22,18 @@ def upscale(
     scheduler: Scheduler,
     
     tile_size: int,
+    blend: int,
 
     optimizations: Optimizations,
+
+    step_preview_mode: StepPreviewMode,
 
     **kwargs
 ):
     from PIL import Image, ImageOps
     import torch
     import diffusers
+    from tiler import Tiler, Merger
 
     if optimizations.cpu_only:
         device = "cpu"
@@ -37,24 +51,44 @@ def upscale(
 
     low_res_image = Image.open(image)
 
-    generator = torch.Generator() if seed is None else (torch.manual_seed(seed) if device == "mps" else torch.Generator(device=device).manual_seed(seed))
-    initial_seed = generator.initial_seed()
+    generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+    if seed is None:
+        seed = random.randrange(0, np.iinfo(np.uint32).max)
 
-    final = Image.new('RGB', (low_res_image.size[0] * 4, low_res_image.size[1] * 4))
-    for x in range(low_res_image.size[0] // tile_size):
-        for y in range(low_res_image.size[1] // tile_size):
-            x_offset = x * tile_size
-            y_offset = y * tile_size
-            tile = low_res_image.crop((x_offset, y_offset, x_offset + tile_size, y_offset + tile_size))
-            upscaled = pipe(
-                prompt=prompt,
-                image=tile,
-                num_inference_steps=steps,
-                generator=torch.manual_seed(initial_seed),
-                guidance_scale=cfg_scale,
-
-            ).images[0]
-            final.paste(upscaled, (x_offset * 4, y_offset * 4))
-            yield np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.
-
-    yield np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.
+    tiler = Tiler(
+        data_shape=(low_res_image.size[0], low_res_image.size[1], len(low_res_image.getbands())),
+        tile_shape=(tile_size, tile_size, len(low_res_image.getbands())),
+        overlap=(blend, blend, 0),
+        channel_dimension=2
+    )
+    merger = Merger(Tiler(
+        data_shape=(low_res_image.size[0] * 4, low_res_image.size[1] * 4, 3),
+        tile_shape=(tile_size * 4, tile_size * 4, 3),
+        overlap=(blend * 4, blend * 4, 0),
+        channel_dimension=2
+    ))
+    input_array = np.array(low_res_image)
+    for id, tile in tiler(input_array, progress_bar=True):
+        merger.add(id, np.array(pipe(
+            prompt=prompt,
+            image=Image.fromarray(tile),
+            num_inference_steps=steps,
+            generator=generator.manual_seed(seed),
+            guidance_scale=cfg_scale,
+        ).images[0]))
+        if step_preview_mode != StepPreviewMode.NONE:
+            step = Image.fromarray(merger.merge().astype(np.uint8))
+        yield ImageUpscaleResult(
+            (np.asarray(ImageOps.flip(step).convert('RGBA'), dtype=np.float32) / 255.) if step is not None else None,
+            id + 1,
+            tiler.n_tiles,
+            (id + 1) == tiler.n_tiles
+        )
+    if step_preview_mode == StepPreviewMode.NONE:
+        final = Image.fromarray(merger.merge().astype(np.uint8))
+        yield ImageUpscaleResult(
+            np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.,
+            tiler.n_tiles,
+            tiler.n_tiles,
+            True
+        )

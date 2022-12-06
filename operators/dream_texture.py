@@ -165,6 +165,7 @@ class DreamTexture(bpy.types.Operator):
             if hasattr(gen, '_active_generation_future'):
                 del gen._active_generation_future
             self.report({'ERROR'}, str(exception))
+            raise exception
 
         gen = Generator.shared()
         def generate_next():

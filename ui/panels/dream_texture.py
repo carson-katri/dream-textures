@@ -221,16 +221,7 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                         layout.prop(prompt, "text_mask_confidence")
                 layout.prop(prompt, "inpaint_replace")
             elif prompt.init_img_action == 'outpaint':
-                column = layout.column(align=True)
-                column.prop(prompt, "outpaint_top")
-                column.prop(prompt, "outpaint_right")
-                column.prop(prompt, "outpaint_bottom")
-                column.prop(prompt, "outpaint_left")
-
-                layout.separator()
-                
-                layout.prop(prompt, "outpaint_blend")
-                layout.prop(prompt, "inpaint_replace")
+                layout.prop(prompt, "outpaint_origin")
             elif prompt.init_img_action == 'modify':
                 layout.prop(prompt, "fit")
             layout.prop(prompt, "strength")

@@ -180,7 +180,10 @@ class DreamTexture(bpy.types.Operator):
                             **generated_args
                         )
                     case 'outpaint':
-                        raise NotImplementedError()
+                        f = gen.outpaint(
+                            image=init_image,
+                            **generated_args
+                        )
             else:
                 f = gen.prompt_to_image(
                     **generated_args,

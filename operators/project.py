@@ -1,6 +1,8 @@
 import bpy
 import gpu
 import numpy as np
+from mathutils import Matrix
+from gpu_extras.batch import batch_for_shader
 
 from .view_history import ImportPromptFile
 from ..property_groups.dream_prompt import pipeline_options
@@ -126,6 +128,47 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
     finally:
         cleanup()
 
+def draw_prompt_mask(width, height, scene, region_data):
+    offscreen = gpu.types.GPUOffScreen(width, height)
+
+    with offscreen.bind():
+        fb = gpu.state.active_framebuffer_get()
+        fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+        gpu.state.depth_test_set('LESS_EQUAL')
+        gpu.state.depth_mask_set(True)
+        with gpu.matrix.push_pop():
+            gpu.matrix.load_matrix(region_data.view_matrix)
+            gpu.matrix.load_projection_matrix(region_data.window_matrix)
+
+            for i, ob in enumerate(scene.objects):
+                if (mesh := ob.data) is None:
+                    continue
+                
+                mesh = mesh.copy()
+
+                mesh.transform(ob.matrix_world)
+                mesh.calc_loop_triangles()
+
+                co = np.empty((len(mesh.vertices), 3), 'f')
+                vertices = np.empty((len(mesh.loop_triangles), 3), 'i')
+
+                mesh.vertices.foreach_get("co", co.ravel())
+                mesh.loop_triangles.foreach_get("vertices", vertices.ravel())
+
+                shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
+                batch = batch_for_shader(
+                    shader, 'TRIS',
+                    {"pos": co},
+                    indices=vertices,
+                )
+                shader.bind()
+                shader.uniform_float("color", (i / 255., i / 255., i / 255., 1))
+                batch.draw(shader)
+        buffer = fb.read_color(0, 0, width, height, 4, 0, 'UBYTE')
+    offscreen.free()
+    image = bpy.data.images.new("prompt-mask", width, height)
+    image.pixels[:] = [c / 255 for row in buffer for pix in row for c in pix]
+
 class ProjectDreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture_project"
     bl_label = "Project Dream Texture"
@@ -138,6 +181,13 @@ class ProjectDreamTexture(bpy.types.Operator):
 
     def execute(self, context):
         # Render the viewport
+        for area in context.screen.areas:
+            if area.type == 'VIEW_3D':
+                for region in area.regions:
+                    if region.type == 'WINDOW':
+                        region_width, region_height = region.width, region.height
+        draw_prompt_mask(region_width, region_height, context.scene, context.region_data)
+        return {'FINISHED'}
         if context.scene.dream_textures_project_framebuffer_arguments == 'color':
             res_x, res_y = context.scene.render.resolution_x, context.scene.render.resolution_y
             view3d_spaces = []

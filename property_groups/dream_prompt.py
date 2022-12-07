@@ -49,16 +49,10 @@ seamless_axes = [
     ('xy', 'Both', '', 3),
 ]
 
-_model_options = []
-def _on_model_options(future):
-    global _model_options
-    _model_options = future.result()
-if Pipeline.local_available():
-    Generator.shared().hf_list_installed_models().add_done_callback(_on_model_options)
 def model_options(self, context):
     match Pipeline[self.pipeline]:
         case Pipeline.STABLE_DIFFUSION:
-            return [(m.id, os.path.basename(m.id).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(_model_options)]
+            return [(m.model, os.path.basename(m.model).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(context.preferences.addons[__package__.split('.')[0]].preferences.installed_models)]
         case Pipeline.STABILITY_SDK:
             return [(x, x, '') for x in [
                 "stable-diffusion-v1",

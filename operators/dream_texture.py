@@ -11,7 +11,6 @@ from ..property_groups.dream_prompt import pipeline_options
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
-from ..absolute_path import WEIGHTS_PATH, CLIPSEG_WEIGHTS_PATH
 from ..generator_process import Generator
 from ..generator_process.actions.prompt_to_image import Pipeline, Optimizations, ImageGenerationResult
 

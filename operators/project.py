@@ -145,6 +145,8 @@ def draw_prompt_segmentation_map(width, height, scene, region_data):
     
     Index `0` would be colored `(0, 0, 0)`, index `12` colored `(12, 12, 12)`, and so on up to `255`.
     """
+    segmentation_prompts = {}
+
     offscreen = gpu.types.GPUOffScreen(width, height)
 
     with offscreen.bind():
@@ -159,6 +161,8 @@ def draw_prompt_segmentation_map(width, height, scene, region_data):
             for i, ob in enumerate(scene.objects):
                 if (mesh := ob.data) is None:
                     continue
+                
+                segmentation_prompts[i] = ob.dream_textures_prompt.prompt
                 
                 mesh = mesh.copy()
 
@@ -182,7 +186,7 @@ def draw_prompt_segmentation_map(width, height, scene, region_data):
                 batch.draw(shader)
         buffer = fb.read_color(0, 0, width, height, 4, 0, 'UBYTE')
     offscreen.free()
-    return np.array([c for row in buffer for pix in row for c in pix]).reshape((height, width, 4))[:, :, 0]
+    return np.array([c for row in buffer for pix in row for c in pix]).reshape((height, width, 4))[:, :, 0], segmentation_prompts
 
 class ProjectDreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture_project"
@@ -202,10 +206,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                     for region in area.regions:
                         if region.type == 'WINDOW':
                             region_width, region_height = region.width, region.height
-            segmentation_map = draw_prompt_segmentation_map(region_width, region_height, context.scene, context.region_data)
-            segmentation_prompts = {
-                i: ob.dream_textures_prompt.prompt for i, ob in enumerate(context.scene.objects)
-            }
+            segmentation_map, segmentation_prompts = draw_prompt_segmentation_map(region_width, region_height, context.scene, context.region_data)
         else:
             segmentation_map = None
             segmentation_prompts = None

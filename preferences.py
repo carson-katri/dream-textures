@@ -12,6 +12,7 @@ from .ui.presets import RestoreDefaultPresets, default_presets_missing
 from .generator_process import Generator
 from .generator_process.actions.prompt_to_image import Pipeline
 from .generator_process.actions.huggingface_hub import DownloadStatus
+from .generator_process.actions.convert_original_stable_diffusion_to_diffusers import ModelConfig
 
 is_downloading = False
 
@@ -25,6 +26,7 @@ class OpenHuggingFace(bpy.types.Operator):
         webbrowser.open("https://huggingface.co/settings/tokens")
         return {"FINISHED"}
 
+_model_config_options = [(m.name, m.value, '') for m in ModelConfig]
 class ImportWeights(bpy.types.Operator, ImportHelper):
     bl_idname = "dream_textures.import_weights"
     bl_label = "Import Checkpoint File"
@@ -34,6 +36,10 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
         options={'HIDDEN'},
         maxlen=255,
     )
+    model_config: bpy.props.EnumProperty(
+        name="Model Config",
+        items=_model_config_options
+    )
 
     def execute(self, context):
         _, extension = os.path.splitext(self.filepath)
@@ -41,7 +47,7 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
             self.report({"ERROR"}, "Select a valid stable diffusion '.ckpt' file.")
             return {"FINISHED"}
         try:
-            Generator.shared().convert_original_stable_diffusion_to_diffusers(self.filepath).result()
+            Generator.shared().convert_original_stable_diffusion_to_diffusers(self.filepath, ModelConfig[self.model_config]).result()
         except Exception as e:
             self.report({"ERROR"}, str(e))
         

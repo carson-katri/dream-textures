@@ -212,12 +212,15 @@ def inpaint(
                 pipe = self._cached_img2img_pipe[0]
             else:
                 storage_folder = model
-                revision = "main"
-                ref_path = os.path.join(storage_folder, "refs", revision)
-                with open(ref_path) as f:
-                    commit_hash = f.read()
+                if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
+                    snapshot_folder = storage_folder
+                else:
+                    revision = "main"
+                    ref_path = os.path.join(storage_folder, "refs", revision)
+                    with open(ref_path) as f:
+                        commit_hash = f.read()
 
-                snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+                    snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
                 pipe = GeneratorPipeline.from_pretrained(
                     snapshot_folder,
                     revision="fp16" if optimizations.can_use("half_precision", device) else None,

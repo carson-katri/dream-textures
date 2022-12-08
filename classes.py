@@ -6,7 +6,8 @@ from .operators.inpaint_area_brush import InpaintAreaBrushActivated
 from .operators.upscale import Upscale
 from .operators.project import ProjectDreamTexture, dream_texture_projection_panels
 from .property_groups.dream_prompt import DreamPrompt
-from .ui.panels import dream_texture, history, upscaling, render_properties
+from .property_groups.object_prompt import ObjectPrompt
+from .ui.panels import dream_texture, history, upscaling, render_properties, object_prompt
 from .preferences import OpenHuggingFace, OpenContributors, StableDiffusionPreferences, OpenDreamStudio, ImportWeights, Model, DeleteSelectedWeights, ModelSearch, InstallModel, PREFERENCES_UL_ModelList
 
 from .ui.presets import DREAM_PT_AdvancedPresets, DREAM_MT_AdvancedPresets, AddAdvancedPreset, RestoreDefaultPresets
@@ -37,6 +38,7 @@ CLASSES = (
     *upscaling.upscaling_panels(),
     *history.history_panels(),
     *dream_texture_projection_panels(),
+    object_prompt.ObjectPromptPanel,
 
     dream_texture.OpenClipSegDownload,
     dream_texture.OpenClipSegWeightsDirectory,
@@ -49,6 +51,7 @@ PREFERENCE_CLASSES = (
                       DeleteSelectedWeights,
                       Model,
                       DreamPrompt,
+                      ObjectPrompt,
                       InstallDependencies,
                       OpenHuggingFace,
                       ImportWeights,

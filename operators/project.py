@@ -1,6 +1,8 @@
 import bpy
 import gpu
 import numpy as np
+from mathutils import Matrix
+from gpu_extras.batch import batch_for_shader
 
 from .view_history import ImportPromptFile
 from ..property_groups.dream_prompt import pipeline_options
@@ -66,6 +68,17 @@ def dream_texture_projection_panels():
                 layout = self.layout
                 layout.use_property_split = True
 
+                layout.prop(context.scene, "dream_textures_project_use_object_prompts")
+                missing_prompt_parts = []
+                for ob in context.scene.objects:
+                    if ob.dream_textures_prompt.prompt.lower() not in get_prompt(context).generate_prompt():
+                        missing_prompt_parts.append(ob)
+                if len(missing_prompt_parts) > 0:
+                    box = layout.box()
+                    box.label(text="Missing Prompt Parts", icon="ERROR")
+                    box.label(text="Each object prompt should be used in the main prompt.")
+                    for ob in missing_prompt_parts:
+                        box.label(text=f"{ob.name} - {ob.dream_textures_prompt.prompt}")
                 layout.prop(context.scene, "dream_textures_project_framebuffer_arguments")
                 if context.scene.dream_textures_project_framebuffer_arguments == 'color':
                     layout.prop(get_prompt(context), "strength")
@@ -76,8 +89,12 @@ def dream_texture_projection_panels():
         return ActionsPanel
     yield create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, actions_panel, get_prompt)
 
-def draw(context, init_img_path, image_texture_node, material, cleanup):
+def draw(context, init_img_path, segmentation_map, segmentation_prompts, image_texture_node, material, cleanup):
+    """
+    Access the depth information from the current viewport, and pass it to `Generator.depth_to_image`.
+    """
     try:
+        # Read the depth information
         framebuffer = gpu.state.active_framebuffer_get()
         viewport = gpu.state.viewport_get()
         width, height = viewport[2], viewport[3]
@@ -85,11 +102,14 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
 
         depth = 1 - np.interp(depth, [depth.min(), depth.max()], [0, 1])
 
+        # Downsample
         scaled_width = 512 if width < height else (512 * (width // height))
         scaled_height = 512 if height < width else (512 * (height // width))
         factor = max(width // scaled_width, height // scaled_height)
 
         depth = depth[::factor, ::factor]
+        if segmentation_map is not None:
+            segmentation_map = segmentation_map[::factor, ::factor]
 
         texture = None
 
@@ -118,13 +138,65 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
         future = Generator.shared().depth_to_image(
             depth=depth,
             image=init_img_path,
+            segmentation_map=segmentation_map,
+            segmentation_prompts=segmentation_prompts,
             **context.scene.dream_textures_project_prompt.generate_args()
         )
         future.add_response_callback(on_response)
         future.add_done_callback(on_done)
 
     finally:
+        # The handle should always be removed.
         cleanup()
+
+def draw_prompt_segmentation_map(width, height, scene, region_data):
+    """
+    Generate an image where each object is a different shade of gray based on their index.
+    
+    Index `0` would be colored `(0, 0, 0)`, index `12` colored `(12, 12, 12)`, and so on up to `255`.
+    """
+    segmentation_prompts = {}
+
+    offscreen = gpu.types.GPUOffScreen(width, height)
+
+    with offscreen.bind():
+        fb = gpu.state.active_framebuffer_get()
+        fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+        gpu.state.depth_test_set('LESS_EQUAL')
+        gpu.state.depth_mask_set(True)
+        with gpu.matrix.push_pop():
+            gpu.matrix.load_matrix(region_data.view_matrix)
+            gpu.matrix.load_projection_matrix(region_data.window_matrix)
+
+            for i, ob in enumerate(scene.objects):
+                if (mesh := ob.data) is None:
+                    continue
+                
+                segmentation_prompts[i] = ob.dream_textures_prompt.prompt
+                
+                mesh = mesh.copy()
+
+                mesh.transform(ob.matrix_world)
+                mesh.calc_loop_triangles()
+
+                co = np.empty((len(mesh.vertices), 3), 'f')
+                vertices = np.empty((len(mesh.loop_triangles), 3), 'i')
+
+                mesh.vertices.foreach_get("co", co.ravel())
+                mesh.loop_triangles.foreach_get("vertices", vertices.ravel())
+
+                shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
+                batch = batch_for_shader(
+                    shader, 'TRIS',
+                    {"pos": co},
+                    indices=vertices,
+                )
+                shader.bind()
+                shader.uniform_float("color", (i / 255., i / 255., i / 255., 1))
+                batch.draw(shader)
+        buffer = fb.read_color(0, 0, width, height, 4, 0, 'UBYTE')
+    offscreen.free()
+    return np.array([c for row in buffer for pix in row for c in pix]).reshape((height, width, 4))[:, :, 0], segmentation_prompts
 
 class ProjectDreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture_project"
@@ -137,7 +209,18 @@ class ProjectDreamTexture(bpy.types.Operator):
         return Generator.shared().can_use()
 
     def execute(self, context):
-        # Render the viewport
+        # Use a segmentation map to specify which prompts go with which objects.
+        if context.scene.dream_textures_project_use_object_prompts:
+            for area in context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    for region in area.regions:
+                        if region.type == 'WINDOW':
+                            region_width, region_height = region.width, region.height
+            segmentation_map, segmentation_prompts = draw_prompt_segmentation_map(region_width, region_height, context.scene, context.region_data)
+        else:
+            segmentation_map = None
+            segmentation_prompts = None
+        # Render the viewport color if we're using img2img *and* depth2image.
         if context.scene.dream_textures_project_framebuffer_arguments == 'color':
             res_x, res_y = context.scene.render.resolution_x, context.scene.render.resolution_y
             view3d_spaces = []
@@ -163,8 +246,10 @@ class ProjectDreamTexture(bpy.types.Operator):
         else:
             init_img_path = None
 
+        # Setup UVs from the current viewport angle.
         bpy.ops.uv.project_from_view()
         
+        # Create a material and image texture nodes, and bind it to each selected object.
         material = bpy.data.materials.new(name="diffused-material")
         material.use_nodes = True
         image_texture_node = material.node_tree.nodes.new("ShaderNodeTexImage")
@@ -178,12 +263,15 @@ class ProjectDreamTexture(bpy.types.Operator):
             else:
                 obj.data.materials.append(material)
 
+        # Use a draw handler to access the depth buffer.
         handle = None
         handle = bpy.types.SpaceView3D.draw_handler_add(
             draw,
             (
                 context,
                 init_img_path,
+                segmentation_map,
+                segmentation_prompts,
                 image_texture_node,
                 material,
                 lambda: bpy.types.SpaceView3D.draw_handler_remove(handle, 'WINDOW'),
@@ -192,6 +280,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             'POST_VIEW'
         )
 
+        # Redraw the scene to ensure the texture changes propagate.
         for area in context.screen.areas:
             if area.type == 'VIEW_3D':
                 area.tag_redraw()

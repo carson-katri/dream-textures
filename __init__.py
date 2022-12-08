@@ -45,6 +45,7 @@ if current_process().name != "__actor__":
     from .operators.dream_texture import DreamTexture, kill_generator
     from .operators.upscale import upscale_options
     from .property_groups.dream_prompt import DreamPrompt
+    from .property_groups.object_prompt import ObjectPrompt
     from .preferences import StableDiffusionPreferences
     from .ui.presets import register_default_presets
 
@@ -93,6 +94,9 @@ if current_process().name != "__actor__":
         
         bpy.types.Scene.dream_textures_project_prompt = PointerProperty(type=DreamPrompt)
         bpy.types.Scene.dream_textures_project_framebuffer_arguments = EnumProperty(name="Inputs", items=framebuffer_arguments)
+        bpy.types.Scene.dream_textures_project_use_object_prompts = BoolProperty(name="Use Per-Object Prompts", default=False, description="Specify a separate prompt for each object in the 'Object Properties' panel")
+
+        bpy.types.Object.dream_textures_prompt = PointerProperty(type=ObjectPrompt)
 
         for cls in CLASSES:
             bpy.utils.register_class(cls)

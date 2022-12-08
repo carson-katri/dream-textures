@@ -69,6 +69,16 @@ def dream_texture_projection_panels():
                 layout.use_property_split = True
 
                 layout.prop(context.scene, "dream_textures_project_use_object_prompts")
+                missing_prompt_parts = []
+                for ob in context.scene.objects:
+                    if ob.dream_textures_prompt.prompt.lower() not in get_prompt(context).generate_prompt():
+                        missing_prompt_parts.append(ob)
+                if len(missing_prompt_parts) > 0:
+                    box = layout.box()
+                    box.label(text="Missing Prompt Parts", icon="ERROR")
+                    box.label(text="Each object prompt should be used in the main prompt.")
+                    for ob in missing_prompt_parts:
+                        box.label(text=f"{ob.name} - {ob.dream_textures_prompt.prompt}")
                 layout.prop(context.scene, "dream_textures_project_framebuffer_arguments")
                 if context.scene.dream_textures_project_framebuffer_arguments == 'color':
                     layout.prop(get_prompt(context), "strength")

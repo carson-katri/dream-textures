@@ -94,6 +94,7 @@ if current_process().name != "__actor__":
         
         bpy.types.Scene.dream_textures_project_prompt = PointerProperty(type=DreamPrompt)
         bpy.types.Scene.dream_textures_project_framebuffer_arguments = EnumProperty(name="Inputs", items=framebuffer_arguments)
+        bpy.types.Scene.dream_textures_project_use_object_prompts = BoolProperty(name="Use Per-Object Prompts", default=False, description="Specify a separate prompt for each object in the 'Object Properties' panel")
 
         bpy.types.Object.dream_textures_prompt = PointerProperty(type=ObjectPrompt)
 

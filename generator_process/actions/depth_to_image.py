@@ -1,4 +1,4 @@
-from typing import Union, Generator, Callable, List, Optional
+from typing import Union, Generator, Callable, List, Optional, Dict
 import os
 from contextlib import nullcontext
 from numpy.typing import NDArray
@@ -18,6 +18,8 @@ def depth_to_image(
 
     depth: NDArray | str,
     image: NDArray | str | None,
+    segmentation_map: NDArray | str | None,
+    segmentation_prompts: Dict[int, str],
     strength: float,
     prompt: str,
     steps: int,
@@ -38,6 +40,9 @@ def depth_to_image(
             import PIL.Image
             import PIL.ImageOps
             from ...absolute_path import WEIGHTS_PATH
+
+            print(segmentation_map)
+            print(segmentation_prompts)
 
             final_size = depth.shape[:2]
 
@@ -333,6 +338,8 @@ def depth_to_image(
                 (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                 depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255), 'L')).resize(rounded_size)
                 init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
+                if segmentation_map is not None:
+                    segmentation_map = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(segmentation_map * 255), 'L')).resize(rounded_size)
                 yield from pipe(
                     prompt=prompt,
                     depth_image=depth_image,

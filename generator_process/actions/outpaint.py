@@ -27,8 +27,8 @@ def outpaint(
     outpaint_bounds = Image.new(
         'RGBA',
         (
-            max(init_image.size[0], outpaint_origin[0] + width),
-            max(init_image.size[1], outpaint_origin[1] + height),
+            max(init_image.size[0], outpaint_origin[0] + width) - min(0, outpaint_origin[0]),
+            max(init_image.size[1], outpaint_origin[1] + height) - min(0, outpaint_origin[1]),
         ),
         (0, 0, 0, 0)
     )

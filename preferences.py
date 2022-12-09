@@ -130,7 +130,7 @@ class InstallModel(bpy.types.Operator):
             webbrowser.open(f"file://{self.model}")
         else:
             _ = Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token).result()
-            set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+            set_model_list('installed_models', Generator.shared().hf_list_installed_models(_block=True).result())
         return {"FINISHED"}
 
 def _model_search(self, context):
@@ -156,7 +156,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     @staticmethod
     def register():
         if Pipeline.local_available():
-            set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+            set_model_list('installed_models', Generator.shared().hf_list_installed_models(_block=True).result())
 
     def draw(self, context):
         layout = self.layout

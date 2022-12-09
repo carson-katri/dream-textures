@@ -4,7 +4,7 @@ import enum
 import traceback
 import threading
 from typing import Type, TypeVar, Callable, Any, MutableSet, Generator
-# from concurrent.futures import Future
+import functools
 import site
 import sys
 
@@ -43,7 +43,7 @@ class Future:
 
     def result(self):
         """
-        Get the result value (blocking).
+        Get the result value. To block while waiting for the result, pass `_block=True` to the action before calling `.result()`.
         """
         def _response():
             match len(self._responses):
@@ -55,28 +55,12 @@ class Future:
                     return self._responses
         if self._exception is not None:
             raise self._exception
-        if self.done:
-            return _response()
-        else:
-            event = threading.Event()
-            def _done(_):
-                event.set()
-            self.add_done_callback(_done)
-            event.wait()
-            if self._exception is not None:
-                raise self._exception
-            return _response()
+        assert self.done, "The future is not done. To block while waiting for the result, pass `_block=True` to the action before calling `.result()`."
+        return _response()
     
     def exception(self):
-        if self.done:
-            return self._exception
-        else:
-            event = threading.Event()
-            def _done(_):
-                event.set()
-            self.add_done_callback(_done)
-            event.wait()
-            return self._exception
+        assert self.done, "The future is not done. To block while waiting for the exception, pass `_block=True` to the action before calling `.exception()`."
+        return self._exception
     
     def cancel(self):
         self.cancelled = True
@@ -284,11 +268,11 @@ class Actor:
 
     def _send(self, name):
         def _send(*args, _block=False, **kwargs):
+            import bpy
             future = Future()
-            def _send_thread(future: Future):
+            if _block:
                 self._lock.acquire()
                 self._message_queue.put(Message(name, args, kwargs))
-
                 while not future.done:
                     if future.cancelled:
                         self._message_queue.put(Message.CANCEL)
@@ -302,13 +286,40 @@ class Actor:
                         future.set_exception(response)
                     else:
                         future.add_response(response)
-                
                 self._lock.release()
-            if _block:
-                _send_thread(future)
             else:
-                thread = threading.Thread(target=_send_thread, args=(future,), daemon=True)
-                thread.start()
+                did_start = False
+                def _send_thread(future: Future):
+                    nonlocal did_start
+                    if not did_start:
+                        if not self._lock.acquire(block=False):
+                            return 0.1 # Continue the timer
+                        self._message_queue.put(Message(name, args, kwargs))
+                        did_start = True
+                    sent_cancellation_message = False
+
+                    if future.done:
+                        self._lock.release()
+                        return None # Stop the timer
+                    else:
+                        if future.cancelled and not sent_cancellation_message:
+                            self._message_queue.put(Message.CANCEL)
+                            sent_cancellation_message = True
+                        try:
+                            response = self._response_queue.get(block=False)
+                        except:
+                            return 0.1 # Continue the timer
+                        if response == Message.END:
+                            future.set_done()
+                        elif isinstance(response, TracedError):
+                            response.base.__cause__ = Exception(response.trace)
+                            future.set_exception(response.base)
+                        elif isinstance(response, Exception):
+                            future.set_exception(response)
+                        else:
+                            future.add_response(response)
+                        return 0.1 # Continue the timer
+                bpy.app.timers.register(functools.partial(_send_thread, future))
             return future
         return _send
     

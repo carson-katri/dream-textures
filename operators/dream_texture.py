@@ -70,7 +70,7 @@ class DreamTexture(bpy.types.Operator):
             init_image = np.flipud(
                 (np.array(init_image.pixels) * 255)
                     .astype(np.uint8)
-                    .reshape((init_image.size[0], init_image.size[1], init_image.channels))
+                    .reshape((init_image.size[1], init_image.size[0], init_image.channels))
             )
 
         # Setup the progress indicator

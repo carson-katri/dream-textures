@@ -27,6 +27,7 @@ class Future:
     _done_callbacks: MutableSet[Callable[['Future'], None]] = set()
     _responses: list = []
     _exception: BaseException | None = None
+    _done_event: threading.Event
     done: bool = False
     cancelled: bool = False
     call_done_on_exception: bool = True
@@ -37,13 +38,14 @@ class Future:
         self._done_callbacks = set()
         self._responses = []
         self._exception = None
+        self._done_event = threading.Event()
         self.done = False
         self.cancelled = False
         self.call_done_on_exception = True
 
     def result(self):
         """
-        Get the result value. To block while waiting for the result, pass `_block=True` to the action before calling `.result()`.
+        Get the result value (blocking).
         """
         def _response():
             match len(self._responses):
@@ -55,31 +57,47 @@ class Future:
                     return self._responses
         if self._exception is not None:
             raise self._exception
-        assert self.done, "The future is not done. To block while waiting for the result, pass `_block=True` to the action before calling `.result()`."
-        return _response()
+        if self.done:
+            return _response()
+        else:
+            self._done_event.wait()
+            if self._exception is not None:
+                raise self._exception
+            return _response()
     
     def exception(self):
-        assert self.done, "The future is not done. To block while waiting for the exception, pass `_block=True` to the action before calling `.exception()`."
-        return self._exception
+        if self.done:
+            return self._exception
+        else:
+            self._done_event.wait()
+            return self._exception
     
     def cancel(self):
         self.cancelled = True
+
+    def _run_on_main_thread(self, func):
+        import bpy
+        bpy.app.timers.register(func)
 
     def add_response(self, response):
         """
         Add a response value and notify all consumers.
         """
         self._responses.append(response)
-        for response_callback in self._response_callbacks:
-            response_callback(self, response)
+        def run_callbacks():
+            for response_callback in self._response_callbacks:
+                response_callback(self, response)
+        self._run_on_main_thread(run_callbacks)
 
     def set_exception(self, exception: BaseException):
         """
         Set the exception.
         """
         self._exception = exception
-        for exception_callback in self._exception_callbacks:
-            exception_callback(self, exception)
+        def run_callbacks():
+            for exception_callback in self._exception_callbacks:
+                exception_callback(self, exception)
+        self._run_on_main_thread(run_callbacks)
 
     def set_done(self):
         """
@@ -87,9 +105,12 @@ class Future:
         """
         assert not self.done
         self.done = True
+        self._done_event.set()
         if self._exception is None or self.call_done_on_exception:
-            for done_callback in self._done_callbacks:
-                done_callback(self)
+            def run_callbacks():
+                for done_callback in self._done_callbacks:
+                    done_callback(self)
+            self._run_on_main_thread(run_callbacks)
 
     def add_response_callback(self, callback: Callable[['Future', Any], None]):
         """
@@ -268,11 +289,11 @@ class Actor:
 
     def _send(self, name):
         def _send(*args, _block=False, **kwargs):
-            import bpy
             future = Future()
-            if _block:
+            def _send_thread(future: Future):
                 self._lock.acquire()
                 self._message_queue.put(Message(name, args, kwargs))
+
                 while not future.done:
                     if future.cancelled:
                         self._message_queue.put(Message.CANCEL)
@@ -286,40 +307,13 @@ class Actor:
                         future.set_exception(response)
                     else:
                         future.add_response(response)
+                
                 self._lock.release()
+            if _block:
+                _send_thread(future)
             else:
-                did_start = False
-                def _send_thread(future: Future):
-                    nonlocal did_start
-                    if not did_start:
-                        if not self._lock.acquire(block=False):
-                            return 0.1 # Continue the timer
-                        self._message_queue.put(Message(name, args, kwargs))
-                        did_start = True
-                    sent_cancellation_message = False
-
-                    if future.done:
-                        self._lock.release()
-                        return None # Stop the timer
-                    else:
-                        if future.cancelled and not sent_cancellation_message:
-                            self._message_queue.put(Message.CANCEL)
-                            sent_cancellation_message = True
-                        try:
-                            response = self._response_queue.get(block=False)
-                        except:
-                            return 0.1 # Continue the timer
-                        if response == Message.END:
-                            future.set_done()
-                        elif isinstance(response, TracedError):
-                            response.base.__cause__ = Exception(response.trace)
-                            future.set_exception(response.base)
-                        elif isinstance(response, Exception):
-                            future.set_exception(response)
-                        else:
-                            future.add_response(response)
-                        return 0.1 # Continue the timer
-                bpy.app.timers.register(functools.partial(_send_thread, future))
+                thread = threading.Thread(target=_send_thread, args=(future,), daemon=True)
+                thread.start()
             return future
         return _send
     

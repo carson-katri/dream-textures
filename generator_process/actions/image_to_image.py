@@ -16,7 +16,7 @@ def image_to_image(
 
     optimizations: Optimizations,
 
-    image: NDArray | str,
+    image: NDArray,
     fit: bool,
     strength: float,
     prompt: str,
@@ -216,7 +216,7 @@ def image_to_image(
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                    init_image = (Image.open(image) if isinstance(image, str) else Image.fromarray(image)).convert('RGB')
+                    init_image = Image.fromarray(image).convert('RGB')
                     yield from pipe(
                         prompt=prompt,
                         image=init_image if fit else init_image.resize((width, height)),

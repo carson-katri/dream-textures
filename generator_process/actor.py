@@ -4,6 +4,10 @@ import enum
 import traceback
 import threading
 from typing import Type, TypeVar, Callable, Any, MutableSet, Generator
+<<<<<<< HEAD
+=======
+import functools
+>>>>>>> fcafd8ba4c66b5123ac63f9f07190ab1f1fd17ce
 import site
 import sys
 
@@ -26,6 +30,7 @@ class Future:
     _done_callbacks: MutableSet[Callable[['Future'], None]] = set()
     _responses: list = []
     _exception: BaseException | None = None
+    _done_event: threading.Event
     done: bool = False
     cancelled: bool = False
     call_done_on_exception: bool = True
@@ -36,6 +41,7 @@ class Future:
         self._done_callbacks = set()
         self._responses = []
         self._exception = None
+        self._done_event = threading.Event()
         self.done = False
         self.cancelled = False
         self.call_done_on_exception = True
@@ -57,11 +63,7 @@ class Future:
         if self.done:
             return _response()
         else:
-            event = threading.Event()
-            def _done(_):
-                event.set()
-            self.add_done_callback(_done)
-            event.wait()
+            self._done_event.wait()
             if self._exception is not None:
                 raise self._exception
             return _response()
@@ -70,31 +72,35 @@ class Future:
         if self.done:
             return self._exception
         else:
-            event = threading.Event()
-            def _done(_):
-                event.set()
-            self.add_done_callback(_done)
-            event.wait()
+            self._done_event.wait()
             return self._exception
     
     def cancel(self):
         self.cancelled = True
+
+    def _run_on_main_thread(self, func):
+        import bpy
+        bpy.app.timers.register(func)
 
     def add_response(self, response):
         """
         Add a response value and notify all consumers.
         """
         self._responses.append(response)
-        for response_callback in self._response_callbacks:
-            response_callback(self, response)
+        def run_callbacks():
+            for response_callback in self._response_callbacks:
+                response_callback(self, response)
+        self._run_on_main_thread(run_callbacks)
 
     def set_exception(self, exception: BaseException):
         """
         Set the exception.
         """
         self._exception = exception
-        for exception_callback in self._exception_callbacks:
-            exception_callback(self, exception)
+        def run_callbacks():
+            for exception_callback in self._exception_callbacks:
+                exception_callback(self, exception)
+        self._run_on_main_thread(run_callbacks)
 
     def set_done(self):
         """
@@ -102,9 +108,12 @@ class Future:
         """
         assert not self.done
         self.done = True
+        self._done_event.set()
         if self._exception is None or self.call_done_on_exception:
-            for done_callback in self._done_callbacks:
-                done_callback(self)
+            def run_callbacks():
+                for done_callback in self._done_callbacks:
+                    done_callback(self)
+            self._run_on_main_thread(run_callbacks)
 
     def add_response_callback(self, callback: Callable[['Future', Any], None]):
         """

@@ -136,9 +136,7 @@ class InstallModel(bpy.types.Operator):
             def on_done(future):
                 global is_downloading
                 is_downloading = False
-                def refresh_model_list():
-                    set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
-                bpy.app.timers.register(refresh_model_list)
+                set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
             def on_exception(_, exception):
                 self.report({"ERROR"}, str(exception))
             f.add_response_callback(on_progress)
@@ -179,7 +177,9 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     @staticmethod
     def register():
         if Pipeline.local_available():
-            set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+            def on_done(future):
+                set_model_list('installed_models', future.result())
+            Generator.shared().hf_list_installed_models().add_done_callback(on_done)
 
     def draw(self, context):
         layout = self.layout

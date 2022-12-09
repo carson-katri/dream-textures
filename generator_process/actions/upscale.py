@@ -13,7 +13,7 @@ class ImageUpscaleResult:
 
 def upscale(
     self,
-    image: str,
+    image: NDArray,
     
     prompt: str,
     steps: int,
@@ -49,7 +49,7 @@ def upscale(
     pipe = pipe.to(device)
     pipe = optimizations.apply(pipe, device)
 
-    low_res_image = Image.open(image)
+    low_res_image = Image.fromarray(image)
 
     generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
     if seed is None:

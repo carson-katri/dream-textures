@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty
+from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty
 import os
 import sys
 from typing import _AnnotatedAlias
@@ -122,11 +122,7 @@ attributes = {
     "text_mask_confidence": FloatProperty(name="Confidence Threshold", description="How confident the segmentation model needs to be", default=0.5, min=0),
 
     # Outpaint
-    "outpaint_top": IntProperty(name="Top", default=64, step=64, min=0),
-    "outpaint_right": IntProperty(name="Right", default=64, step=64, min=0),
-    "outpaint_bottom": IntProperty(name="Bottom", default=64, step=64, min=0),
-    "outpaint_left": IntProperty(name="Left", default=64, step=64, min=0),
-    "outpaint_blend": IntProperty(name="Blend", description="Gaussian blur amount to apply to the extended area", default=16, min=0),
+    "outpaint_origin": IntVectorProperty(name="Origin", default=(0, 448), size=2, description="The position of the outpaint area relative to the top left corner of the image. A value of (0, 512) will outpaint from the bottom of a 512x512 image"),
 
     # Resulting image
     "hash": StringProperty(name="Image Hash"),
@@ -224,6 +220,7 @@ def generate_args(self):
     args['scheduler'] = Scheduler(args['scheduler'])
     args['step_preview_mode'] = StepPreviewMode(args['step_preview_mode'])
     args['pipeline'] = Pipeline[args['pipeline']]
+    args['outpaint_origin'] = (args['outpaint_origin'][0], args['outpaint_origin'][1])
     args['key'] = bpy.context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key
     return args
 

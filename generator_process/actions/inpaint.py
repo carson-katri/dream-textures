@@ -16,7 +16,7 @@ def inpaint(
 
     optimizations: Optimizations,
 
-    image: NDArray | str,
+    image: NDArray,
     fit: bool,
     strength: float,
     prompt: str,
@@ -252,7 +252,7 @@ def inpaint(
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                    init_image = Image.open(image) if isinstance(image, str) else Image.fromarray(image)
+                    init_image = Image.fromarray(image)
                     yield from pipe(
                         prompt=prompt,
                         image=init_image.convert('RGB'),

@@ -156,7 +156,9 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     @staticmethod
     def register():
         if Pipeline.local_available():
-            set_model_list('installed_models', Generator.shared().hf_list_installed_models(_block=True).result())
+            def on_done(future):
+                set_model_list('installed_models', future.result())
+            Generator.shared().hf_list_installed_models().add_done_callback(on_done)
 
     def draw(self, context):
         layout = self.layout

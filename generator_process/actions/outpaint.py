@@ -6,7 +6,7 @@ from .prompt_to_image import ImageGenerationResult
 def outpaint(
     self,
 
-    image: NDArray | str,
+    image: NDArray,
 
     width: int,
     height: int,
@@ -17,7 +17,7 @@ def outpaint(
 ) -> Generator[ImageGenerationResult, None, None]:
     from PIL import Image, ImageOps
 
-    init_image = Image.open(image) if isinstance(image, str) else Image.fromarray(image)
+    init_image = Image.fromarray(image)
     
     if outpaint_origin[0] > init_image.size[0] or outpaint_origin[0] < -width:
         raise ValueError(f"Outpaint origin X ({outpaint_origin[0]}) must be between {-width} and {init_image.size[0]}")

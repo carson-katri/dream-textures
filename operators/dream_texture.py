@@ -1,45 +1,12 @@
-import sys
 import bpy
-import os
 import hashlib
 import numpy as np
-from numpy.typing import NDArray
-from multiprocessing.shared_memory import SharedMemory
-
-from ..property_groups.dream_prompt import pipeline_options
 
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
-from ..absolute_path import WEIGHTS_PATH, CLIPSEG_WEIGHTS_PATH
 from ..generator_process import Generator
-from ..generator_process.actions.prompt_to_image import Pipeline, Optimizations, ImageGenerationResult
-
-import tempfile
-
-generator_advance = None
-last_data_block = None
-timer = None
-
-def save_temp_image(img, path=None):
-    path = path if path is not None else tempfile.NamedTemporaryFile().name
-
-    settings = bpy.context.scene.render.image_settings
-    file_format = settings.file_format
-    mode = settings.color_mode
-    depth = settings.color_depth
-
-    settings.file_format = 'PNG'
-    settings.color_mode = 'RGBA'
-    settings.color_depth = '8'
-
-    img.save_render(path)
-
-    settings.file_format = file_format
-    settings.color_mode = mode
-    settings.color_depth = depth
-
-    return path
+from ..generator_process.actions.prompt_to_image import ImageGenerationResult
 
 def bpy_image(name, width, height, pixels, existing_image):
     if existing_image is None:
@@ -93,12 +60,18 @@ class DreamTexture(bpy.types.Operator):
         if generated_args['use_init_img']:
             match generated_args['init_img_src']:
                 case 'file':
-                    init_image = save_temp_image(scene.init_img)
+                    init_image = scene.init_img
                 case 'open_editor':
                     for area in screen.areas:
                         if area.type == 'IMAGE_EDITOR':
                             if area.spaces.active.image is not None:
-                                init_image = save_temp_image(area.spaces.active.image)
+                                init_image = area.spaces.active.image
+        if init_image is not None:
+            init_image = np.flipud(
+                (np.array(init_image.pixels) * 255)
+                    .astype(np.uint8)
+                    .reshape((init_image.size[0], init_image.size[1], init_image.channels))
+            )
 
         # Setup the progress indicator
         def step_progress_update(self, context):

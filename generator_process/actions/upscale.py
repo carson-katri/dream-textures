@@ -1,10 +1,19 @@
 import numpy as np
-from .prompt_to_image import Optimizations, Scheduler
+from .prompt_to_image import Optimizations, Scheduler, StepPreviewMode
 import random
+from dataclasses import dataclass
+from numpy.typing import NDArray
+
+@dataclass
+class ImageUpscaleResult:
+    image: NDArray | None
+    tile: int
+    total: int
+    final: bool
 
 def upscale(
     self,
-    image: str,
+    image: NDArray,
     
     prompt: str,
     steps: int,
@@ -16,6 +25,8 @@ def upscale(
     blend: int,
 
     optimizations: Optimizations,
+
+    step_preview_mode: StepPreviewMode,
 
     **kwargs
 ):
@@ -38,15 +49,11 @@ def upscale(
     pipe = pipe.to(device)
     pipe = optimizations.apply(pipe, device)
 
-    low_res_image = Image.open(image)
+    low_res_image = Image.fromarray(image)
 
     generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
     if seed is None:
         seed = random.randrange(0, np.iinfo(np.uint32).max)
-    generator = generator.manual_seed(seed)
-    initial_seed = generator.initial_seed()
-
-    # final = Image.new('RGB', (low_res_image.size[0] * 4, low_res_image.size[1] * 4))
     tiler = Tiler(
         data_shape=(low_res_image.size[0], low_res_image.size[1], len(low_res_image.getbands())),
         tile_shape=(tile_size, tile_size, len(low_res_image.getbands())),
@@ -65,11 +72,22 @@ def upscale(
             prompt=prompt,
             image=Image.fromarray(tile),
             num_inference_steps=steps,
-            generator=torch.manual_seed(initial_seed),
+            generator=generator.manual_seed(seed),
             guidance_scale=cfg_scale,
         ).images[0]))
+        if step_preview_mode != StepPreviewMode.NONE:
+            step = Image.fromarray(merger.merge().astype(np.uint8))
+        yield ImageUpscaleResult(
+            (np.asarray(ImageOps.flip(step).convert('RGBA'), dtype=np.float32) / 255.) if step is not None else None,
+            id + 1,
+            tiler.n_tiles,
+            (id + 1) == tiler.n_tiles
+        )
+    if step_preview_mode == StepPreviewMode.NONE:
         final = Image.fromarray(merger.merge().astype(np.uint8))
-        yield np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.
-
-    # final = Image.fromarray(merger.merge().astype(np.uint8))
-    # yield np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.
+        yield ImageUpscaleResult(
+            np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.,
+            tiler.n_tiles,
+            tiler.n_tiles,
+            True
+        )

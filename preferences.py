@@ -11,7 +11,7 @@ from .operators.open_latest_version import OpenLatestVersion
 from .property_groups.dream_prompt import DreamPrompt
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
 from .generator_process import Generator
-from .generator_process.registrar import BackendTarget
+from .generator_process.actions.prompt_to_image import Pipeline
 
 class OpenHuggingFace(bpy.types.Operator):
     bl_idname = "dream_textures.open_hugging_face"
@@ -130,7 +130,7 @@ class InstallModel(bpy.types.Operator):
             webbrowser.open(f"file://{self.model}")
         else:
             _ = Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token).result()
-            set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+            set_model_list('installed_models', Generator.shared().hf_list_installed_models(_block=True).result())
         return {"FINISHED"}
 
 def _model_search(self, context):
@@ -155,8 +155,10 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
     @staticmethod
     def register():
-        if BackendTarget.local_available():
-            set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+        if Pipeline.local_available():
+            def on_done(future):
+                set_model_list('installed_models', future.result())
+            Generator.shared().hf_list_installed_models().add_done_callback(on_done)
 
     def draw(self, context):
         layout = self.layout
@@ -168,7 +170,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
         has_dependencies = len(os.listdir(absolute_path(".python_dependencies"))) > 2
         if has_dependencies:
-            has_local = BackendTarget.local_available()
+            has_local = Pipeline.local_available()
 
             if has_local:        
                 search_box = layout.box()

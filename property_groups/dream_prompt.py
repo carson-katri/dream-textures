@@ -1,11 +1,10 @@
 import bpy
-from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty
+from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty
 import os
 import sys
 from typing import _AnnotatedAlias
 from ..absolute_path import absolute_path
-from ..generator_process.registrar import BackendTarget
-from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode
+from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode, Pipeline
 from ..generator_process import Generator
 from ..prompt_engineering import *
 
@@ -32,7 +31,7 @@ init_image_actions = [
 ]
 
 def init_image_actions_filtered(self, context):
-    available = BackendTarget[self.backend].init_img_actions()
+    available = Pipeline[self.pipeline].init_img_actions()
     return list(filter(lambda x: x[0] in available, init_image_actions))
 
 inpaint_mask_sources = [
@@ -41,7 +40,7 @@ inpaint_mask_sources = [
 ]
 
 def inpaint_mask_sources_filtered(self, context):
-    available = BackendTarget[self.backend].inpaint_mask_sources()
+    available = Pipeline[self.pipeline].inpaint_mask_sources()
     return list(filter(lambda x: x[0] in available, inpaint_mask_sources))
 
 seamless_axes = [
@@ -50,21 +49,26 @@ seamless_axes = [
     ('xy', 'Both', '', 3),
 ]
 
-_model_options = []
-def _on_model_options(future):
-    global _model_options
-    _model_options = future.result()
-if BackendTarget.local_available():
-    Generator.shared().hf_list_installed_models().add_done_callback(_on_model_options)
 def model_options(self, context):
-    return [(m.id, os.path.basename(m.id).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(_model_options)]
+    match Pipeline[self.pipeline]:
+        case Pipeline.STABLE_DIFFUSION:
+            return [(m.model, os.path.basename(m.model).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(bpy.context.preferences.addons[__package__.split('.')[0]].preferences.installed_models)]
+        case Pipeline.STABILITY_SDK:
+            return [(x, x, '') for x in [
+                "stable-diffusion-v1",
+                "stable-diffusion-v1-5",
+                "stable-diffusion-512-v2-0",
+                "stable-diffusion-768-v2-0",
+                "stable-inpainting-v1-0",
+                "stable-inpainting-512-v2-0"
+            ]]
 
-def backend_options(self, context):
+def pipeline_options(self, context):
     def options():
-        if BackendTarget.local_available():
-            yield (BackendTarget.LOCAL.name, 'Local', 'Run on your own hardware', 1)
+        if Pipeline.local_available():
+            yield (Pipeline.STABLE_DIFFUSION.name, 'Stable Diffusion', 'Stable Diffusion on your own hardware', 1)
         if len(context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key) > 0:
-            yield (BackendTarget.STABILITY_SDK.name, 'DreamStudio', 'Run in the cloud with DreamStudio', 2)
+            yield (Pipeline.STABILITY_SDK.name, 'DreamStudio', 'Cloud compute via DreamStudio', 2)
     return [*options()]
 
 def seed_clamp(self, ctx):
@@ -77,7 +81,7 @@ def seed_clamp(self, ctx):
         pass # will get hashed once generated
 
 attributes = {
-    "backend": EnumProperty(name="Backend", items=backend_options, default=1 if BackendTarget.local_available() else 2, description="Fill in a few simple options to create interesting images quickly"),
+    "pipeline": EnumProperty(name="Pipeline", items=pipeline_options, default=1 if Pipeline.local_available() else 2, description="Specify which model and target should be used."),
     "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference"),
 
     # Prompt
@@ -118,11 +122,7 @@ attributes = {
     "text_mask_confidence": FloatProperty(name="Confidence Threshold", description="How confident the segmentation model needs to be", default=0.5, min=0),
 
     # Outpaint
-    "outpaint_top": IntProperty(name="Top", default=64, step=64, min=0),
-    "outpaint_right": IntProperty(name="Right", default=64, step=64, min=0),
-    "outpaint_bottom": IntProperty(name="Bottom", default=64, step=64, min=0),
-    "outpaint_left": IntProperty(name="Left", default=64, step=64, min=0),
-    "outpaint_blend": IntProperty(name="Blend", description="Gaussian blur amount to apply to the extended area", default=16, min=0),
+    "outpaint_origin": IntVectorProperty(name="Origin", default=(0, 448), size=2, description="The position of the outpaint area relative to the top left corner of the image. A value of (0, 512) will outpaint from the bottom of a 512x512 image"),
 
     # Resulting image
     "hash": StringProperty(name="Image Hash"),
@@ -219,6 +219,9 @@ def generate_args(self):
     args['optimizations'] = self.get_optimizations()
     args['scheduler'] = Scheduler(args['scheduler'])
     args['step_preview_mode'] = StepPreviewMode(args['step_preview_mode'])
+    args['pipeline'] = Pipeline[args['pipeline']]
+    args['outpaint_origin'] = (args['outpaint_origin'][0], args['outpaint_origin'][1])
+    args['key'] = bpy.context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key
     return args
 
 DreamPrompt.generate_prompt = generate_prompt

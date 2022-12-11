@@ -52,7 +52,7 @@ seamless_axes = [
 def model_options(self, context):
     match Pipeline[self.pipeline]:
         case Pipeline.STABLE_DIFFUSION:
-            return [(m.model, os.path.basename(m.model).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(bpy.context.preferences.addons[__package__.split('.')[0]].preferences.installed_models)]
+            return [(m.model, os.path.basename(m.model).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(context.preferences.addons[__package__.split('.')[0]].preferences.installed_models)]
         case Pipeline.STABILITY_SDK:
             return [(x, x, '') for x in [
                 "stable-diffusion-v1",

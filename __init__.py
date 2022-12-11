@@ -43,7 +43,6 @@ if current_process().name != "__actor__":
     from .classes import CLASSES, PREFERENCE_CLASSES
     from .tools import TOOLS
     from .operators.dream_texture import DreamTexture, kill_generator
-    from .operators.upscale import upscale_options
     from .property_groups.dream_prompt import DreamPrompt
     from .preferences import StableDiffusionPreferences
     from .ui.presets import register_default_presets

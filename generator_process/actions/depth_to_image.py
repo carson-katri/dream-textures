@@ -37,7 +37,6 @@ def depth_to_image(
             import torch
             import PIL.Image
             import PIL.ImageOps
-            from ...absolute_path import WEIGHTS_PATH
 
             final_size = depth.shape[:2]
 
@@ -205,11 +204,7 @@ def depth_to_image(
                     num_channels_depth = depth.shape[1]
                     if num_channels_latents + num_channels_depth != self.unet.config.in_channels:
                         raise ValueError(
-                            f"Incorrect configuration settings! The config of `pipeline.unet`: {self.unet.config} expects"
-                            f" {self.unet.config.in_channels} but received `num_channels_latents`: {num_channels_latents} +"
-                            f" `num_channels_mask`: {num_channels_depth}"
-                            f" = {num_channels_latents+num_channels_depth}. Please verify the config of"
-                            " `pipeline.unet` or your `mask_image` or `image` input."
+                            f"Select a depth model, such as 'stabilityai/stable-diffusion-2-depth'"
                         )
 
                     # 9. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
@@ -293,15 +288,18 @@ def depth_to_image(
             if hasattr(self, "_cached_depth2img_pipe") and self._cached_depth2img_pipe[1] == model and use_cpu_offload == self._cached_depth2img_pipe[2]:
                 pipe = self._cached_depth2img_pipe[0]
             else:
-                storage_folder = os.path.join(WEIGHTS_PATH, model)
-                revision = "main"
-                ref_path = os.path.join(storage_folder, "refs", revision)
-                with open(ref_path) as f:
-                    commit_hash = f.read()
+                storage_folder = model
+                if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
+                    snapshot_folder = storage_folder
+                else:
+                    revision = "main"
+                    ref_path = os.path.join(storage_folder, "refs", revision)
+                    with open(ref_path) as f:
+                        commit_hash = f.read()
 
-                snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+                    snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
                 pipe = GeneratorPipeline.from_pretrained(
-                    "carsonkatri/stable-diffusion-2-depth-diffusers",
+                    snapshot_folder,
                     revision="fp16" if optimizations.can_use("half_precision", device) else None,
                     torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
                 )

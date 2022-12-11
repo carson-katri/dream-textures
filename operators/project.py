@@ -9,6 +9,7 @@ from .open_latest_version import OpenLatestVersion, is_force_show_download, new_
 from ..ui.panels.dream_texture import advanced_panel, create_panel, prompt_panel, size_panel
 
 from ..generator_process import Generator
+from ..generator_process.actions.prompt_to_image import Pipeline
 import tempfile
 
 framebuffer_arguments = [
@@ -42,6 +43,16 @@ def dream_texture_projection_panels():
             layout.use_property_split = True
             layout.use_property_decorate = False
 
+            if len(pipeline_options(self, context)) > 1:
+                layout.prop(context.scene.dream_textures_project_prompt, "pipeline")
+            if Pipeline[context.scene.dream_textures_project_prompt.pipeline].model():
+                layout.prop(context.scene.dream_textures_project_prompt, 'model')
+            
+            if not Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth():
+                box = layout.box()
+                box.label(text="Unsupported pipeline", icon="ERROR")
+                box.label(text="The selected pipeline does not support depth to image.")
+
             if is_force_show_download():
                 layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
             elif new_version_available():
@@ -73,6 +84,7 @@ def dream_texture_projection_panels():
                 row = layout.row()
                 row.scale_y = 1.5
                 row.operator(ProjectDreamTexture.bl_idname, icon="MOD_UVPROJECT")
+                row.enabled = Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth()
         return ActionsPanel
     yield create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, actions_panel, get_prompt)
 

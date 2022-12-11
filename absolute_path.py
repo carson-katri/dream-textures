@@ -8,6 +8,5 @@ def absolute_path(component: str):
     """
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), component)
 
-WEIGHTS_PATH = absolute_path("weights/stable-diffusion-v1.4/")
 REAL_ESRGAN_WEIGHTS_PATH = absolute_path("weights/realesrgan/realesr-general-x4v3.pth")
 CLIPSEG_WEIGHTS_PATH = absolute_path("weights/clipseg/rd64-uni.pth")

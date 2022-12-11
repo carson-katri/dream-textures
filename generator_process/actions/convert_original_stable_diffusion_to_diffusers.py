@@ -764,6 +764,7 @@ def convert_original_stable_diffusion_to_diffusers(
     if (
         "parameterization" in original_config["model"]["params"]
         and original_config["model"]["params"]["parameterization"] == "v"
+        and global_step is not None
     ):
         if prediction_type is None:
             # NOTE: For stable diffusion 2 base it is recommended to pass `prediction_type=="epsilon"`

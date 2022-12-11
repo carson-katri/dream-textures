@@ -1,5 +1,6 @@
 import bpy
 import gpu
+import bmesh
 import numpy as np
 
 from .view_history import ImportPromptFile
@@ -184,11 +185,14 @@ class ProjectDreamTexture(bpy.types.Operator):
         for obj in bpy.context.selected_objects:
             if not hasattr(obj, "data") or not hasattr(obj.data, "materials"):
                 continue
-            if obj.data.materials:
-                for slot in range(len(obj.data.materials)):
-                    obj.data.materials[slot] = material
-            else:
-                obj.data.materials.append(material)
+            material_index = len(obj.material_slots)
+            obj.data.materials.append(material)
+            mesh = bmesh.from_edit_mesh(obj.data)
+            mesh.faces.ensure_lookup_table()
+            for face in mesh.faces:
+                if face.select:
+                    face.material_index = material_index
+            bmesh.update_edit_mesh(obj.data)
 
         handle = None
         handle = bpy.types.SpaceView3D.draw_handler_add(

@@ -4,10 +4,6 @@ import enum
 import traceback
 import threading
 from typing import Type, TypeVar, Callable, Any, MutableSet, Generator
-<<<<<<< HEAD
-=======
-import functools
->>>>>>> fcafd8ba4c66b5123ac63f9f07190ab1f1fd17ce
 import site
 import sys
 

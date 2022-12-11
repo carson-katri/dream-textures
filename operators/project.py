@@ -8,6 +8,8 @@ from ..property_groups.dream_prompt import pipeline_options
 from .open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 
 from ..ui.panels.dream_texture import advanced_panel, create_panel, prompt_panel, size_panel
+from .dream_texture import CancelGenerator, ReleaseGenerator
+from ..preferences import StableDiffusionPreferences
 
 from ..generator_process import Generator
 from ..generator_process.actions.prompt_to_image import Pipeline
@@ -57,7 +59,7 @@ def dream_texture_projection_panels():
             
             models = list(filter(
                 lambda m: m.model == context.scene.dream_textures_project_prompt.model,
-                context.preferences.addons['dream_textures'].preferences.installed_models
+                context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
             ))
             if len(models) > 0 and ModelType[models[0].model_type] != ModelType.DEPTH:
                 box = layout.box()
@@ -94,13 +96,27 @@ def dream_texture_projection_panels():
 
                 row = layout.row()
                 row.scale_y = 1.5
-                row.operator(ProjectDreamTexture.bl_idname, icon="MOD_UVPROJECT")
-                row.enabled = Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth()
+                if context.scene.dream_textures_progress <= 0:
+                    if context.scene.dream_textures_info != "":
+                        row.label(text=context.scene.dream_textures_info, icon="INFO")
+                    else:
+                        r = row.row()
+                        r.operator(ProjectDreamTexture.bl_idname, icon="MOD_UVPROJECT")
+                        r.enabled = Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth()
+                else:
+                    disabled_row = row.row()
+                    disabled_row.use_property_split = True
+                    disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
+                    disabled_row.enabled = False
+                if CancelGenerator.poll(context):
+                    row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
+                row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
         return ActionsPanel
     yield create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, actions_panel, get_prompt)
 
 def draw(context, init_img_path, image_texture_node, material, cleanup):
     try:
+        context.scene.dream_textures_info = "Rendering viewport depth..."
         framebuffer = gpu.state.active_framebuffer_get()
         viewport = gpu.state.viewport_get()
         width, height = viewport[2], viewport[3]
@@ -114,10 +130,15 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
 
         depth = depth[::factor, ::factor]
 
+        gen = Generator.shared()
+        
         texture = None
 
         def on_response(_, response):
             nonlocal texture
+            if response.final:
+                return
+            context.scene.dream_textures_progress = response.step
             if texture is None:
                 texture = bpy.data.images.new(name="Step", width=response.image.shape[1], height=response.image.shape[0])
             texture.name = f"Step {response.step}/{context.scene.dream_textures_project_prompt.steps}"
@@ -127,6 +148,10 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
 
         def on_done(future):
             nonlocal texture
+            if hasattr(gen, '_active_generation_future'):
+                del gen._active_generation_future
+            context.scene.dream_textures_info = ""
+            context.scene.dream_textures_progress = 0
             generated = future.result()
             if isinstance(generated, list):
                 generated = generated[-1]
@@ -138,13 +163,25 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
             texture.update()
             image_texture_node.image = texture
         
-        future = Generator.shared().depth_to_image(
+        def on_exception(_, exception):
+            context.scene.dream_textures_info = ""
+            context.scene.dream_textures_progress = 0
+            if hasattr(gen, '_active_generation_future'):
+                del gen._active_generation_future
+            self.report({'ERROR'}, str(exception))
+            raise exception
+        
+        context.scene.dream_textures_info = "Generating..."
+        future = gen.depth_to_image(
             depth=depth,
             image=init_img_path,
             **context.scene.dream_textures_project_prompt.generate_args()
         )
+        gen._active_generation_future = future
+        future.call_done_on_exception = False
         future.add_response_callback(on_response)
         future.add_done_callback(on_done)
+        future.add_exception_callback(on_exception)
 
     finally:
         cleanup()
@@ -160,8 +197,19 @@ class ProjectDreamTexture(bpy.types.Operator):
         return Generator.shared().can_use()
 
     def execute(self, context):
+        # Setup the progress indicator
+        def step_progress_update(self, context):
+            if hasattr(context.area, "regions"):
+                for region in context.area.regions:
+                    if region.type == "UI":
+                        region.tag_redraw()
+            return None
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=context.scene.dream_textures_project_prompt.steps, update=step_progress_update)
+        context.scene.dream_textures_info = "Starting..."
+
         # Render the viewport
         if context.scene.dream_textures_project_framebuffer_arguments == 'color':
+            context.scene.dream_textures_info = "Rendering viewport color..."
             res_x, res_y = context.scene.render.resolution_x, context.scene.render.resolution_y
             view3d_spaces = []
             for area in context.screen.areas:
@@ -186,6 +234,7 @@ class ProjectDreamTexture(bpy.types.Operator):
         else:
             init_img_path = None
 
+        context.scene.dream_textures_info = "Creating material..."
         bpy.ops.uv.project_from_view()
         
         material = bpy.data.materials.new(name="diffused-material")
@@ -204,6 +253,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                     face.material_index = material_index
             bmesh.update_edit_mesh(obj.data)
 
+        context.scene.dream_textures_info = "Requesting redraw..."
         handle = None
         handle = bpy.types.SpaceView3D.draw_handler_add(
             draw,

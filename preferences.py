@@ -7,7 +7,6 @@ import webbrowser
 from .absolute_path import absolute_path
 from .operators.install_dependencies import InstallDependencies
 from .operators.open_latest_version import OpenLatestVersion
-from .property_groups.dream_prompt import DreamPrompt
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
 from .generator_process import Generator
 from .generator_process.actions.prompt_to_image import Pipeline
@@ -165,8 +164,6 @@ def _update_ui(self, context):
 
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
-
-    history: CollectionProperty(type=DreamPrompt)
 
     dream_studio_key: StringProperty(name="DreamStudio Key")
 

@@ -25,7 +25,7 @@ from multiprocessing import current_process
 
 if current_process().name != "__actor__":
     import bpy
-    from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty
+    from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty, CollectionProperty
     import sys
     import os
 
@@ -62,6 +62,8 @@ if current_process().name != "__actor__":
             raise RuntimeError("Another instance of Dream Textures is already running.")
 
         bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='requirements/mac-mps-cpu.txt' if sys.platform == 'darwin' else 'requirements/win-linux-cuda.txt')
+
+        StableDiffusionPreferences.__annotations__['history'] = CollectionProperty(type=DreamPrompt)
 
         for cls in PREFERENCE_CLASSES:
             bpy.utils.register_class(cls)

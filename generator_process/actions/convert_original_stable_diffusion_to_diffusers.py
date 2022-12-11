@@ -736,7 +736,7 @@ def convert_original_stable_diffusion_to_diffusers(
     dump_path = os.path.join(DIFFUSERS_CACHE, os.path.splitext(os.path.basename(checkpoint_path))[0])
 
     checkpoint = torch.load(checkpoint_path)
-    global_step = checkpoint["global_step"]
+    global_step = checkpoint.get("global_step", None)
     checkpoint = checkpoint["state_dict"]
 
     key_name = "model.diffusion_model.input_blocks.2.1.transformer_blocks.0.attn2.to_k.weight"

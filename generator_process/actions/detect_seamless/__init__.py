@@ -4,10 +4,13 @@ from numpy.typing import NDArray
 model = None
 
 
-def detect_seamless(self, image: NDArray) -> (bool, bool):
+def detect_seamless(self, image: NDArray) -> tuple[bool, bool]:
     import os
     import torch
     from torch import nn
+
+    if image.shape[0] < 8 or image.shape[1] < 8:
+        return False, False
 
     global model
     if model is None:
@@ -58,20 +61,21 @@ def detect_seamless(self, image: NDArray) -> (bool, bool):
         image = image[:, :, :3]
 
     # slice 8 pixels off each edge and combine opposing sides where the seam/seamless portion is in the middle
+    # may trim up to 3 pixels off the length of each edge to make them a multiple of 4
     # expects pixel values to be between 0-1 before this step
     edge_x = np.zeros((image.shape[0], 16, 3), dtype=np.float32)
     edge_x[:, :8] = image[:, -8:]
     edge_x[:, 8:] = image[:, :8]
     edge_x *= 2
     edge_x -= 1
-    edge_x = edge_x.transpose(2, 0, 1)
+    edge_x = edge_x[:image.shape[0] // 4 * 4].transpose(2, 0, 1)
 
     edge_y = np.zeros((16, image.shape[1], 3), dtype=np.float32)
     edge_y[:8] = image[-8:]
     edge_y[8:] = image[:8]
     edge_y *= 2
     edge_y -= 1
-    edge_y = edge_y.transpose(2, 1, 0)
+    edge_y = edge_y[:, :image.shape[1] // 4 * 4].transpose(2, 1, 0)
 
     @torch.no_grad()
     def infer(*inputs):

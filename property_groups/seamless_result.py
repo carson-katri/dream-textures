@@ -22,12 +22,14 @@ class SeamlessResult(bpy.types.PropertyGroup):
         if image == self.image:
             return
 
+        can_process = image is not None and image.size[0] >= 8 and image.size[1] >= 8
+
         def init():
             self.image = image
-            self.result = 'Off' if image is None else 'Processing'
+            self.result = 'Processing' if can_process else 'Off'
         bpy.app.timers.register(init)
 
-        if image is None or image.size[0] == 0 or image.size[1] == 0:
+        if not can_process:
             return
         pixels = np.empty(image.size[0]*image.size[1]*4, dtype=np.float32)
         image.pixels.foreach_get(pixels)
@@ -39,12 +41,3 @@ class SeamlessResult(bpy.types.PropertyGroup):
                 self.result = (('X' if x else '') + ('Y' if y else '')) or 'Off'
             bpy.app.timers.register(assign)
         Generator.shared().detect_seamless(pixels).add_done_callback(result)
-
-    def get_axes(self, axes):
-        if axes != 'auto':
-            return axes
-        match self.result:
-            case 'Off' | 'Processing':
-                return ''
-            case default:
-                return default.lower()

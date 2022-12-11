@@ -213,7 +213,7 @@ def get_optimizations(self: DreamPrompt):
         optimizations.attention_slice_size = 'auto'
     return optimizations
 
-def generate_args(self):
+def generate_args(self, seamless_result=None):
     args = { key: getattr(self, key) for key in DreamPrompt.__annotations__ }
     args['prompt'] = self.generate_prompt()
     args['seed'] = self.get_seed()
@@ -223,7 +223,17 @@ def generate_args(self):
     args['pipeline'] = Pipeline[args['pipeline']]
     args['outpaint_origin'] = (args['outpaint_origin'][0], args['outpaint_origin'][1])
     args['key'] = bpy.context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key
-    args['seamless_axes'] = bpy.context.scene.seamless_result.get_axes(args['seamless_axes'])
+    if self.seamless_axes == 'auto':
+        if seamless_result is None:
+            args['seamless_axes'] = ''
+        else:
+            match seamless_result:
+                case 'Off' | 'Processing':
+                    args['seamless_axes'] = ''
+                case default:
+                    args['seamless_axes'] = default.lower()
+    elif self.seamless_axes == 'off':
+        args['seamless_axes'] = ''
     return args
 
 DreamPrompt.generate_prompt = generate_prompt

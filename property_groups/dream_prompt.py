@@ -44,6 +44,8 @@ def inpaint_mask_sources_filtered(self, context):
     return list(filter(lambda x: x[0] in available, inpaint_mask_sources))
 
 seamless_axes = [
+    ('auto', 'Auto-detect', 'Detect from source image when modifying or inpainting, off otherwise', -1),
+    ('off', 'Off', '', 0),
     ('x', 'X', '', 1),
     ('y', 'Y', '', 2),
     ('xy', 'Both', '', 3),
@@ -94,8 +96,7 @@ attributes = {
     "height": IntProperty(name="Height", default=512, min=64, step=64),
 
     # Simple Options
-    "seamless": BoolProperty(name="Seamless", default=False, description="Enables seamless/tilable image generation"),
-    "seamless_axes": EnumProperty(name="Seamless Axes", items=seamless_axes, default='xy', description="Specify which axes should be seamless/tilable"),
+    "seamless_axes": EnumProperty(name="Seamless Axes", items=seamless_axes, default='auto', description="Specify which axes should be seamless/tilable"),
 
     # Advanced
     "show_advanced": BoolProperty(name="", default=False),
@@ -222,6 +223,7 @@ def generate_args(self):
     args['pipeline'] = Pipeline[args['pipeline']]
     args['outpaint_origin'] = (args['outpaint_origin'][0], args['outpaint_origin'][1])
     args['key'] = bpy.context.preferences.addons[__package__.split('.')[0]].preferences.dream_studio_key
+    args['seamless_axes'] = bpy.context.scene.seamless_result.get_axes(args['seamless_axes'])
     return args
 
 DreamPrompt.generate_prompt = generate_prompt

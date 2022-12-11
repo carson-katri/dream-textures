@@ -1,17 +1,7 @@
-from functools import partial
-
 import bpy
 
 import numpy as np
 from ..generator_process import Generator
-
-result_options = [
-    ('proc', 'Processing', '', -1),
-    ('none', 'None', '', 0),
-    ('x', 'X', '', 1),
-    ('y', 'Y', '', 2),
-    ('xy', 'Both', '', 3),
-]
 
 
 def update(self, context):
@@ -26,7 +16,7 @@ class SeamlessResult(bpy.types.PropertyGroup):
     bl_idname = "dream_textures.SeamlessResult"
 
     image: bpy.props.PointerProperty(type=bpy.types.Image)
-    result: bpy.props.EnumProperty(items=result_options, update=update, default='proc')
+    result: bpy.props.StringProperty(update=update, default='Off')
 
     def check(self, image):
         if image == self.image:
@@ -34,7 +24,7 @@ class SeamlessResult(bpy.types.PropertyGroup):
 
         def init():
             self.image = image
-            self.result = 'proc'
+            self.result = 'Off' if image is None else 'Processing'
         bpy.app.timers.register(init)
 
         if image is None or image.size[0] == 0 or image.size[1] == 0:
@@ -46,6 +36,15 @@ class SeamlessResult(bpy.types.PropertyGroup):
         def result(future):
             x, y = future.result()
             def assign():
-                self.result = (('x' if x else '') + ('y' if y else '')) or 'none'
+                self.result = (('X' if x else '') + ('Y' if y else '')) or 'Off'
             bpy.app.timers.register(assign)
         Generator.shared().detect_seamless(pixels).add_done_callback(result)
+
+    def get_axes(self, axes):
+        if axes != 'auto':
+            return axes
+        match self.result:
+            case 'Off' | 'Processing':
+                return ''
+            case default:
+                return default.lower()

@@ -58,13 +58,28 @@ def dream_texture_panels():
 
         def get_prompt(context):
             return context.scene.dream_textures_prompt
-        yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, prompt_panel, get_prompt)
+        def get_seamless_result(context):
+            return context.scene.seamless_result
+        def get_init_image(context, prompt):
+            if prompt.use_init_img and prompt.init_img_action in ['modify', 'inpaint']:
+                match prompt.init_img_src:
+                    case 'file':
+                        return context.scene.init_img
+                    case 'open_editor':
+                        for area in context.screen.areas:
+                            if area.type == 'IMAGE_EDITOR':
+                                if area.spaces.active.image is not None:
+                                    return area.spaces.active.image
+            return None
+        yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, prompt_panel, get_prompt,
+                                get_seamless_result=get_seamless_result,
+                                get_init_image=get_init_image)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, size_panel, get_prompt)
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, init_image_panels, get_prompt)
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, actions_panel, get_prompt)
 
-def create_panel(space_type, region_type, parent_id, ctor, get_prompt, use_property_decorate=False):
+def create_panel(space_type, region_type, parent_id, ctor, get_prompt, use_property_decorate=False, **kwargs):
     class BasePanel(bpy.types.Panel):
         bl_category = "Dream"
         bl_space_type = space_type
@@ -79,9 +94,9 @@ def create_panel(space_type, region_type, parent_id, ctor, get_prompt, use_prope
         def draw(self, context):
             self.layout.use_property_decorate = use_property_decorate
     
-    return ctor(SubPanel, space_type, get_prompt)
+    return ctor(SubPanel, space_type, get_prompt, **kwargs)
 
-def prompt_panel(sub_panel, space_type, get_prompt):
+def prompt_panel(sub_panel, space_type, get_prompt, get_seamless_result=None, get_init_image=None):
     class PromptPanel(sub_panel):
         """Create a subpanel for prompt input"""
         bl_label = "Prompt"
@@ -112,21 +127,13 @@ def prompt_panel(sub_panel, space_type, get_prompt):
             if Pipeline[prompt.pipeline].seamless():
                 layout.prop(prompt, "seamless_axes")
 
-                init_image = None
-                if prompt.use_init_img and prompt.init_img_action in ['modify', 'inpaint']:
-                    match prompt.init_img_src:
-                        case 'file':
-                            init_image = context.scene.init_img
-                        case 'open_editor':
-                            for area in context.screen.areas:
-                                if area.type == 'IMAGE_EDITOR':
-                                    if area.spaces.active.image is not None:
-                                        init_image = area.spaces.active.image
-                context.scene.seamless_result.check(init_image)
-                if prompt.seamless_axes == 'auto':
-                    auto_row = layout.row()
-                    auto_row.enabled = False
-                    auto_row.prop(context.scene.seamless_result, "result", text="Auto-detected")
+                if get_seamless_result is not None:
+                    init_image = get_init_image(context, prompt)
+                    get_seamless_result(context).check(init_image)
+                    if prompt.seamless_axes == 'auto':
+                        auto_row = layout.row()
+                        auto_row.enabled = False
+                        auto_row.prop(context.scene.seamless_result, "result", text="Auto-detected")
 
     yield PromptPanel
 

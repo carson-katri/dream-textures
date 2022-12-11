@@ -44,7 +44,6 @@ def image_to_image(
             import torch
             from PIL import Image, ImageOps
             import PIL.Image
-            from ...absolute_path import WEIGHTS_PATH
 
             # Mostly copied from `diffusers.StableDiffusionImg2ImgPipeline`, with slight modifications to yield the latents at each step.
             class GeneratorPipeline(diffusers.StableDiffusionImg2ImgPipeline):
@@ -176,13 +175,16 @@ def image_to_image(
             if hasattr(self, "_cached_img2img_pipe") and self._cached_img2img_pipe[1] == model and use_cpu_offload == self._cached_img2img_pipe[2]:
                 pipe = self._cached_img2img_pipe[0]
             else:
-                storage_folder = os.path.join(WEIGHTS_PATH, model)
-                revision = "main"
-                ref_path = os.path.join(storage_folder, "refs", revision)
-                with open(ref_path) as f:
-                    commit_hash = f.read()
+                storage_folder = model
+                if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
+                    snapshot_folder = storage_folder
+                else:
+                    revision = "main"
+                    ref_path = os.path.join(storage_folder, "refs", revision)
+                    with open(ref_path) as f:
+                        commit_hash = f.read()
 
-                snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+                    snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
                 pipe = GeneratorPipeline.from_pretrained(
                     snapshot_folder,
                     revision="fp16" if optimizations.can_use("half_precision", device) else None,

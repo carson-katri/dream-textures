@@ -12,6 +12,22 @@ from functools import partial
 from hashlib import sha256
 from pathlib import Path
 import requests
+import json
+import enum
+
+class ModelType(enum.IntEnum):
+    """
+    Inferred model type from the U-Net `in_channels`.
+    """
+    UNKNOWN = 0
+    PROMPT_TO_IMAGE = 4
+    DEPTH = 5
+    UPSCALING = 7
+    INPAINTING = 9
+
+    @classmethod
+    def _missing_(cls, _):
+        return cls.UNKNOWN
 
 @dataclass
 class Model:
@@ -20,6 +36,7 @@ class Model:
     tags: list[str]
     likes: int
     downloads: int
+    model_type: ModelType
 
 def hf_list_models(
     self,
@@ -39,18 +56,38 @@ def hf_list_models(
         search=query
     )
 
-    return list(map(lambda m: Model(m.modelId, m.author, m.tags, m.likes, getattr(m, "downloads", -1)), models))
+    return list(map(lambda m: Model(m.modelId, m.author, m.tags, m.likes, getattr(m, "downloads", -1), ModelType.UNKNOWN), models))
 
 def hf_list_installed_models(self) -> list[Model]:
     from diffusers.utils import DIFFUSERS_CACHE
     if not os.path.exists(DIFFUSERS_CACHE):
         return []
-    return list(
-        filter(
-            lambda x: os.path.isdir(x.id),
-            map(lambda x: Model(os.path.join(DIFFUSERS_CACHE, x), "", [], -1, -1), os.listdir(DIFFUSERS_CACHE))
+    def _map_model(file):
+        storage_folder = os.path.join(DIFFUSERS_CACHE, file)
+        if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
+            snapshot_folder = storage_folder
+        else:
+            revision = "main"
+            ref_path = os.path.join(storage_folder, "refs", revision)
+            with open(ref_path) as f:
+                commit_hash = f.read()
+
+            snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+        model_type = ModelType.UNKNOWN
+        try:
+            with open(os.path.join(snapshot_folder, 'unet', 'config.json'), 'r') as f:
+                model_type = ModelType(json.load(f)['in_channels'])
+        except:
+            pass
+        return Model(
+            storage_folder,
+            "",
+            [],
+            -1,
+            -1,
+            model_type
         )
-    )
+    return [_map_model(file) for file in os.listdir(DIFFUSERS_CACHE) if os.path.isdir(os.path.join(DIFFUSERS_CACHE, file))]
 
 @dataclass
 class DownloadStatus:

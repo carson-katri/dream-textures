@@ -11,7 +11,7 @@ from .property_groups.dream_prompt import DreamPrompt
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
 from .generator_process import Generator
 from .generator_process.actions.prompt_to_image import Pipeline
-from .generator_process.actions.huggingface_hub import DownloadStatus
+from .generator_process.actions.huggingface_hub import DownloadStatus, ModelType
 from .generator_process.actions.convert_original_stable_diffusion_to_diffusers import ModelConfig
 
 is_downloading = False
@@ -80,6 +80,7 @@ class Model(bpy.types.PropertyGroup):
     model: bpy.props.StringProperty(name="Model")
     downloads: bpy.props.IntProperty(name="Downloads")
     likes: bpy.props.IntProperty(name="Likes")
+    model_type: bpy.props.EnumProperty(name="Model Type", items=[(t.name, t.name, '') for t in ModelType])
 
 class PREFERENCES_UL_ModelList(bpy.types.UIList):
     def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
@@ -94,6 +95,8 @@ class PREFERENCES_UL_ModelList(bpy.types.UIList):
             split.label(text=str(item.downloads), icon="IMPORT")
         if item.downloads != -1:
             split.label(text=str(item.likes), icon="HEART")
+        if ModelType[item.model_type] != ModelType.UNKNOWN:
+            split.label(text=item.model_type.replace('_', ' ').title())
         layout.operator(InstallModel.bl_idname, text="", icon="FILE_FOLDER" if is_installed else "IMPORT").model = item.model
 
 @staticmethod
@@ -104,6 +107,10 @@ def set_model_list(model_list: str, models: list):
         m.model = model.id
         m.downloads = model.downloads
         m.likes = model.likes
+        try:
+            m.model_type = model.model_type.name
+        except:
+            pass
 
 class ModelSearch(bpy.types.Operator):
     bl_idname = "dream_textures.model_search"

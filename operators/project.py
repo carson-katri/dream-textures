@@ -11,6 +11,7 @@ from ..ui.panels.dream_texture import advanced_panel, create_panel, prompt_panel
 
 from ..generator_process import Generator
 from ..generator_process.actions.prompt_to_image import Pipeline
+from ..generator_process.actions.huggingface_hub import ModelType
 import tempfile
 
 framebuffer_arguments = [
@@ -53,6 +54,15 @@ def dream_texture_projection_panels():
                 box = layout.box()
                 box.label(text="Unsupported pipeline", icon="ERROR")
                 box.label(text="The selected pipeline does not support depth to image.")
+            
+            models = list(filter(
+                lambda m: m.model == context.scene.dream_textures_project_prompt.model,
+                context.preferences.addons['dream_textures'].preferences.installed_models
+            ))
+            if len(models) > 0 and ModelType[models[0].model_type] != ModelType.DEPTH:
+                box = layout.box()
+                box.label(text="Unsupported model", icon="ERROR")
+                box.label(text="Select a depth model, such as 'stabilityai/stable-diffusion-2-depth'")
 
             if is_force_show_download():
                 layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")

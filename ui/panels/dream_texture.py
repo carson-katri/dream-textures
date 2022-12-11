@@ -95,23 +95,39 @@ def prompt_panel(sub_panel, space_type, get_prompt):
             super().draw(context)
             layout = self.layout
             layout.use_property_split = True
+            prompt = get_prompt(context)
 
-            structure = next(x for x in prompt_structures if x.id == get_prompt(context).prompt_structure)
+            structure = next(x for x in prompt_structures if x.id == prompt.prompt_structure)
             for segment in structure.structure:
                 segment_row = layout.row()
                 enum_prop = 'prompt_structure_token_' + segment.id + '_enum'
-                is_custom = getattr(get_prompt(context), enum_prop) == 'custom'
+                is_custom = getattr(prompt, enum_prop) == 'custom'
                 if is_custom:
-                    segment_row.prop(get_prompt(context), 'prompt_structure_token_' + segment.id)
+                    segment_row.prop(prompt, 'prompt_structure_token_' + segment.id)
                 enum_cases = DreamPrompt.__annotations__[enum_prop].keywords['items']
                 if len(enum_cases) != 1 or enum_cases[0][0] != 'custom':
-                    segment_row.prop(get_prompt(context), enum_prop, icon_only=is_custom)
-            if get_prompt(context).prompt_structure == file_batch_structure.id:
+                    segment_row.prop(prompt, enum_prop, icon_only=is_custom)
+            if prompt.prompt_structure == file_batch_structure.id:
                 layout.template_ID(context.scene, "dream_textures_prompt_file", open="text.open")
-            if Pipeline[get_prompt(context).pipeline].seamless():
-                layout.prop(get_prompt(context), "seamless")
-                if get_prompt(context).seamless:
-                    layout.prop(get_prompt(context), "seamless_axes")
+            if Pipeline[prompt.pipeline].seamless():
+                layout.prop(prompt, "seamless_axes")
+
+                init_image = None
+                if prompt.use_init_img and prompt.init_img_action in ['modify', 'inpaint']:
+                    match prompt.init_img_src:
+                        case 'file':
+                            init_image = context.scene.init_img
+                        case 'open_editor':
+                            for area in context.screen.areas:
+                                if area.type == 'IMAGE_EDITOR':
+                                    if area.spaces.active.image is not None:
+                                        init_image = area.spaces.active.image
+                context.scene.seamless_result.check(init_image)
+                if prompt.seamless_axes == 'auto':
+                    auto_row = layout.row()
+                    auto_row.enabled = False
+                    auto_row.prop(context.scene.seamless_result, "result", text="Auto-detected")
+
     yield PromptPanel
 
     class NegativePromptPanel(sub_panel):
@@ -206,18 +222,6 @@ def init_image_panels(sub_panel, space_type, get_prompt):
             layout.prop(prompt, "init_img_action", expand=True)
             
             layout.use_property_split = True
-
-            init_image = None
-            match prompt.init_img_src:
-                case 'file':
-                    init_image = context.scene.init_img
-                case 'open_editor':
-                    for area in context.screen.areas:
-                        if area.type == 'IMAGE_EDITOR':
-                            if area.spaces.active.image is not None:
-                                init_image = area.spaces.active.image
-            context.scene.seamless_result.check(init_image)
-            layout.prop(context.scene.seamless_result, "result")
 
             if prompt.init_img_action == 'inpaint':
                 layout.prop(prompt, "inpaint_mask_src")

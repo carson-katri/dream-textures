@@ -223,8 +223,7 @@ def prompt_to_image(
     use_negative_prompt: bool,
     negative_prompt: str,
     
-    seamless: bool,
-    seamless_axes: list[str],
+    seamless_axes: str,
 
     iterations: int,
 
@@ -407,8 +406,8 @@ def prompt_to_image(
             generator = generator.manual_seed(seed)
             
             # Seamless
-            _configure_model_padding(pipe.unet, seamless, seamless_axes)
-            _configure_model_padding(pipe.vae, seamless, seamless_axes)
+            _configure_model_padding(pipe.unet, seamless_axes)
+            _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
@@ -445,14 +444,14 @@ def _conv_forward_asymmetric(self, input, weight, bias):
     working = nn.functional.pad(working, self.asymmetric_padding[1], mode=self.asymmetric_padding_mode[1])
     return nn.functional.conv2d(working, weight, bias, self.stride, nn.modules.utils._pair(0), self.dilation, self.groups)
 
-def _configure_model_padding(model, seamless, seamless_axes):
+def _configure_model_padding(model, seamless_axes):
     import torch.nn as nn
     """
     Modifies the 2D convolution layers to use a circular padding mode based on the `seamless` and `seamless_axes` options.
     """
     for m in model.modules():
         if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-            if seamless:
+            if seamless_axes != '':
                 m.asymmetric_padding_mode = (
                     'circular' if ('x' in seamless_axes) else 'constant',
                     'circular' if ('y' in seamless_axes) else 'constant'

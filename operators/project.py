@@ -129,13 +129,6 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
 
         depth = 1 - np.interp(depth, [depth.min(), depth.max()], [0, 1])
 
-        base_size = int(context.scene.dream_textures_project_scale * 512)
-        scaled_width = base_size if width < height else (base_size * (width // height))
-        scaled_height = base_size if height < width else (base_size * (height // width))
-        factor = max(width // scaled_width, height // scaled_height)
-
-        depth = depth[::factor, ::factor]
-
         gen = Generator.shared()
         
         texture = None
@@ -174,7 +167,6 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
             context.scene.dream_textures_progress = 0
             if hasattr(gen, '_active_generation_future'):
                 del gen._active_generation_future
-            self.report({'ERROR'}, str(exception))
             raise exception
         
         context.scene.dream_textures_info = "Starting..."
@@ -241,7 +233,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             init_img_path = None
 
         context.scene.dream_textures_info = "Creating material..."
-        bpy.ops.uv.project_from_view()
+        bpy.ops.uv.project_from_view(correct_aspect=False)
         
         material = bpy.data.materials.new(name="diffused-material")
         material.use_nodes = True

@@ -23,6 +23,9 @@ def depth_to_image(
     steps: int,
     seed: int,
 
+    width: int,
+    height: int,
+
     cfg_scale: float,
     use_negative_prompt: bool,
     negative_prompt: str,
@@ -324,8 +327,8 @@ def depth_to_image(
 
             # Inference
             rounded_size = (
-                int(8 * (depth.shape[1] // 8)),
-                int(8 * (depth.shape[0] // 8)),
+                int(8 * (width // 8)),
+                int(8 * (height // 8)),
             )
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                 (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):

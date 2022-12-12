@@ -93,6 +93,7 @@ def dream_texture_projection_panels():
                 layout.prop(context.scene, "dream_textures_project_framebuffer_arguments")
                 if context.scene.dream_textures_project_framebuffer_arguments == 'color':
                     layout.prop(get_prompt(context), "strength")
+                layout.prop(context.scene, "dream_textures_project_scale")
 
                 row = layout.row()
                 row.scale_y = 1.5
@@ -102,7 +103,11 @@ def dream_texture_projection_panels():
                     else:
                         r = row.row()
                         r.operator(ProjectDreamTexture.bl_idname, icon="MOD_UVPROJECT")
-                        r.enabled = Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth()
+                        r.enabled = Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth() and bpy.context.object.mode == 'EDIT'
+                        if bpy.context.object.mode != 'EDIT':
+                            box = layout.box()
+                            box.label(text="Enter Edit Mode", icon="ERROR")
+                            box.label(text="In edit mode, select the faces to project onto.")
                 else:
                     disabled_row = row.row()
                     disabled_row.use_property_split = True
@@ -124,8 +129,9 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
 
         depth = 1 - np.interp(depth, [depth.min(), depth.max()], [0, 1])
 
-        scaled_width = 512 if width < height else (512 * (width // height))
-        scaled_height = 512 if height < width else (512 * (height // width))
+        base_size = int(context.scene.dream_textures_project_scale * 512)
+        scaled_width = base_size if width < height else (base_size * (width // height))
+        scaled_height = base_size if height < width else (base_size * (height // width))
         factor = max(width // scaled_width, height // scaled_height)
 
         depth = depth[::factor, ::factor]
@@ -171,7 +177,7 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
             self.report({'ERROR'}, str(exception))
             raise exception
         
-        context.scene.dream_textures_info = "Generating..."
+        context.scene.dream_textures_info = "Starting..."
         future = gen.depth_to_image(
             depth=depth,
             image=init_img_path,

@@ -93,7 +93,6 @@ def dream_texture_projection_panels():
                 layout.prop(context.scene, "dream_textures_project_framebuffer_arguments")
                 if context.scene.dream_textures_project_framebuffer_arguments == 'color':
                     layout.prop(get_prompt(context), "strength")
-                layout.prop(context.scene, "dream_textures_project_scale")
 
                 row = layout.row()
                 row.scale_y = 1.5

@@ -94,7 +94,6 @@ if current_process().name != "__actor__":
         
         bpy.types.Scene.dream_textures_project_prompt = PointerProperty(type=DreamPrompt)
         bpy.types.Scene.dream_textures_project_framebuffer_arguments = EnumProperty(name="Inputs", items=framebuffer_arguments)
-        bpy.types.Scene.dream_textures_project_scale = FloatProperty(name="Scale", default=1, min=0, soft_min=1, soft_max=2, description="By default, the viewport resolution is scaled down closer to 512x512. Specify a scaling factor to increase the size of the generated texture")
 
         for cls in CLASSES:
             bpy.utils.register_class(cls)

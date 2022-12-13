@@ -168,18 +168,16 @@ class DreamTexture(bpy.types.Operator):
                                 require_depth()
                                 f = gen.depth_to_image(
                                     image=init_image,
-                                    depth=np.flipud(
-                                        (np.array(scene.init_depth.pixels) * 255)
-                                            .astype(np.uint8)
-                                            .reshape((scene.init_depth.size[1], scene.init_depth.size[0], scene.init_depth.channels))
-                                    ),
+                                    depth=np.array(scene.init_depth.pixels)
+                                            .astype(np.float32)
+                                            .reshape((scene.init_depth.size[1], scene.init_depth.size[0], scene.init_depth.channels)),
                                     **generated_args,
                                 )
                             case 'depth':
                                 require_depth()
                                 f = gen.depth_to_image(
                                     image=None,
-                                    depth=np.flipud(init_image),
+                                    depth=np.flipud(init_image.astype(np.float32) / 255.),
                                     **generated_args,
                                 )
                     case 'inpaint':

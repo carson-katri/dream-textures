@@ -41,8 +41,6 @@ def depth_to_image(
             import PIL.Image
             import PIL.ImageOps
 
-            final_size = depth.shape[:2] if depth is not None else (width, height)
-
             class GeneratorPipeline(diffusers.StableDiffusionInpaintPipeline):
                 def prepare_depth(self, depth, image, dtype, device):
                     device = torch.device('cpu' if device.type == 'mps' else device.type)
@@ -274,7 +272,7 @@ def depth_to_image(
                                     )
                                 case StepPreviewMode.FAST:
                                     yield ImageGenerationResult(
-                                        np.asarray(PIL.ImageOps.flip(PIL.Image.fromarray(approximate_decoded_latents(latents))).resize(final_size, PIL.Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
+                                        np.asarray(PIL.ImageOps.flip(PIL.Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), PIL.Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
                                         generator.initial_seed(),
                                         i,
                                         False
@@ -282,7 +280,7 @@ def depth_to_image(
                                 case StepPreviewMode.ACCURATE:
                                     yield from [
                                         ImageGenerationResult(
-                                            np.asarray(PIL.ImageOps.flip(image).resize(final_size).convert('RGBA'), dtype=np.float32) / 255.,
+                                            np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
                                             generator.initial_seed(),
                                             i,
                                             False
@@ -300,7 +298,7 @@ def depth_to_image(
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield from [
                         ImageGenerationResult(
-                            np.asarray(PIL.ImageOps.flip(image).resize(final_size).convert('RGBA'), dtype=np.float32) / 255.,
+                            np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
                             generator.initial_seed(),
                             num_inference_steps,
                             True

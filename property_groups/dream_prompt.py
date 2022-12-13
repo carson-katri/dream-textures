@@ -57,8 +57,8 @@ def modify_action_source_type(self, context):
             context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
         ))
         if Pipeline[self.pipeline].depth() and len(models) > 0 and ModelType[models[0].model_type] == ModelType.DEPTH:
-            yield ('depth_generated', 'Color + Generated Depth', 'Use MiDaS to infer the depth of the initial image and include it in the conditioning. Can give results that more closely match the composition of the source image', 2)
-            yield ('depth_map', 'Color + Depth Map', 'Specify a secondary image to use as the depth map. Can give results that closely match the composition of the depth map', 3)
+            yield ('depth_generated', 'Color and Generated Depth', 'Use MiDaS to infer the depth of the initial image and include it in the conditioning. Can give results that more closely match the composition of the source image', 2)
+            yield ('depth_map', 'Color and Depth Map', 'Specify a secondary image to use as the depth map. Can give results that closely match the composition of the depth map', 3)
             yield ('depth', 'Depth', 'Treat the initial image as a depth map, and ignore any color. Matches the composition of the source image without any color influence', 4)
     return [*options()]
 

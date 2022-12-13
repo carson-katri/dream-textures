@@ -1,6 +1,7 @@
 import bpy
 import gpu
 import bmesh
+from bpy_extras import view3d_utils
 import numpy as np
 
 from .view_history import ImportPromptFile
@@ -124,7 +125,7 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
         framebuffer = gpu.state.active_framebuffer_get()
         viewport = gpu.state.viewport_get()
         width, height = viewport[2], viewport[3]
-        depth = np.asarray(framebuffer.read_depth(0, 0, width, height).to_list())
+        depth = np.array(framebuffer.read_depth(0, 0, width, height).to_list())
 
         depth = 1 - np.interp(depth, [depth.min(), depth.max()], [0, 1])
 
@@ -231,8 +232,7 @@ class ProjectDreamTexture(bpy.types.Operator):
         else:
             init_img_path = None
 
-        context.scene.dream_textures_info = "Creating material..."
-        bpy.ops.uv.project_from_view(correct_aspect=False)
+        context.scene.dream_textures_info = "Generating UVs and materials..."
         
         material = bpy.data.materials.new(name="diffused-material")
         material.use_nodes = True
@@ -244,9 +244,18 @@ class ProjectDreamTexture(bpy.types.Operator):
             material_index = len(obj.material_slots)
             obj.data.materials.append(material)
             mesh = bmesh.from_edit_mesh(obj.data)
+            # Project from UVs view and update material index
+            mesh.verts.ensure_lookup_table()
+            mesh.verts.index_update()
+            def vert_to_uv(v):
+                screen_space = view3d_utils.location_3d_to_region_2d(context.region, context.space_data.region_3d, obj.matrix_world @ v.co)
+                return (screen_space[0] / context.region.width, screen_space[1] / context.region.height)
+            uv_layer = mesh.loops.layers.uv[0] if len(mesh.loops.layers.uv) > 0 else mesh.loops.layers.uv.new("Projected UVs")
             mesh.faces.ensure_lookup_table()
             for face in mesh.faces:
                 if face.select:
+                    for loop in face.loops:
+                        loop[uv_layer].uv = vert_to_uv(mesh.verts[loop.vert.index])
                     face.material_index = material_index
             bmesh.update_edit_mesh(obj.data)
 

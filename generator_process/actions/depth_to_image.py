@@ -16,7 +16,7 @@ def depth_to_image(
 
     optimizations: Optimizations,
 
-    depth: NDArray | str,
+    depth: NDArray | None,
     image: NDArray | str | None,
     strength: float,
     prompt: str,
@@ -41,17 +41,45 @@ def depth_to_image(
             import PIL.Image
             import PIL.ImageOps
 
-            final_size = depth.shape[:2]
-
-            def prepare_depth(depth):
-                if isinstance(depth, PIL.Image.Image):
-                    depth = np.array(depth.convert("L"))
-                    depth = depth.astype(np.float32) / 255.0
-                depth = depth[None, None]
-                depth = torch.from_numpy(depth)
-                return depth
+            final_size = depth.shape[:2] if depth is not None else (width, height)
 
             class GeneratorPipeline(diffusers.StableDiffusionInpaintPipeline):
+                def prepare_depth(self, depth, image, dtype, device):
+                    device = torch.device('cpu' if device.type == 'mps' else device.type)
+                    if depth is None:
+                        from transformers import DPTFeatureExtractor, DPTForDepthEstimation
+                        import contextlib
+                        feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large")
+                        depth_estimator = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
+                        depth_estimator = depth_estimator.to(device)
+                        
+                        pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+                        pixel_values = pixel_values.to(device=device)
+                        # The DPT-Hybrid model uses batch-norm layers which are not compatible with fp16.
+                        # So we use `torch.autocast` here for half precision inference.
+                        context_manger = torch.autocast("cuda", dtype=dtype) if device.type == "cuda" else contextlib.nullcontext()
+                        with context_manger:
+                            depth_map = depth_estimator(pixel_values).predicted_depth
+                        depth_map = torch.nn.functional.interpolate(
+                            depth_map.unsqueeze(1),
+                            size=(height // self.vae_scale_factor, width // self.vae_scale_factor),
+                            mode="bicubic",
+                            align_corners=False,
+                        )
+
+                        depth_min = torch.amin(depth_map, dim=[1, 2, 3], keepdim=True)
+                        depth_max = torch.amax(depth_map, dim=[1, 2, 3], keepdim=True)
+                        depth_map = 2.0 * (depth_map - depth_min) / (depth_max - depth_min) - 1.0
+                        depth_map = depth_map.to(device)
+                        return depth_map
+                    else:
+                        if isinstance(depth, PIL.Image.Image):
+                            depth = np.array(depth.convert("L"))
+                            depth = depth.astype(dtype) / 255.0
+                        depth = depth[None, None]
+                        depth = torch.from_numpy(depth)
+                        return depth
+                        
                 def prepare_depth_latents(
                     self, depth, batch_size, height, width, dtype, device, generator, do_classifier_free_guidance
                 ):
@@ -152,7 +180,7 @@ def depth_to_image(
                     )
 
                     # 4. Prepare the depth image
-                    depth = prepare_depth(depth_image)
+                    depth = self.prepare_depth(depth_image, image, text_embeddings.dtype, device)
 
                     if image is not None and isinstance(image, PIL.Image.Image):
                         image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.preprocess(image)
@@ -332,7 +360,7 @@ def depth_to_image(
             )
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                 (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255), 'L')).resize(rounded_size)
+                depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255), 'L')).resize(rounded_size) if depth is not None else None
                 init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
                 yield from pipe(
                     prompt=prompt,

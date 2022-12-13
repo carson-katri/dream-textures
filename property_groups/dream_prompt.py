@@ -115,6 +115,7 @@ attributes = {
     "strength": FloatProperty(name="Noise Strength", description="The ratio of noise:image. A higher value gives more 'creative' results", default=0.75, min=0, max=1, soft_min=0.01, soft_max=0.99),
     "fit": BoolProperty(name="Fit to width/height", default=True),
     "use_init_img_color": BoolProperty(name="Color Correct", default=True),
+    "use_init_img_depth": BoolProperty(name="Use Depth", default=False, description="Generates a depth map for the input image using MiDaS"),
     
     # Inpaint
     "inpaint_mask_src": EnumProperty(name="Mask Source", items=inpaint_mask_sources_filtered, default=1),

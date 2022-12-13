@@ -7,6 +7,7 @@ from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..generator_process import Generator
 from ..generator_process.actions.prompt_to_image import ImageGenerationResult
+from ..generator_process.actions.huggingface_hub import ModelType
 
 def bpy_image(name, width, height, pixels, existing_image):
     if existing_image is None:
@@ -142,10 +143,21 @@ class DreamTexture(bpy.types.Operator):
             if init_image is not None:
                 match generated_args['init_img_action']:
                     case 'modify':
-                        f = gen.image_to_image(
-                            image=init_image,
-                            **generated_args
-                        )
+                        models = list(filter(
+                            lambda m: m.model == generated_args['model'],
+                            context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
+                        ))
+                        if generated_args['use_init_img_depth'] and generated_args['pipeline'].depth() and len(models) > 0 and ModelType[models[0].model_type] == ModelType.DEPTH:
+                            f = gen.depth_to_image(
+                                image=init_image,
+                                depth=None,
+                                **generated_args,
+                            )
+                        else:
+                            f = gen.image_to_image(
+                                image=init_image,
+                                **generated_args
+                            )
                     case 'inpaint':
                         f = gen.inpaint(
                             image=init_image,

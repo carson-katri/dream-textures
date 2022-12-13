@@ -127,7 +127,8 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
         width, height = viewport[2], viewport[3]
         depth = np.array(framebuffer.read_depth(0, 0, width, height).to_list())
 
-        depth = 1 - np.interp(depth, [depth.min(), depth.max()], [0, 1])
+        depth = 1 - depth
+        depth = np.interp(depth, [np.ma.masked_equal(depth, 0, copy=False).min(), depth.max()], [0, 1]).clip(0, 1)
 
         gen = Generator.shared()
         

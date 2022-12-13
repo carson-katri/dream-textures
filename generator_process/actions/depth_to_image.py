@@ -4,7 +4,7 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, approximate_decoded_latents, ImageGenerationResult
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, approximate_decoded_latents, ImageGenerationResult, _configure_model_padding
 
 def depth_to_image(
     self,
@@ -29,6 +29,9 @@ def depth_to_image(
     cfg_scale: float,
     use_negative_prompt: bool,
     negative_prompt: str,
+    
+    seamless: bool,
+    seamless_axes: list[str],
 
     step_preview_mode: StepPreviewMode,
 
@@ -350,6 +353,10 @@ def depth_to_image(
             if seed is None:
                 seed = random.randrange(0, np.iinfo(np.uint32).max)
             generator = generator.manual_seed(seed)
+
+            # Seamless
+            _configure_model_padding(pipe.unet, seamless, seamless_axes)
+            _configure_model_padding(pipe.vae, seamless, seamless_axes)
 
             # Inference
             rounded_size = (

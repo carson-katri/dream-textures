@@ -147,17 +147,41 @@ class DreamTexture(bpy.types.Operator):
                             lambda m: m.model == generated_args['model'],
                             context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
                         ))
-                        if generated_args['use_init_img_depth'] and generated_args['pipeline'].depth() and len(models) > 0 and ModelType[models[0].model_type] == ModelType.DEPTH:
-                            f = gen.depth_to_image(
-                                image=init_image,
-                                depth=None,
-                                **generated_args,
-                            )
-                        else:
-                            f = gen.image_to_image(
-                                image=init_image,
-                                **generated_args
-                            )
+                        supports_depth = generated_args['pipeline'].depth() and len(models) > 0 and ModelType[models[0].model_type] == ModelType.DEPTH
+                        def require_depth():
+                            if not supports_depth:
+                                raise ValueError("Selected pipeline and model do not support depth conditioning. Please select a different model, such as 'stable-diffusion-2-depth' or change the 'Image Type' to 'Color'.")
+                        match generated_args['modify_action_source_type']:
+                            case 'color':
+                                f = gen.image_to_image(
+                                    image=init_image,
+                                    **generated_args
+                                )
+                            case 'depth_generated':
+                                require_depth()
+                                f = gen.depth_to_image(
+                                    image=init_image,
+                                    depth=None,
+                                    **generated_args,
+                                )
+                            case 'depth_map':
+                                require_depth()
+                                f = gen.depth_to_image(
+                                    image=init_image,
+                                    depth=np.flipud(
+                                        (np.array(scene.init_depth.pixels) * 255)
+                                            .astype(np.uint8)
+                                            .reshape((scene.init_depth.size[1], scene.init_depth.size[0], scene.init_depth.channels))
+                                    ),
+                                    **generated_args,
+                                )
+                            case 'depth':
+                                require_depth()
+                                f = gen.depth_to_image(
+                                    image=None,
+                                    depth=np.flipud(init_image),
+                                    **generated_args,
+                                )
                     case 'inpaint':
                         f = gen.inpaint(
                             image=init_image,

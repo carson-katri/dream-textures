@@ -3,9 +3,8 @@ from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, St
 import os
 import sys
 from typing import _AnnotatedAlias
-from ..absolute_path import absolute_path
 from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode, Pipeline
-from ..generator_process import Generator
+from ..generator_process.actions.huggingface_hub import ModelType
 from ..prompt_engineering import *
 from ..preferences import StableDiffusionPreferences
 
@@ -49,6 +48,19 @@ seamless_axes = [
     ('y', 'Y', '', 2),
     ('xy', 'Both', '', 3),
 ]
+
+def modify_action_source_type(self, context):
+    def options():
+        yield ('color', 'Color', 'Use the color information from the image', 1)
+        models = list(filter(
+            lambda m: m.model == self.model,
+            context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
+        ))
+        if Pipeline[self.pipeline].depth() and len(models) > 0 and ModelType[models[0].model_type] == ModelType.DEPTH:
+            yield ('depth_generated', 'Color + Generated Depth', 'Use MiDaS to infer the depth of the initial image and include it in the conditioning. Can give results that more closely match the composition of the source image', 2)
+            yield ('depth_map', 'Color + Depth Map', 'Specify a secondary image to use as the depth map. Can give results that closely match the composition of the depth map', 3)
+            yield ('depth', 'Depth', 'Treat the initial image as a depth map, and ignore any color. Matches the composition of the source image without any color influence', 4)
+    return [*options()]
 
 def model_options(self, context):
     match Pipeline[self.pipeline]:
@@ -115,7 +127,7 @@ attributes = {
     "strength": FloatProperty(name="Noise Strength", description="The ratio of noise:image. A higher value gives more 'creative' results", default=0.75, min=0, max=1, soft_min=0.01, soft_max=0.99),
     "fit": BoolProperty(name="Fit to width/height", default=True),
     "use_init_img_color": BoolProperty(name="Color Correct", default=True),
-    "use_init_img_depth": BoolProperty(name="Use Depth", default=False, description="Generates a depth map for the input image using MiDaS"),
+    "modify_action_source_type": EnumProperty(name="Image Type", items=modify_action_source_type, default=1, description="What kind of data is the source image"),
     
     # Inpaint
     "inpaint_mask_src": EnumProperty(name="Mask Source", items=inpaint_mask_sources_filtered, default=1),

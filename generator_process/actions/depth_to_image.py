@@ -75,7 +75,7 @@ def depth_to_image(
                     else:
                         if isinstance(depth, PIL.Image.Image):
                             depth = np.array(depth.convert("L"))
-                            depth = depth.astype(dtype) / 255.0
+                            depth = depth.astype(np.float32) / 255.0
                         depth = depth[None, None]
                         depth = torch.from_numpy(depth)
                         return depth
@@ -360,7 +360,7 @@ def depth_to_image(
             )
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                 (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255), 'L')).resize(rounded_size) if depth is not None else None
+                depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255)).convert('L')).resize(rounded_size) if depth is not None else None
                 init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
                 yield from pipe(
                     prompt=prompt,

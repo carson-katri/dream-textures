@@ -74,6 +74,7 @@ if current_process().name != "__actor__":
         bpy.types.Scene.dream_textures_prompt_file = PointerProperty(type=bpy.types.Text)
         bpy.types.Scene.init_img = PointerProperty(name="Init Image", type=bpy.types.Image)
         bpy.types.Scene.init_mask = PointerProperty(name="Init Mask", type=bpy.types.Image)
+        bpy.types.Scene.init_depth = PointerProperty(name="Init Depth", type=bpy.types.Image, description="Use an existing depth map. Leave blank to generate one from the init image")
         def get_selection_preview(self):
             history = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
             if self.dream_textures_history_selection > 0 and self.dream_textures_history_selection < len(history):

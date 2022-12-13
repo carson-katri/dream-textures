@@ -244,12 +244,10 @@ def init_image_panels(sub_panel, space_type, get_prompt):
             layout.prop(prompt, "strength")
             if Pipeline[prompt.pipeline].color_correction():
                 layout.prop(prompt, "use_init_img_color")
-            models = list(filter(
-                lambda m: m.model == prompt.model,
-                context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
-            ))
-            if prompt.init_img_action == 'modify' and Pipeline[prompt.pipeline].depth() and len(models) > 0 and ModelType[models[0].model_type] == ModelType.DEPTH:
-                layout.prop(prompt, "use_init_img_depth")
+            if prompt.init_img_action == 'modify':
+                layout.prop(prompt, "modify_action_source_type")
+                if prompt.modify_action_source_type == 'depth_map':
+                    layout.template_ID(context.scene, "init_depth", open="image.open")
     yield InitImagePanel
 
 def advanced_panel(sub_panel, space_type, get_prompt):

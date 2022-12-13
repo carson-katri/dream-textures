@@ -471,6 +471,8 @@ def prompt_to_image(
             )
             for answer in answers:
                 for artifact in answer.artifacts:
+                    if artifact.finish_reason == stability_sdk.interfaces.gooseai.generation.generation_pb2.FILTER:
+                        raise ValueError("Your request activated DreamStudio's safety filter. Please modify your prompt and try again.")
                     if artifact.type == stability_sdk.interfaces.gooseai.generation.generation_pb2.ARTIFACT_IMAGE:
                         image = Image.open(io.BytesIO(artifact.binary))
                         yield ImageGenerationResult(

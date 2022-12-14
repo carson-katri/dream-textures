@@ -108,7 +108,7 @@ def set_model_list(model_list: str, models: list):
 class ModelSearch(bpy.types.Operator):
     bl_idname = "dream_textures.model_search"
     bl_label = "Search"
-    bl_description = ("Searches HuggingFace Hub for models")
+    bl_description = ("Searches Hugging Face Hub for models")
     bl_options = {"REGISTER", "INTERNAL"}
 
     def execute(self, context):
@@ -207,7 +207,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
                     search_box = layout.box()
                     search_box.label(text="Find Models", icon="SETTINGS")
-                    search_box.label(text="Search HuggingFace Hub for more compatible models.")
+                    search_box.label(text="Search Hugging Face Hub for more compatible models.")
 
                     search_box.prop(self, "model_query", text="", icon="VIEWZOOM")
                     

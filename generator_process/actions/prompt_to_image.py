@@ -351,6 +351,7 @@ def prompt_to_image(
                                     i,
                                     False
                                 )
+                                Image.fromarray(approximate_decoded_latents(latents)).save(f'step_{i}.png')
                             case StepPreviewMode.ACCURATE:
                                 yield from [
                                     ImageGenerationResult(

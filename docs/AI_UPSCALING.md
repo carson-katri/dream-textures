@@ -9,6 +9,6 @@ Real-ESRGAN is built-in to the addon to upscale any generated image 2-4x the ori
 
 > Some GPUs will require Full Precision to be enabled.
 
-![A screenshot of the AI Upscaling panel set to 2 times target size and full precision enabled](../readme_assets/upscaling.png)
+![A screenshot of the AI Upscaling panel set to 2 times target size and full precision enabled](assets/upscaling.png)
 
 The upscaled image will be opened in the *Image Editor*. The image will be named `Source Image Name (Upscaled)`.

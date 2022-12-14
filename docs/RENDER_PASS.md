@@ -8,17 +8,17 @@ A custom 'Dream Textures' render pass is available for Cycles. This can allow yo
 
 > In the *Output Properties* panel, ensure the image size is reasonable for your GPU and Stable Diffusion. 512x512 is a good place to start.
 
-![A screenshot of the Render Properties panel with the Cycles render engine selected, and the Dream Textures render pass checked](../readme_assets/render-pass.png)
+![A screenshot of the Render Properties panel with the Cycles render engine selected, and the Dream Textures render pass checked](assets/render-pass.png)
 
 3. To use the Dream Textures generated image as the final result, open the *Compositor* space
 4. Enable *Use Nodes*
 5. Connect the *Dream Textures* socket from the *Render Layers* node to the *Image* socket of the *Composite* node
 
-![A screenshot of the Compositor space with Use Nodes checked and the Dream Textures socket from the Render Layers node connected to the Image socket of the Composite node](../readme_assets/render-pass-compositor.png)
+![A screenshot of the Compositor space with Use Nodes checked and the Dream Textures socket from the Render Layers node connected to the Image socket of the Composite node](assets/render-pass-compositor.png)
 
 And now each frame of our render will use the generated image. Here's that Rembrandt of the default cube promised by the prompt:
 
-![The default cube in a painting style](../readme_assets/rembrandt-default-cube.png)
+![The default cube in a painting style](assets/rembrandt-default-cube.png)
 
 ## Controlling the Output
 

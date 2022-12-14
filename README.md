@@ -1,4 +1,4 @@
-![Dream Textures, subtitle: Stable Diffusion built-in to Blender](readme_assets/banner.png)
+![Dream Textures, subtitle: Stable Diffusion built-in to Blender](docs/assets/banner.png)
 
 [![Latest Release](https://flat.badgen.net/github/release/carson-katri/dream-textures)](https://github.com/carson-katri/dream-textures/releases/latest)
 [![Join the Discord](https://flat.badgen.net/badge/icon/discord?icon=discord&label)](https://discord.gg/EmDJ8CaWZ7)
@@ -23,8 +23,13 @@ If you want a visual guide to installation, see this video tutorial from Ashlee 
 
 Here's a few quick guides:
 
-## [Image Generation](docs/IMAGE_GENERATION.md)
+# [Image Generation](docs/IMAGE_GENERATION.md)
 Create textures, concept art, and more with text prompts. Learn how to use the various configuration options to get exactly what you're looking for.
+
+![A graphic showing each step of the image generation process](docs/assets/image_generation.png)
+
+## [Texture Projection](docs/TEXTURE_PROJECT.md)
+Texture entire models and scenes with depth to image.
 
 ## [Inpainting](docs/INPAINTING.md)
 Fix up images and convert existing textures into seamless ones automatically.

@@ -3,7 +3,7 @@
 1. Ensure the sidebar is visible by pressing *N* or checking *View* > *Sidebar*
 2. Select the 'Dream' panel to open the interface
 
-![A screenshot showing the 'Dream' panel in an Image Editor space](../readme_assets/opening-ui.png)
+![A screenshot showing the 'Dream' panel in an Image Editor space](assets/opening-ui.png)
 
 Enter a prompt then click *Generate*. It can take anywhere from a few seconds to a few minutes to generate, depending on your graphics card.
 

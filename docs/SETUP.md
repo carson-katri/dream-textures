@@ -1,6 +1,8 @@
 # Setting Up
 Getting up and running is easy. Make sure you have several GBs of storage free, as the model weights and add-on consume a lot of storage space.
 
+In general, all of the instructions you need to setup will be given within Blender. However, if you want to see screenshots and more explanation this can be helpful.
+
 ## Installation
 
 See the [release notes](https://github.com/carson-katri/dream-textures/releases/latest) for the most recent version of Dream Textures. There you will find a section titled "Choose Your Installation". Use the dropdowns to find the right version for your system.
@@ -26,7 +28,8 @@ In the add-on preferences, search for this model. Then click the download button
 There are a few other models you may want to download as well:
 
 * `stabilityai/stable-diffusion-2-inpainting` - Fine-tuned for inpainting, and required to use the [inpaint and outpaint](INPAINTING.md) features
-* `stabilityai/stable-diffusion-2-depth` - Uses depth information to guide generation, required for [texture projection](TEXTURE_PROJECTION.md) and the [render pass](RENDER_PASS.md) when using depth pass input
+* `stabilityai/stable-diffusion-2-depth` - Uses depth information to guide generation, required for [texture projection](TEXTURE_PROJECTION.md), the [render pass](RENDER_PASS.md) when using depth pass input, and image to image when using depth
+* `stabilityai/stable-diffusion-x4-upscaler` - Upscales the input image 4x, used only for [upscaling](AI_UPSCALING.md)
 * `stabilityai/stable-diffusion-2-1` - Fine-tuned for 768x768 images
 
 ### Private Models

@@ -34,7 +34,7 @@ def image_to_image(
 
     iterations: int,
 
-    step_preview_mode: StepPreviewMode,
+    step_preview_mode: StepPreviewMode | None,
 
     # Stability SDK
     key: str | None = None,
@@ -125,6 +125,8 @@ def image_to_image(
 
                             # NOTE: Modified to yield the latents instead of calling a callback.
                             match kwargs['step_preview_mode']:
+                                case None:
+                                    break
                                 case StepPreviewMode.NONE:
                                     yield ImageGenerationResult(
                                         None,

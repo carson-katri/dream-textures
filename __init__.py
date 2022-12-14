@@ -36,7 +36,7 @@ if current_process().name != "__actor__":
                 del sys.modules[name]
     clear_modules() # keep before all addon imports
 
-    from .render_pass import register_render_pass, unregister_render_pass
+    from .render_pass import register_render_pass, unregister_render_pass, pass_inputs
     from .prompt_engineering import *
     from .operators.open_latest_version import check_for_updates
     from .operators.project import framebuffer_arguments
@@ -88,6 +88,7 @@ if current_process().name != "__actor__":
         bpy.types.Scene.dream_textures_viewport_enabled = BoolProperty(name="Viewport Enabled", default=False)
         bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)
         bpy.types.Scene.dream_textures_render_properties_prompt = PointerProperty(type=DreamPrompt)
+        bpy.types.Scene.dream_textures_render_properties_pass_inputs = EnumProperty(name="Pass Inputs", items=pass_inputs)
         
         bpy.types.Scene.dream_textures_upscale_prompt = PointerProperty(type=DreamPrompt)
         bpy.types.Scene.dream_textures_upscale_tile_size = IntProperty(name="Tile Size", default=128, step=64, min=64, max=512)

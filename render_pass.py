@@ -75,7 +75,6 @@ def unregister_render_pass():
 
 def _render_dream_textures_pass(self, layer, size, scene, render_pass, render_result):
     self.update_stats("Dream Textures", "Starting")
-    self.update_stats("Dream Textures", "Creating temporary image")
     
     rect = layer.passes["Combined"].rect
     

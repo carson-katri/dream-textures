@@ -23,6 +23,9 @@ If you want a visual guide to installation, see this video tutorial from Ashlee 
 
 Here's a few quick guides:
 
+## [Setting Up](docs/SETUP.md)
+Setup instructions for various platforms and configurations.
+
 ## [Image Generation](docs/IMAGE_GENERATION.md)
 Create textures, concept art, and more with text prompts. Learn how to use the various configuration options to get exactly what you're looking for.
 

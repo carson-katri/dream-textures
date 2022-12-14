@@ -7,7 +7,7 @@
 
 * Create textures, concept art, background assets, and more with a simple text prompt
 * Use the 'Seamless' option to create textures that tile perfectly with no visible seam
-* Quickly create variations on an existing texture
+* Texture entire scenes with 'Project Dream Texture' and depth to image
 * Re-style animations with the Cycles render pass
 * Run the models on your machine to iterate without slowdowns from a service
 
@@ -23,7 +23,7 @@ If you want a visual guide to installation, see this video tutorial from Ashlee 
 
 Here's a few quick guides:
 
-# [Image Generation](docs/IMAGE_GENERATION.md)
+## [Image Generation](docs/IMAGE_GENERATION.md)
 Create textures, concept art, and more with text prompts. Learn how to use the various configuration options to get exactly what you're looking for.
 
 ![A graphic showing each step of the image generation process](docs/assets/image_generation.png)
@@ -31,14 +31,24 @@ Create textures, concept art, and more with text prompts. Learn how to use the v
 ## [Texture Projection](docs/TEXTURE_PROJECT.md)
 Texture entire models and scenes with depth to image.
 
-## [Inpainting](docs/INPAINTING.md)
-Fix up images and convert existing textures into seamless ones automatically.
+![A graphic showing each step of the texture projection process](docs/assets/texture_projection.png)
+
+## [Inpaint/Outpaint](docs/INPAINTING.md)
+Inpaint to fix up images and convert existing textures into seamless ones automatically.
+
+Outpaint to increase the size of an image by extending it in any direction.
+
+![A graphic showing each step of the outpainting process](docs/assets/inpaint_outpaint.png)
 
 ## [Render Pass](docs/RENDER_PASS.md)
 Perform style transfer and create novel animations with Stable Diffusion as a post processing step.
 
+![A graphic showing each frame of a render pass, split with the original and generated result](docs/assets/render_pass.png)
+
 ## [AI Upscaling](docs/AI_UPSCALING.md)
-Convert your low-res generations to 2K, 4K, and higher with Real-ESRGAN built-in.
+Upscale your low-res generations 4x.
+
+![A graphic showing each step of the upscaling process](docs/assets/upscale.png)
 
 ## [History](docs/HISTORY.md)
 Recall, export, and import history entries for later use.

@@ -36,8 +36,11 @@ def image_to_image(
 
     step_preview_mode: StepPreviewMode,
 
+    # Stability SDK
+    key: str | None = None,
+
     **kwargs
-) -> Generator[NDArray, None, None]:
+) -> Generator[ImageGenerationResult, None, None]:
     match pipeline:
         case Pipeline.STABLE_DIFFUSION:
             import diffusers
@@ -234,7 +237,40 @@ def image_to_image(
                         step_preview_mode=step_preview_mode
                     )
         case Pipeline.STABILITY_SDK:
-            import stability_sdk
-            raise NotImplementedError()
+            import stability_sdk.client
+            import stability_sdk.interfaces.gooseai.generation.generation_pb2
+            from PIL import Image, ImageOps
+            import io
+
+            if key is None:
+                raise ValueError("DreamStudio key not provided. Enter your key in the add-on preferences.")
+            client = stability_sdk.client.StabilityInference(key=key, engine=model)
+
+            if seed is None:
+                seed = random.randrange(0, np.iinfo(np.uint32).max)
+
+            answers = client.generate(
+                prompt=prompt,
+                width=width,
+                height=height,
+                cfg_scale=cfg_scale,
+                sampler=scheduler.stability_sdk(),
+                steps=steps,
+                seed=seed,
+                init_image=(Image.open(image) if isinstance(image, str) else Image.fromarray(image)).convert('RGB'),
+                start_schedule=strength,
+            )
+            for answer in answers:
+                for artifact in answer.artifacts:
+                    if artifact.finish_reason == stability_sdk.interfaces.gooseai.generation.generation_pb2.FILTER:
+                        raise ValueError("Your request activated DreamStudio's safety filter. Please modify your prompt and try again.")
+                    if artifact.type == stability_sdk.interfaces.gooseai.generation.generation_pb2.ARTIFACT_IMAGE:
+                        image = Image.open(io.BytesIO(artifact.binary))
+                        yield ImageGenerationResult(
+                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
+                            seed,
+                            steps,
+                            True
+                        )
         case _:
             raise Exception(f"Unsupported pipeline {pipeline}.")

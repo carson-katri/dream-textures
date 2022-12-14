@@ -6,6 +6,12 @@ from .generator_process.actions.prompt_to_image import Pipeline, StepPreviewMode
 from .generator_process import Generator
 import threading
 
+pass_inputs = [
+    ('color', 'Color', 'Provide the scene color as input'),
+    ('depth', 'Depth', 'Provide the Z pass as depth input'),
+    ('color_depth', 'Color and Depth', 'Provide the scene color and depth as input'),
+]
+
 update_render_passes_original = cycles.CyclesRender.update_render_passes
 render_original = cycles.CyclesRender.render
 # del_original = cycles.CyclesRender.__del__
@@ -37,7 +43,10 @@ def register_render_pass():
                 for layer in render_result.layers:
                     for render_pass in layer.passes:
                         if render_pass.name == "Dream Textures":
-                            self._render_dream_textures_pass(layer, (size_x, size_y), scene, render_pass, render_result)
+                            try:
+                                self._render_dream_textures_pass(layer, (size_x, size_y), scene, render_pass, render_result)
+                            except Exception as e:
+                                self.error_set(str(e))
                         else:
                             source_pass = None
                             for original_layer in original_result.layers:
@@ -77,6 +86,13 @@ def _render_dream_textures_pass(self, layer, size, scene, render_pass, render_re
     self.update_stats("Dream Textures", "Starting")
     
     rect = layer.passes["Combined"].rect
+
+    match scene.dream_textures_render_properties_pass_inputs:
+        case 'color': pass
+        case 'depth' | 'color_depth':
+            depth = np.empty((size[0] * size[1], 1), dtype=np.float32)
+            layer.passes["Depth"].rect.foreach_get(depth)
+            depth = (1 - np.interp(depth, [0, np.ma.masked_equal(depth, depth.max(), copy=False).max()], [0, 1])).reshape((size[1], size[0]))
     
     combined_pixels = np.empty((size[0] * size[1], 4), dtype=np.float32)
     rect.foreach_get(combined_pixels)
@@ -99,10 +115,24 @@ def _render_dream_textures_pass(self, layer, size, scene, render_pass, render_re
     generated_args = scene.dream_textures_render_properties_prompt.generate_args()
     generated_args['width'] = size[0]
     generated_args['height'] = size[1]
-    f = gen.image_to_image(
-        image=np.flipud(combined_pixels.reshape((size[1], size[0], 4)) * 255).astype(np.uint8),
-        **generated_args
-    )
+    match scene.dream_textures_render_properties_pass_inputs:
+        case 'color':
+            f = gen.image_to_image(
+                image=np.flipud(combined_pixels.reshape((size[1], size[0], 4)) * 255).astype(np.uint8),
+                **generated_args
+            )
+        case 'depth':
+            f = gen.depth_to_image(
+                depth=depth,
+                image=None,
+                **generated_args
+            )
+        case 'color_depth':
+            f = gen.depth_to_image(
+                depth=depth,
+                image=np.flipud(combined_pixels.reshape((size[1], size[0], 4)) * 255).astype(np.uint8),
+                **generated_args
+            )
     event = threading.Event()
     def on_step(_, step: ImageGenerationResult):
         if step.final:

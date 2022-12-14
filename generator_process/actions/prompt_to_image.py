@@ -64,6 +64,13 @@ class Pipeline(enum.IntEnum):
                 return True
             case Pipeline.STABILITY_SDK:
                 return False
+    
+    def depth(self):
+        match self:
+            case Pipeline.STABLE_DIFFUSION:
+                return True
+            case Pipeline.STABILITY_SDK:
+                return False
 
 class Scheduler(enum.Enum):
     LMS_DISCRETE = "LMS Discrete"

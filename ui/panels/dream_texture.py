@@ -15,6 +15,8 @@ from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
 from ...property_groups.dream_prompt import DreamPrompt, pipeline_options
 from ...generator_process.actions.prompt_to_image import Optimizations, Pipeline
+from ...generator_process.actions.huggingface_hub import ModelType
+from ...preferences import StableDiffusionPreferences
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -242,6 +244,10 @@ def init_image_panels(sub_panel, space_type, get_prompt):
             layout.prop(prompt, "strength")
             if Pipeline[prompt.pipeline].color_correction():
                 layout.prop(prompt, "use_init_img_color")
+            if prompt.init_img_action == 'modify':
+                layout.prop(prompt, "modify_action_source_type")
+                if prompt.modify_action_source_type == 'depth_map':
+                    layout.template_ID(context.scene, "init_depth", open="image.open")
     yield InitImagePanel
 
 def advanced_panel(sub_panel, space_type, get_prompt):

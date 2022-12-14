@@ -34,13 +34,13 @@ def image_to_image(
 
     iterations: int,
 
-    step_preview_mode: StepPreviewMode | None,
+    step_preview_mode: StepPreviewMode,
 
     # Stability SDK
     key: str | None = None,
 
     **kwargs
-) -> Generator[NDArray, None, None]:
+) -> Generator[ImageGenerationResult, None, None]:
     match pipeline:
         case Pipeline.STABLE_DIFFUSION:
             import diffusers
@@ -125,8 +125,6 @@ def image_to_image(
 
                             # NOTE: Modified to yield the latents instead of calling a callback.
                             match kwargs['step_preview_mode']:
-                                case None:
-                                    break
                                 case StepPreviewMode.NONE:
                                     yield ImageGenerationResult(
                                         None,

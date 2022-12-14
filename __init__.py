@@ -110,6 +110,6 @@ if current_process().name != "__actor__":
         for tool in TOOLS:
             bpy.utils.unregister_tool(tool)
         
-        # unregister_render_pass()
+        unregister_render_pass()
 
         kill_generator()

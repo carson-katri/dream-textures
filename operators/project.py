@@ -250,13 +250,18 @@ class ProjectDreamTexture(bpy.types.Operator):
             mesh.verts.index_update()
             def vert_to_uv(v):
                 screen_space = view3d_utils.location_3d_to_region_2d(context.region, context.space_data.region_3d, obj.matrix_world @ v.co)
+                if screen_space is None:
+                    return None
                 return (screen_space[0] / context.region.width, screen_space[1] / context.region.height)
             uv_layer = mesh.loops.layers.uv[0] if len(mesh.loops.layers.uv) > 0 else mesh.loops.layers.uv.new("Projected UVs")
             mesh.faces.ensure_lookup_table()
             for face in mesh.faces:
                 if face.select:
                     for loop in face.loops:
-                        loop[uv_layer].uv = vert_to_uv(mesh.verts[loop.vert.index])
+                        uv = vert_to_uv(mesh.verts[loop.vert.index])
+                        if uv is None:
+                            continue
+                        loop[uv_layer].uv = uv
                     face.material_index = material_index
             bmesh.update_edit_mesh(obj.data)
 

@@ -31,7 +31,7 @@ Create textures, concept art, and more with text prompts. Learn how to use the v
 
 ![A graphic showing each step of the image generation process](docs/assets/image_generation.png)
 
-## [Texture Projection](docs/TEXTURE_PROJECT.md)
+## [Texture Projection](docs/TEXTURE_PROJECTION.md)
 Texture entire models and scenes with depth to image.
 
 ![A graphic showing each step of the texture projection process](docs/assets/texture_projection.png)

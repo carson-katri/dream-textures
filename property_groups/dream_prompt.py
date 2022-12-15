@@ -195,7 +195,7 @@ def generate_prompt(self):
             tokens[segment.id] = getattr(self, 'prompt_structure_token_' + segment.id)
         else:
             tokens[segment.id] = next(x for x in segment.values if x[0] == enum_value)[1]
-    return structure.generate(dotdict(tokens)) + (f" [{self.negative_prompt}]" if self.use_negative_prompt else "")
+    return structure.generate(dotdict(tokens))
 
 def get_prompt_subject(self):
     structure = next(x for x in prompt_structures if x.id == self.prompt_structure)
@@ -229,6 +229,8 @@ def get_optimizations(self: DreamPrompt):
 
 def generate_args(self, seamless_result=None):
     args = { key: getattr(self, key) for key in DreamPrompt.__annotations__ }
+    if not args['use_negative_prompt']:
+        args['negative_prompt'] = None
     args['prompt'] = self.generate_prompt()
     args['seed'] = self.get_seed()
     args['optimizations'] = self.get_optimizations()

@@ -3,6 +3,8 @@ Getting up and running is easy. Make sure you have several GBs of storage free, 
 
 In general, all of the instructions you need to setup will be given within Blender. However, if you want to see screenshots and more explanation this can be helpful.
 
+If you have any problems, you can get help in the [Dream Textures Discord server](https://discord.gg/EmDJ8CaWZ7).
+
 ## Installation
 
 See the [release notes](https://github.com/carson-katri/dream-textures/releases/latest) for the most recent version of Dream Textures. There you will find a section titled "Choose Your Installation". Use the dropdowns to find the right version for your system.

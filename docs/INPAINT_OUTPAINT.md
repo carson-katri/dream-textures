@@ -2,6 +2,8 @@
 
 This guide shows how to use both [inpainting](#inpainting) and [outpainting](#outpainting).
 
+> For both inpainting and outpainting you *must* use a model fine-tuned for inpainting, such as `stabilityai/stable-diffusion-2-inpainting`. Follow the instructions to [download a model](setup.md#download-a-model).
+
 # Inpainting
 Inpainting refers to filling in or replacing parts of an image. It can also be used to [make existing textures seamless](#making-textures-seamless).
 

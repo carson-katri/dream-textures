@@ -2,6 +2,8 @@
 
 Using depth to image, Dream Textures is able to texture entire scenes automatically with a simple prompt.
 
+It's sort of like [Ian Hubert's method](https://www.youtube.com/watch?v=v_ikG-u_6r0) in reverse. Instead of starting with an image and building geometry around that, we start with the geometry and generate an image that projects perfectly onto it.
+
 > Make sure you download a depth model such as `stabilityai/stable-diffusion-2-depth`. Follow the instructions to [download a model](setup.md#download-a-model).
 
 Follow the steps below to project a texture onto your mesh.

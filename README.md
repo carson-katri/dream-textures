@@ -36,7 +36,7 @@ Texture entire models and scenes with depth to image.
 
 ![A graphic showing each step of the texture projection process](docs/assets/texture_projection.png)
 
-## [Inpaint/Outpaint](docs/INPAINTING.md)
+## [Inpaint/Outpaint](docs/INPAINT_OUTPAINT.md)
 Inpaint to fix up images and convert existing textures into seamless ones automatically.
 
 Outpaint to increase the size of an image by extending it in any direction.

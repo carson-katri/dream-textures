@@ -27,7 +27,7 @@ In the add-on preferences, search for this model. Then click the download button
 ### Other Useful Models
 There are a few other models you may want to download as well:
 
-* `stabilityai/stable-diffusion-2-inpainting` - Fine-tuned for inpainting, and required to use the [inpaint and outpaint](INPAINTING.md) features
+* `stabilityai/stable-diffusion-2-inpainting` - Fine-tuned for inpainting, and required to use the [inpaint and outpaint](INPAINT_OUTPAINT.md) features
 * `stabilityai/stable-diffusion-2-depth` - Uses depth information to guide generation, required for [texture projection](TEXTURE_PROJECTION.md), the [render pass](RENDER_PASS.md) when using depth pass input, and image to image when using depth
 * `stabilityai/stable-diffusion-x4-upscaler` - Upscales the input image 4x, used only for [upscaling](AI_UPSCALING.md)
 * `stabilityai/stable-diffusion-2-1` - Fine-tuned for 768x768 images

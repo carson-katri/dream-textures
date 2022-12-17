@@ -1,4 +1,4 @@
-from multiprocessing import Queue, Process, Lock, current_process
+from multiprocessing import Queue, Process, Lock, current_process, get_context
 import multiprocessing.synchronize
 import enum
 import traceback
@@ -225,7 +225,7 @@ class Actor:
         """
         match self.context:
             case ActorContext.FRONTEND:
-                self.process = Process(target=_start_backend, args=(self.__class__, self._message_queue, self._response_queue), name="__actor__", daemon=True)
+                self.process = get_context('spawn').Process(target=_start_backend, args=(self.__class__, self._message_queue, self._response_queue), name="__actor__", daemon=True)
                 self.process.start()
             case ActorContext.BACKEND:
                 self._backend_loop()

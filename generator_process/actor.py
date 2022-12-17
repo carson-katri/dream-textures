@@ -198,8 +198,8 @@ class Actor:
 
     def __init__(self, context: ActorContext, message_queue: Queue = None, response_queue: Queue = None):
         self.context = context
-        self._message_queue = message_queue if message_queue is not None else Queue(maxsize=1)
-        self._response_queue = response_queue if response_queue is not None else Queue(maxsize=1)
+        self._message_queue = message_queue if message_queue is not None else get_context('spawn').Queue(maxsize=1)
+        self._response_queue = response_queue if response_queue is not None else get_context('spawn').Queue(maxsize=1)
         self._setup()
         self.__class__._shared_instance = self
     

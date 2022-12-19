@@ -41,6 +41,7 @@ jobs:
       - name: Install dependencies into target
         shell: bash
         run: 'python -m pip install -r requirements/win-linux-cuda.txt --no-cache-dir --target .python_dependencies'
+        working-directory: dream_textures
       - name: Archive Release
         uses: thedoctor0/zip-release@main
         with:

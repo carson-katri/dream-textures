@@ -4,6 +4,7 @@ from .operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGener
 from .operators.view_history import SCENE_UL_HistoryList, RecallHistoryEntry, ClearHistory, RemoveHistorySelection, ExportHistorySelection, ImportPromptFile
 from .operators.inpaint_area_brush import InpaintAreaBrushActivated
 from .operators.upscale import Upscale
+from .operators.project import ProjectDreamTexture, dream_texture_projection_panels
 from .property_groups.dream_prompt import DreamPrompt
 from .property_groups.seamless_result import SeamlessResult
 from .ui.panels import dream_texture, history, upscaling, render_properties
@@ -26,6 +27,7 @@ CLASSES = (
     ImportPromptFile,
     InpaintAreaBrushActivated,
     Upscale,
+    ProjectDreamTexture,
 
     DREAM_PT_AdvancedPresets,
     DREAM_MT_AdvancedPresets,
@@ -35,6 +37,7 @@ CLASSES = (
     *dream_texture.dream_texture_panels(),
     *upscaling.upscaling_panels(),
     *history.history_panels(),
+    *dream_texture_projection_panels(),
 
     dream_texture.OpenClipSegDownload,
     dream_texture.OpenClipSegWeightsDirectory,

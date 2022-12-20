@@ -29,7 +29,8 @@ def image_to_image(
     use_negative_prompt: bool,
     negative_prompt: str,
     
-    seamless_axes: str,
+    seamless: bool,
+    seamless_axes: list[str],
 
     iterations: int,
 
@@ -212,8 +213,8 @@ def image_to_image(
             generator = generator.manual_seed(seed)
             
             # Seamless
-            _configure_model_padding(pipe.unet, seamless_axes)
-            _configure_model_padding(pipe.vae, seamless_axes)
+            _configure_model_padding(pipe.unet, seamless, seamless_axes)
+            _configure_model_padding(pipe.vae, seamless, seamless_axes)
 
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \

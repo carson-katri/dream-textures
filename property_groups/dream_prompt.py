@@ -44,6 +44,8 @@ def inpaint_mask_sources_filtered(self, context):
     return list(filter(lambda x: x[0] in available, inpaint_mask_sources))
 
 seamless_axes = [
+    ('auto', 'Auto-detect', 'Detect from source image when modifying or inpainting, off otherwise', -1),
+    ('off', 'Off', '', 0),
     ('x', 'X', '', 1),
     ('y', 'Y', '', 2),
     ('xy', 'Both', '', 3),
@@ -107,8 +109,7 @@ attributes = {
     "height": IntProperty(name="Height", default=512, min=64, step=64),
 
     # Simple Options
-    "seamless": BoolProperty(name="Seamless", default=False, description="Enables seamless/tilable image generation"),
-    "seamless_axes": EnumProperty(name="Seamless Axes", items=seamless_axes, default='xy', description="Specify which axes should be seamless/tilable"),
+    "seamless_axes": EnumProperty(name="Seamless Axes", items=seamless_axes, default='auto', description="Specify which axes should be seamless/tilable"),
 
     # Advanced
     "show_advanced": BoolProperty(name="", default=False),
@@ -226,7 +227,7 @@ def get_optimizations(self: DreamPrompt):
         optimizations.attention_slice_size = 'auto'
     return optimizations
 
-def generate_args(self):
+def generate_args(self, seamless_result=None):
     args = { key: getattr(self, key) for key in DreamPrompt.__annotations__ }
     if not args['use_negative_prompt']:
         args['negative_prompt'] = None
@@ -238,6 +239,17 @@ def generate_args(self):
     args['pipeline'] = Pipeline[args['pipeline']]
     args['outpaint_origin'] = (args['outpaint_origin'][0], args['outpaint_origin'][1])
     args['key'] = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key
+    if self.seamless_axes == 'auto':
+        if seamless_result is None:
+            args['seamless_axes'] = ''
+        else:
+            match seamless_result:
+                case 'Off' | 'Processing':
+                    args['seamless_axes'] = ''
+                case default:
+                    args['seamless_axes'] = default.lower()
+    elif self.seamless_axes == 'off':
+        args['seamless_axes'] = ''
     return args
 
 DreamPrompt.generate_prompt = generate_prompt

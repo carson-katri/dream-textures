@@ -38,6 +38,24 @@ def upscaling_panels():
                 layout.prop(context.scene, "dream_textures_upscale_tile_size")
                 layout.prop(context.scene, "dream_textures_upscale_blend")
 
+                layout.prop(prompt, "seamless_axes")
+
+                node_tree = context.material.node_tree if hasattr(context, 'material') else None
+                active_node = next((node for node in node_tree.nodes if node.select and node.bl_idname == 'ShaderNodeTexImage'), None) if node_tree is not None else None
+                init_image = None
+                if active_node is not None and active_node.image is not None:
+                    init_image = active_node.image
+                else:
+                    for area in context.screen.areas:
+                        if area.type == 'IMAGE_EDITOR':
+                            if area.spaces.active.image is not None:
+                                init_image = area.spaces.active.image
+                context.scene.dream_textures_upscale_seamless_result.check(init_image)
+                if prompt.seamless_axes == 'auto':
+                    auto_row = layout.row()
+                    auto_row.enabled = False
+                    auto_row.prop(context.scene.dream_textures_upscale_seamless_result, "result", text="Auto-detected")
+
                 if context.scene.dream_textures_upscale_tile_size > 128:
                     warning_box = layout.box()
                     warning_box.label(text="Warning", icon="ERROR")

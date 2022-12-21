@@ -30,7 +30,7 @@ def depth_to_image(
     use_negative_prompt: bool,
     negative_prompt: str,
     
-    seamless_axes: list[str],
+    seamless_axes: str,
 
     step_preview_mode: StepPreviewMode,
 

@@ -9,16 +9,16 @@ from ..generator_process import Generator
 from ..generator_process.actions.prompt_to_image import ImageGenerationResult
 from ..generator_process.actions.huggingface_hub import ModelType
 
-def bpy_image(context, name, width, height, pixels, existing_image):
-    print(context.scene.dream_textures_prompt + name)
-    name = context.scene.dream_textures_prompt + name
+def bpy_image(name, width, height, pixels, existing_image):
+    gen_seed_string = str(name)
+    prompt_subject = bpy.data.scenes["Scene"].dream_textures_project_prompt.prompt_structure_token_subject
+    name_with_prompt = str(prompt_subject + "-" + gen_seed_string).replace(" ", "-")
     if existing_image is None:
-        image = bpy.data.images.new(name, width=width, height=height)
+        image = bpy.data.images.new(name_with_prompt, width=width, height=height)
     else:
         image = existing_image
-        image.name = context.scene.dream_textures_prompt + name
+        image.name = name_with_prompt
     image.pixels[:] = pixels
-    image.name = context.scene.dream_textures_prompt + name
     image.pack()
     image.update()
     return image

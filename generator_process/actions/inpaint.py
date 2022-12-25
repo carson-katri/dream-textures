@@ -4,7 +4,7 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding, model_snapshot_folder
 
 def inpaint(
     self,
@@ -214,19 +214,11 @@ def inpaint(
             if hasattr(self, "_cached_img2img_pipe") and self._cached_img2img_pipe[1] == model and use_cpu_offload == self._cached_img2img_pipe[2]:
                 pipe = self._cached_img2img_pipe[0]
             else:
-                storage_folder = model
-                if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
-                    snapshot_folder = storage_folder
-                else:
-                    revision = "main"
-                    ref_path = os.path.join(storage_folder, "refs", revision)
-                    with open(ref_path) as f:
-                        commit_hash = f.read()
-
-                    snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+                revision = "fp16" if optimizations.can_use("half_precision", device) else None
+                snapshot_folder = model_snapshot_folder(model, revision)
                 pipe = GeneratorPipeline.from_pretrained(
                     snapshot_folder,
-                    revision="fp16" if optimizations.can_use("half_precision", device) else None,
+                    revision=revision,
                     torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
                 )
                 pipe = pipe.to(device)

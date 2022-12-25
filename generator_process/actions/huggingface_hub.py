@@ -68,7 +68,11 @@ def hf_list_installed_models(self) -> list[Model]:
             snapshot_folder = storage_folder
         else:
             revision = "main"
-            ref_path = os.path.join(storage_folder, "refs", revision)
+            ref_path = None
+            for revision in os.listdir(os.path.join(storage_folder, "refs")):
+                ref_path = os.path.join(storage_folder, "refs", revision)
+            if ref_path is None:
+                return None
             with open(ref_path) as f:
                 commit_hash = f.read()
 
@@ -87,7 +91,12 @@ def hf_list_installed_models(self) -> list[Model]:
             -1,
             model_type
         )
-    return [_map_model(file) for file in os.listdir(DIFFUSERS_CACHE) if os.path.isdir(os.path.join(DIFFUSERS_CACHE, file))]
+    return [
+        model for model in (
+            _map_model(file) for file in os.listdir(DIFFUSERS_CACHE) if os.path.isdir(os.path.join(DIFFUSERS_CACHE, file))
+        )
+        if model is not None
+    ]
 
 @dataclass
 class DownloadStatus:

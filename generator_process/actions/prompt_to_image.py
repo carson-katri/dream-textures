@@ -226,6 +226,25 @@ def approximate_decoded_latents(latents):
 
     return latents_ubyte.numpy()
 
+def model_snapshot_folder(model, preferred_revision: str | None = None):
+    """ Try to find the preferred revision, but fallback to another revision if necessary. """
+    storage_folder = model
+    if os.path.exists(os.path.join(storage_folder, 'model_index.json')): # converted model
+        snapshot_folder = storage_folder
+    else: # hub model
+        ref_path = None
+        for revision in os.listdir(os.path.join(storage_folder, "refs")):
+            ref_path = os.path.join(storage_folder, "refs", revision)
+            if revision == preferred_revision:
+                break
+        if ref_path is None:
+            return None
+        with open(ref_path) as f:
+            commit_hash = f.read()
+
+        snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+    return snapshot_folder
+
 def prompt_to_image(
     self,
     pipeline: Pipeline,
@@ -398,19 +417,11 @@ def prompt_to_image(
             if hasattr(self, "_cached_pipe") and self._cached_pipe[1] == model and use_cpu_offload == self._cached_pipe[2]:
                 pipe = self._cached_pipe[0]
             else:
-                storage_folder = model
-                if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
-                    snapshot_folder = storage_folder
-                else:
-                    revision = "main"
-                    ref_path = os.path.join(storage_folder, "refs", revision)
-                    with open(ref_path) as f:
-                        commit_hash = f.read()
-
-                    snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+                revision = "fp16" if optimizations.can_use("half_precision", device) else None
+                snapshot_folder = model_snapshot_folder(model, revision)
                 pipe = GeneratorPipeline.from_pretrained(
                     snapshot_folder,
-                    revision="fp16" if optimizations.can_use("half_precision", device) else None,
+                    revision=revision,
                     torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
                 )
                 pipe = pipe.to(device)

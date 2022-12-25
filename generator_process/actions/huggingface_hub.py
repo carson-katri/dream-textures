@@ -107,7 +107,8 @@ class DownloadStatus:
 def hf_snapshot_download(
     self,
     model: str,
-    token: str
+    token: str,
+    revision: str | None = None
 ) -> Generator[DownloadStatus, None, None]:
     from filelock import FileLock
     from huggingface_hub.constants import (
@@ -118,7 +119,7 @@ def hf_snapshot_download(
     )
     from huggingface_hub.file_download import REGEX_COMMIT_HASH, repo_folder_name, hf_hub_url, _request_wrapper, hf_raise_for_status, logger, cached_download, build_hf_headers, get_hf_file_metadata, _cache_commit_hash_for_specific_revision, OfflineModeIsEnabled, _create_relative_symlink
     from huggingface_hub.hf_api import HfApi
-    from huggingface_hub.utils import filter_repo_objects, validate_hf_hub_args, tqdm, logging, EntryNotFoundError, LocalEntryNotFoundError
+    from huggingface_hub.utils import filter_repo_objects, validate_hf_hub_args, tqdm, logging, EntryNotFoundError, LocalEntryNotFoundError, RevisionNotFoundError
 
     from diffusers import StableDiffusionPipeline
     from diffusers.utils import DIFFUSERS_CACHE, WEIGHTS_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME
@@ -602,12 +603,24 @@ def hf_snapshot_download(
                 yield DownloadStatus(repo_file, status, 1)
             yield DownloadStatus(repo_file, i + 1, len(filtered_repo_files))
 
-    yield from snapshot_download(
-        model,
-        cache_dir=DIFFUSERS_CACHE,
-        resume_download=True,
-        use_auth_token=token,
-        allow_patterns=allow_patterns,
-        ignore_patterns=ignore_patterns,
-        user_agent=user_agent,
-    )
+    try:
+        yield from snapshot_download(
+            model,
+            revision=revision,
+            cache_dir=DIFFUSERS_CACHE,
+            resume_download=True,
+            use_auth_token=token,
+            allow_patterns=allow_patterns,
+            ignore_patterns=ignore_patterns,
+            user_agent=user_agent,
+        )
+    except RevisionNotFoundError:
+        yield from snapshot_download(
+            model,
+            cache_dir=DIFFUSERS_CACHE,
+            resume_download=True,
+            use_auth_token=token,
+            allow_patterns=allow_patterns,
+            ignore_patterns=ignore_patterns,
+            user_agent=user_agent,
+        )

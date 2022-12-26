@@ -3,6 +3,7 @@ import bpy
 import numpy as np
 from ..generator_process.actions.detect_seamless import SeamlessAxes
 from ..generator_process import Generator
+from ..preferences import StableDiffusionPreferences
 
 
 def update(self, context):
@@ -23,11 +24,21 @@ class SeamlessResult(bpy.types.PropertyGroup):
         if image == self.image or not Generator.shared().can_use():
             return
 
+        if (hash_string := image.get('dream_textures_hash', None)) is not None:
+            res = None
+            def hash_init():
+                self.image = image
+                self.result = res
+            for args in bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history:
+                if args.get('hash', None) == hash_string:
+                    res = SeamlessAxes(args.seamless_axes).text
+                    bpy.app.timers.register(hash_init)
+
         can_process = image is not None and image.size[0] >= 8 and image.size[1] >= 8
 
         def init():
             self.image = image
-            self.result = 'Processing' if can_process else 'Off'
+            self.result = 'Processing' if can_process else SeamlessAxes.OFF.text
         bpy.app.timers.register(init)
 
         if not can_process:

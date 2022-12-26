@@ -195,6 +195,15 @@ class ProjectDreamTexture(bpy.types.Operator):
     def poll(cls, context):
         return Generator.shared().can_use()
 
+    @classmethod
+    def get_uv_layer(cls, mesh:bmesh.types.BMesh):
+        for i in range(len(mesh.loops.layers.uv)):
+            uv = mesh.loops.layers.uv[i]
+            if uv.name.lower() == "projected uvs":
+                return uv
+            
+        return mesh.loops.layers.uv.new("Projected UVs")
+
     def execute(self, context):
         # Setup the progress indicator
         def step_progress_update(self, context):
@@ -239,6 +248,9 @@ class ProjectDreamTexture(bpy.types.Operator):
         material.use_nodes = True
         image_texture_node = material.node_tree.nodes.new("ShaderNodeTexImage")
         material.node_tree.links.new(image_texture_node.outputs[0], material.node_tree.nodes['Principled BSDF'].inputs[0])
+        uv_map_node = material.node_tree.nodes.new("ShaderNodeUVMap")
+        uv_map_node.uv_map = "Projected UVs"
+        material.node_tree.links.new(uv_map_node.outputs[0], image_texture_node.inputs[0])
         for obj in bpy.context.selected_objects:
             if not hasattr(obj, "data") or not hasattr(obj.data, "materials"):
                 continue
@@ -253,7 +265,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                 if screen_space is None:
                     return None
                 return (screen_space[0] / context.region.width, screen_space[1] / context.region.height)
-            uv_layer = mesh.loops.layers.uv[0] if len(mesh.loops.layers.uv) > 0 else mesh.loops.layers.uv.new("Projected UVs")
+            uv_layer = ProjectDreamTexture.get_uv_layer(mesh)
             mesh.faces.ensure_lookup_table()
             for face in mesh.faces:
                 if face.select:

@@ -156,7 +156,7 @@ class InstallModel(bpy.types.Operator):
 def _model_search(self, context):
     def on_done(future):
         set_model_list('model_results', future.result())
-    Generator.shared().hf_list_models(self.model_query).add_done_callback(on_done)
+    Generator.shared().hf_list_models(self.model_query, self.hf_token).add_done_callback(on_done)
 
 def _update_ui(self, context):
     if hasattr(context.area, "regions"):

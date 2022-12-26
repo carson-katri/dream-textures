@@ -40,7 +40,8 @@ class Model:
 
 def hf_list_models(
     self,
-    query: str
+    query: str,
+    token: str,
 ) -> list[Model]:
     from huggingface_hub import HfApi, ModelFilter
     
@@ -53,10 +54,14 @@ def hf_list_models(
     filter = ModelFilter(tags="diffusers", task="text-to-image")
     models = api.list_models(
         filter=filter,
-        search=query
+        search=query,
+        use_auth_token=token
     )
-
-    return list(map(lambda m: Model(m.modelId, m.author, m.tags, m.likes, getattr(m, "downloads", -1), ModelType.UNKNOWN), models))
+    return [
+        Model(m.modelId, m.author or "", m.tags, m.likes if hasattr(m, "likes") else 0, getattr(m, "downloads", -1), ModelType.UNKNOWN)
+        for m in models
+        if m.modelId is not None and m.tags is not None and 'diffusers' in (m.tags or {})
+    ]
 
 def hf_list_installed_models(self) -> list[Model]:
     from diffusers.utils import DIFFUSERS_CACHE

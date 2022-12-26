@@ -213,15 +213,19 @@ def image_to_image(
             if seed is None:
                 seed = random.randrange(0, np.iinfo(np.uint32).max)
             generator = generator.manual_seed(seed)
+
+            # Init Image
+            init_image = Image.fromarray(image).convert('RGB')
             
             # Seamless
+            if seamless_axes == SeamlessAxes.AUTO:
+                seamless_axes = self.detect_seamless(np.array(init_image) / 255)
             _configure_model_padding(pipe.unet, seamless_axes)
             _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                    init_image = Image.fromarray(image).convert('RGB')
                     yield from pipe(
                         prompt=prompt,
                         image=init_image if fit else init_image.resize((width, height)),

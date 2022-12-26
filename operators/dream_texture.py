@@ -55,7 +55,8 @@ class DreamTexture(bpy.types.Operator):
         screen = context.screen
         scene = context.scene
 
-        generated_args = scene.dream_textures_prompt.generate_args(context.scene.seamless_result.result)
+        generated_args = scene.dream_textures_prompt.generate_args()
+        context.scene.seamless_result.update_args(generated_args)
 
         init_image = None
         if generated_args['use_init_img']:

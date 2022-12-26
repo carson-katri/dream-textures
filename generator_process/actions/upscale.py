@@ -1,6 +1,7 @@
 import math
 import numpy as np
 from .prompt_to_image import Optimizations, Scheduler, StepPreviewMode
+from .detect_seamless import SeamlessAxes
 import random
 from dataclasses import dataclass
 from numpy.typing import NDArray
@@ -14,13 +15,14 @@ class ImageUpscaleResult:
 
 
 class UpscaleTiler:
-    def __init__(self, image: NDArray, scale: int, tile_size: int, blend: int, seamless_axes: str):
+    def __init__(self, image: NDArray, scale: int, tile_size: int, blend: int, seamless_axes: SeamlessAxes):
         self.image = image
         self.scale = scale
         self.tile_size = tile_size
         self.blend = blend
-        self.x_tiles = self.axis_tiles(image.shape[1], tile_size, blend, 'x' in seamless_axes)
-        self.y_tiles = self.axis_tiles(image.shape[0], tile_size, blend, 'y' in seamless_axes)
+        seamless_axes = SeamlessAxes(seamless_axes)
+        self.x_tiles = self.axis_tiles(image.shape[1], tile_size, blend, seamless_axes.x)
+        self.y_tiles = self.axis_tiles(image.shape[0], tile_size, blend, seamless_axes.y)
         # combined image with last channel containing pixel weights
         self.canvas = np.zeros((image.shape[0] * scale, image.shape[1] * scale, image.shape[2] + 1), dtype=np.float32)
 
@@ -32,7 +34,7 @@ class UpscaleTiler:
         self.tile_weight = np.minimum(tile_weight, np.reshape(weight_gradient, (scaled_tile_size, 1)))
 
     @staticmethod
-    def axis_tiles(axis_size, tile_size, blend, seamless):
+    def axis_tiles(axis_size: int, tile_size: int, blend: int, seamless: bool) -> list[int]:
         """
         Returns a list of values where each tile starts on an axis.
         Blend is only guaranteed as a minimum and may vary by a pixel between tiles.
@@ -48,7 +50,7 @@ class UpscaleTiler:
             return [0]
         return [i * final // (count - 1) for i in range(count)]
 
-    def combined(self):
+    def combined(self) -> NDArray:
         return self.canvas[:, :, :-1]
 
     def __getitem__(self, key: tuple[int, int]) -> NDArray:
@@ -137,7 +139,7 @@ def upscale(
     
     tile_size: int,
     blend: int,
-    seamless_axes: str,
+    seamless_axes: SeamlessAxes | str | bool | tuple[bool, bool] | None,
 
     optimizations: Optimizations,
 

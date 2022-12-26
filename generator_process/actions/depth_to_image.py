@@ -1,10 +1,13 @@
 from typing import Union, Generator, Callable, List, Optional
 import os
 from contextlib import nullcontext
+
 from numpy.typing import NDArray
 import numpy as np
 import random
 from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, approximate_decoded_latents, ImageGenerationResult, _configure_model_padding
+from .detect_seamless import SeamlessAxes
+
 
 def depth_to_image(
     self,
@@ -29,8 +32,8 @@ def depth_to_image(
     cfg_scale: float,
     use_negative_prompt: bool,
     negative_prompt: str,
-    
-    seamless_axes: str,
+
+    seamless_axes: SeamlessAxes | str | bool | tuple[bool, bool] | None,
 
     step_preview_mode: StepPreviewMode,
 

@@ -1,18 +1,81 @@
+from enum import Enum
+
 import numpy as np
 from numpy.typing import NDArray
 
-model = None
+
+class SeamlessAxes(Enum):
+    """Unified handling of seamless axes.
+    Can be converted from str (id or text) or bool tuple/list (x, y).
+    Each enum is equal to their respective convertible values.
+    Special cases:
+        AUTO: None
+        OFF: False, empty str
+        BOTH: True
+    """
+
+    AUTO =       'auto', 'Auto-detect', None,  None
+    OFF =        'off',  'Off',         False, False
+    HORIZONTAL = 'x',    'X',           True,  False
+    VERTICAL =   'y',    'Y',           False, True
+    BOTH =       'xy',   'Both',        True,  True
+
+    def __init__(self, id, text, x, y):
+        self.id = id
+        self.text = text
+        self.x = x
+        self.y = y
+
+    def __eq__(self, other):
+        if isinstance(other, type(self)):
+            return self is other
+        if isinstance(other, str):
+            return self.id == other or self.text == other or (other == '' and self is self.OFF)
+        if isinstance(other, (tuple, list)) and len(other) == 2:
+            return self.x == other[0] and self.y == other[1]
+        if other is True and self is self.BOTH:
+            return True
+        if other is False and self is self.OFF:
+            return True
+        if other is None and self is self.AUTO:
+            return True
+        return False
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            if value == '':
+                return cls.OFF
+            for e in cls:
+                if e.id == value or e.text == value:
+                    return e
+            raise ValueError(f'no {cls.__name__} with id {repr(id)}')
+        elif isinstance(value, (tuple, list)) and len(value) == 2:
+            for e in cls:
+                if e.x == value[0] and e.y == value[1]:
+                    return e
+            raise ValueError(f'no {cls.__name__} with x {value[0]} and y {value[1]}')
+        elif value is True:
+            return cls.BOTH
+        elif value is False:
+            return cls.OFF
+        elif value is None:
+            return cls.AUTO
+        raise TypeError(f'expected str, bool, tuple[bool, bool], or None, got {repr(value)}')
+
+    def bpy_enum(self, *args):
+        return self.id, self.text, *args
 
 
-def detect_seamless(self, image: NDArray) -> tuple[bool, bool]:
+def detect_seamless(self, image: NDArray) -> SeamlessAxes:
     import os
     import torch
     from torch import nn
 
     if image.shape[0] < 8 or image.shape[1] < 8:
-        return False, False
+        return SeamlessAxes.OFF
 
-    global model
+    model = getattr(self, 'detect_seamless_model', None)
     if model is None:
         state_npz = np.load(os.path.join(os.path.dirname(__file__), 'model.npz'))
         state = {k: torch.tensor(v) for k, v in state_npz.items()}
@@ -48,6 +111,7 @@ def detect_seamless(self, image: NDArray) -> tuple[bool, bool]:
         model = SeamlessModel()
         model.load_state_dict(state)
         model.eval()
+        setattr(self, 'detect_seamless_model', model)
 
     if torch.cuda.is_available():
         device = 'cuda'
@@ -93,9 +157,9 @@ def detect_seamless(self, image: NDArray) -> tuple[bool, bool]:
         # both edges batched together
         edges = torch.tensor(np.array([edge_x, edge_y]), dtype=torch.float32, device=device)
         res = infer(edges)
-        return res[0][0].item() > 0, res[0][1].item() > 0
+        return SeamlessAxes((res[0][0].item() > 0, res[0][1].item() > 0))
     else:
         edge_x = torch.tensor(edge_x, dtype=torch.float32, device=device)
         edge_y = torch.tensor(edge_y, dtype=torch.float32, device=device)
         res = infer(edge_x, edge_y)
-        return res[0].item() > 0, res[1].item() > 0
+        return SeamlessAxes((res[0].item() > 0, res[1].item() > 0))

@@ -58,7 +58,8 @@ class Upscale(bpy.types.Operator):
             image.pack()
             return image
 
-        generated_args = context.scene.dream_textures_upscale_prompt.generate_args(context.scene.dream_textures_upscale_seamless_result.result)
+        generated_args = context.scene.dream_textures_upscale_prompt.generate_args()
+        context.scene.dream_textures_upscale_seamless_result.update_args(generated_args)
 
         # Setup the progress indicator
         def step_progress_update(self, context):

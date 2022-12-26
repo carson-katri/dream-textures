@@ -1,10 +1,13 @@
 from typing import Union, Generator, Callable, List, Optional
 import os
 from contextlib import nullcontext
+
 from numpy.typing import NDArray
 import numpy as np
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
 import random
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
+from .detect_seamless import SeamlessAxes
+
 
 def image_to_image(
     self,
@@ -29,7 +32,7 @@ def image_to_image(
     use_negative_prompt: bool,
     negative_prompt: str,
     
-    seamless_axes: str,
+    seamless_axes: SeamlessAxes | str | bool | tuple[bool, bool] | None,
 
     iterations: int,
 

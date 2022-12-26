@@ -3,9 +3,12 @@ import enum
 import os
 from dataclasses import dataclass
 from contextlib import nullcontext
+
 from numpy.typing import NDArray
 import numpy as np
 import random
+from .detect_seamless import SeamlessAxes
+
 
 class Pipeline(enum.IntEnum):
     STABLE_DIFFUSION = 0
@@ -246,7 +249,7 @@ def prompt_to_image(
     use_negative_prompt: bool,
     negative_prompt: str,
     
-    seamless_axes: str,
+    seamless_axes: SeamlessAxes | str | bool | tuple[bool, bool] | None,
 
     iterations: int,
 
@@ -506,12 +509,13 @@ def _configure_model_padding(model, seamless_axes):
     """
     Modifies the 2D convolution layers to use a circular padding mode based on the `seamless` and `seamless_axes` options.
     """
+    seamless_axes = SeamlessAxes(seamless_axes)
     for m in model.modules():
         if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-            if seamless_axes != '':
+            if seamless_axes.x or seamless_axes.y:
                 m.asymmetric_padding_mode = (
-                    'circular' if ('x' in seamless_axes) else 'constant',
-                    'circular' if ('y' in seamless_axes) else 'constant'
+                    'circular' if seamless_axes.x else 'constant',
+                    'circular' if seamless_axes.y else 'constant'
                 )
                 m.asymmetric_padding = (
                     (m._reversed_padding_repeated_twice[0], m._reversed_padding_repeated_twice[1], 0, 0),

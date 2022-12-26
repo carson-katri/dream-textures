@@ -1,6 +1,7 @@
 import bpy
 
 import numpy as np
+from ..generator_process.actions.detect_seamless import SeamlessAxes
 from ..generator_process import Generator
 
 
@@ -16,10 +17,10 @@ class SeamlessResult(bpy.types.PropertyGroup):
     bl_idname = "dream_textures.SeamlessResult"
 
     image: bpy.props.PointerProperty(type=bpy.types.Image)
-    result: bpy.props.StringProperty(update=update, default='Off')
+    result: bpy.props.StringProperty(update=update, default=SeamlessAxes.OFF.text)
 
     def check(self, image):
-        if image == self.image:
+        if image == self.image or not Generator.shared().can_use():
             return
 
         can_process = image is not None and image.size[0] >= 8 and image.size[1] >= 8
@@ -36,8 +37,9 @@ class SeamlessResult(bpy.types.PropertyGroup):
         pixels = pixels.reshape(image.size[1], image.size[0], -1)
 
         def result(future):
-            x, y = future.result()
-            def assign():
-                self.result = (('X' if x else '') + ('Y' if y else '')) or 'Off'
-            bpy.app.timers.register(assign)
+            self.result = future.result().text
         Generator.shared().detect_seamless(pixels).add_done_callback(result)
+
+    def update_args(self, args: dict[str, any]):
+        if args['seamless_axes'] == SeamlessAxes.AUTO and self.result != 'Processing':
+            args['seamless_axes'] = SeamlessAxes(self.result)

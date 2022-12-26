@@ -17,7 +17,7 @@ def depth_to_image(
     optimizations: Optimizations,
 
     depth: NDArray | None,
-    image: NDArray | str | None,
+    image: NDArray | None,
     strength: float,
     prompt: str,
     steps: int,
@@ -43,6 +43,18 @@ def depth_to_image(
             import torch
             import PIL.Image
             import PIL.ImageOps
+
+            rounded_size = (
+                int(8 * (width // 8)),
+                int(8 * (height // 8)),
+            )
+            depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255)).convert('L')).resize(rounded_size) if depth is not None else None
+            init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
+            if depth_image is not None:
+                depth_image.save('test/depth.png')
+            if init_image is not None:
+                init_image.save('test/color.png')
+            return
 
             class GeneratorPipeline(diffusers.StableDiffusionInpaintPipeline):
                 def prepare_depth(self, depth, image, dtype, device):

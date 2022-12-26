@@ -1,11 +1,13 @@
 import bpy
 import gpu
 import bmesh
+import mathutils
 from bpy_extras import view3d_utils
 import numpy as np
 
 from .view_history import ImportPromptFile
 from ..property_groups.dream_prompt import pipeline_options
+from ..property_groups.project_perspective import ProjectPerspective
 from .open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 
 from ..ui.panels.dream_texture import advanced_panel, create_panel, prompt_panel, size_panel
@@ -21,6 +23,53 @@ framebuffer_arguments = [
     ('depth', 'Depth', 'Only provide the scene depth as input'),
     ('color', 'Depth and Color', 'Provide the scene depth and color as input'),
 ]
+
+class AddPerspective(bpy.types.Operator):
+    bl_idname = "shade.dream_texture_project_add_perspective"
+    bl_label = "Add Perspective"
+    bl_description = "Adds the current view to the list of perspectives"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        perspective = context.scene.dream_textures_project_perspectives.add()
+        perspective.name = f"Perspective {len(context.scene.dream_textures_project_perspectives)}"
+        perspective.matrix = [c for v in context.space_data.region_3d.view_matrix for c in v]
+        return {'FINISHED'}
+
+class RemovePerspective(bpy.types.Operator):
+    bl_idname = "shade.dream_texture_project_remove_perspective"
+    bl_label = "Remove Perspective"
+    bl_description = "Removes a perspective"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        context.scene.dream_textures_project_perspectives.remove(context.scene.dream_textures_project_active_perspective)
+        return {'FINISHED'}
+
+class LoadPerspective(bpy.types.Operator):
+    bl_idname = "shade.dream_texture_project_load_perspective"
+    bl_label = "Load Perspective"
+    bl_description = "Moves the viewport to the specified perspective"
+    bl_options = {'REGISTER'}
+
+    matrix: bpy.props.FloatVectorProperty(name="", size=4*4)
+
+    def execute(self, context):
+        context.space_data.region_3d.view_matrix = mathutils.Matrix([
+            mathutils.Vector(self.matrix[i:i + 4])
+            for i in range(0, len(self.matrix), 4)
+        ])
+        for i in range(len(context.scene.dream_textures_project_perspectives)):
+            if mathutils.Vector(context.scene.dream_textures_project_perspectives[i].matrix) == mathutils.Vector(self.matrix):
+                context.scene.dream_textures_project_active_perspective = i
+        return {'FINISHED'}
+
+class SCENE_UL_ProjectPerspectiveList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        layout.prop(item, "name", text="", emboss=False)
+        active_perspective = mathutils.Vector([c for v in context.space_data.region_3d.view_matrix for c in v])
+        is_same_perspective = (mathutils.Vector(item.matrix) - active_perspective).length < 0.00001
+        layout.operator(LoadPerspective.bl_idname, text="", icon="RESTRICT_VIEW_OFF" if is_same_perspective else "RESTRICT_VIEW_ON").matrix = item.matrix
 
 def dream_texture_projection_panels():
     class DREAM_PT_dream_panel_projection(bpy.types.Panel):
@@ -79,6 +128,25 @@ def dream_texture_projection_panels():
     yield from create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, prompt_panel, get_prompt)
     yield create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, size_panel, get_prompt)
     yield from create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, advanced_panel, get_prompt)
+
+    def perspectives_panel(sub_panel, space_type, get_prompt):
+        class PerspectivesPanel(sub_panel):
+            bl_idname = f"DREAM_PT_dream_panel_projection_perspectives"
+            bl_label = "Perspectives"
+
+            def draw(self, context):
+                layout = self.layout
+                layout.use_property_split = True
+
+                row = layout.row()
+                row.template_list(SCENE_UL_ProjectPerspectiveList.__name__, "dream_textures_project_perspectives", context.scene, "dream_textures_project_perspectives", context.scene, "dream_textures_project_active_perspective")
+                col = row.column(align=True)
+                col.operator(AddPerspective.bl_idname, text="", icon="ADD")
+                col.operator(RemovePerspective.bl_idname, text="", icon="REMOVE")
+        return PerspectivesPanel
+
+    yield create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, perspectives_panel, get_prompt)
+
     def actions_panel(sub_panel, space_type, get_prompt):
         class ActionsPanel(sub_panel):
             """Create a subpanel for actions"""

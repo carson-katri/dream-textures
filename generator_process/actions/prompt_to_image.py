@@ -146,7 +146,7 @@ class Optimizations:
         if self.half_precision and device == "cuda":
             import torch
             name = torch.cuda.get_device_name()
-            return not (name.endswith("GTX 1650") or name.endswith("GTX 1660"))
+            return not ("GTX 1650" in name or "GTX 1660" in name)
         return False
     
     def apply(self, pipeline, device):

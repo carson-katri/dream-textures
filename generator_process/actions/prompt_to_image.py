@@ -141,6 +141,13 @@ class Optimizations:
             annotation: _AnnotatedAlias = self.__annotations__[property]
             return annotation.__metadata__[0] == device
         return True
+
+    def can_use_half(self, device):
+        if self.half_precision and device == "cuda":
+            import torch
+            name = torch.cuda.get_device_name()
+            return not (name.endswith("GTX 1650") or name.endswith("GTX 1660"))
+        return False
     
     def apply(self, pipeline, device):
         """
@@ -410,8 +417,8 @@ def prompt_to_image(
                     snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
                 pipe = GeneratorPipeline.from_pretrained(
                     snapshot_folder,
-                    revision="fp16" if optimizations.can_use("half_precision", device) else None,
-                    torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
+                    revision="fp16" if optimizations.can_use_half(device) else None,
+                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
                 )
                 pipe = pipe.to(device)
                 setattr(self, "_cached_pipe", (pipe, model, use_cpu_offload, snapshot_folder))

@@ -332,8 +332,8 @@ def depth_to_image(
                     snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
                 pipe = GeneratorPipeline.from_pretrained(
                     snapshot_folder,
-                    revision="fp16" if optimizations.can_use("half_precision", device) else None,
-                    torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
+                    revision="fp16" if optimizations.can_use_half(device) else None,
+                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
                 )
                 pipe = pipe.to(device)
                 setattr(self, "_cached_depth2img_pipe", (pipe, model, use_cpu_offload, snapshot_folder))

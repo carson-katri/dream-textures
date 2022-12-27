@@ -16,8 +16,8 @@ def depth_to_image(
 
     optimizations: Optimizations,
 
-    depth: NDArray | None,
-    image: NDArray | None,
+    depth: List[NDArray],
+    image: List[NDArray],
     strength: float,
     prompt: str,
     steps: int,
@@ -48,12 +48,12 @@ def depth_to_image(
                 int(8 * (width // 8)),
                 int(8 * (height // 8)),
             )
-            depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255)).convert('L')).resize(rounded_size) if depth is not None else None
-            init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
-            if depth_image is not None:
-                depth_image.save('test/depth.png')
-            if init_image is not None:
-                init_image.save('test/color.png')
+            for x, i in enumerate(depth):
+                depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(i * 255)).convert('L')).resize(rounded_size)
+                depth_image.save(f'test/depth_{x}.png')
+            for x, i in enumerate(image):
+                init_image = (PIL.Image.open(i) if isinstance(i, str) else PIL.Image.fromarray(i.astype(np.uint8))).convert('RGB').resize(rounded_size)
+                init_image.save(f'test/color_{x}.png')
             return
 
             class GeneratorPipeline(diffusers.StableDiffusionInpaintPipeline):

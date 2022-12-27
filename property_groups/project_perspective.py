@@ -6,3 +6,4 @@ class ProjectPerspective(bpy.types.PropertyGroup):
 
     name: bpy.props.StringProperty(name="Name", default="Perspective")
     matrix: bpy.props.FloatVectorProperty(name="", size=4*4)
+    projection_matrix: bpy.props.FloatVectorProperty(name="", size=4*4)

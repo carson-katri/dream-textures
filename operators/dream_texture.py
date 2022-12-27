@@ -31,25 +31,15 @@ class DreamTexture(bpy.types.Operator):
         return Generator.shared().can_use()
 
     def execute(self, context):
-        history_entries = []
+        history_template = {prop: getattr(context.scene.dream_textures_prompt, prop) for prop in context.scene.dream_textures_prompt.__annotations__.keys()}
+        history_template["iterations"] = 1
+        history_template["random_seed"] = False
         is_file_batch = context.scene.dream_textures_prompt.prompt_structure == file_batch_structure.id
         file_batch_lines = []
         if is_file_batch:
             context.scene.dream_textures_prompt.iterations = 1
-            file_batch_lines = [line for line in context.scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
-            history_entries = [context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add() for _ in file_batch_lines]
-        else:
-            history_entries = [context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add() for _ in range(context.scene.dream_textures_prompt.iterations)]
-        for i, history_entry in enumerate(history_entries):
-            for prop in context.scene.dream_textures_prompt.__annotations__.keys():
-                try:
-                    if hasattr(history_entry, prop):
-                        setattr(history_entry, prop, getattr(context.scene.dream_textures_prompt, prop))
-                except:
-                    continue
-            if is_file_batch:
-                history_entry.prompt_structure = custom_structure.id
-                history_entry.prompt_structure_token_subject = file_batch_lines[i].body
+            file_batch_lines = [line.body for line in context.scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
+            history_template["prompt_structure"] = custom_structure.id
 
         node_tree = context.material.node_tree if hasattr(context, 'material') and hasattr(context.material, 'node_tree') else None
         screen = context.screen
@@ -97,6 +87,7 @@ class DreamTexture(bpy.types.Operator):
                         area.spaces.active.image = last_data_block
 
         iteration = 0
+        iteration_limit = len(file_batch_lines) if is_file_batch else generated_args['iterations']
         def done_callback(future):
             nonlocal last_data_block
             nonlocal iteration
@@ -106,6 +97,7 @@ class DreamTexture(bpy.types.Operator):
             if isinstance(image_result, list):
                 image_result = image_result[-1]
             image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel(), last_data_block)
+            last_data_block = None
             if node_tree is not None:
                 nodes = node_tree.nodes
                 texture_node = nodes.new("ShaderNodeTexImage")
@@ -120,11 +112,15 @@ class DreamTexture(bpy.types.Operator):
             image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
             image['dream_textures_hash'] = image_hash
             scene.dream_textures_prompt.hash = image_hash
-            history_entries[iteration].seed = str(image_result.seed)
-            history_entries[iteration].random_seed = False
-            history_entries[iteration].hash = image_hash
+            history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
+            for key, value in history_template.items():
+                setattr(history_entry, key, value)
+            history_entry.seed = str(image_result.seed)
+            history_entry.hash = image_hash
+            if is_file_batch:
+                history_entry.prompt_structure_token_subject = file_batch_lines[iteration]
             iteration += 1
-            if iteration < generated_args['iterations']:
+            if iteration < iteration_limit and not future.cancelled:
                 generate_next()
             else:
                 scene.dream_textures_info = ""
@@ -140,6 +136,8 @@ class DreamTexture(bpy.types.Operator):
 
         gen = Generator.shared()
         def generate_next():
+            if is_file_batch:
+                generated_args["prompt"] = file_batch_lines[iteration]
             if init_image is not None:
                 match generated_args['init_img_action']:
                     case 'modify':

@@ -2,6 +2,7 @@ import bpy
 import gpu
 import bmesh
 import mathutils
+import mathutils.geometry
 from bpy_extras import view3d_utils
 from gpu_extras.batch import batch_for_shader
 import numpy as np
@@ -197,6 +198,36 @@ def dream_texture_projection_panels():
         return ActionsPanel
     yield create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, actions_panel, get_prompt)
 
+def position_shader():
+    vert_out = gpu.types.GPUStageInterfaceInfo("my_interface")
+    vert_out.smooth('VEC3', "position")
+
+    shader_info = gpu.types.GPUShaderCreateInfo()
+    shader_info.push_constant('MAT4', "ModelViewProjectionMatrix")
+    shader_info.vertex_in(0, 'VEC3', "pos")
+    shader_info.vertex_out(vert_out)
+    shader_info.fragment_out(0, 'VEC4', "fragColor")
+
+    shader_info.vertex_source("""
+void main()
+{
+  position = pos;
+  gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+
+#ifdef USE_WORLD_CLIP_PLANES
+  world_clip_planes_calc_clip_distance((clipPlanes.ClipModelMatrix * vec4(pos, 1.0)).xyz);
+#endif
+}
+""")
+
+    shader_info.fragment_source(
+        "void main()"
+        "{"
+        "  fragColor = vec4(position, 1.0);"
+        "}"
+    )
+
+    return gpu.shader.create_from_info(shader_info)
 
 def draw_depth_map(width, height, context, matrix, projection_matrix):
     """
@@ -212,20 +243,182 @@ def draw_depth_map(width, height, context, matrix, projection_matrix):
         with gpu.matrix.push_pop():
             gpu.matrix.load_matrix(matrix)
             gpu.matrix.load_projection_matrix(projection_matrix)
-            offscreen.draw_view3d(
-                context.scene,
-                context.view_layer,
-                context.space_data,
-                context.region,
-                matrix,
-                projection_matrix,
-                do_color_management=False
-            )
+
+            # Render each object with the custom position shader.
+            for ob in context.scene.objects:
+                if (mesh := ob.data) is None:
+                    continue
+                
+                mesh = mesh.copy()
+
+                if not hasattr(mesh, "transform"):
+                    continue
+
+                mesh.transform(ob.matrix_world)
+                mesh.calc_loop_triangles()
+
+                co = np.empty((len(mesh.vertices), 3), 'f')
+                vertices = np.empty((len(mesh.loop_triangles), 3), 'i')
+
+                mesh.vertices.foreach_get("co", co.ravel())
+                mesh.loop_triangles.foreach_get("vertices", vertices.ravel())
+
+                shader = position_shader()
+                batch = batch_for_shader(
+                    shader, 'TRIS',
+                    {"pos": co},
+                    indices=vertices,
+                )
+                shader.bind()
+                batch.draw(shader)
+        position_map = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
+            # offscreen.draw_view3d(
+            #     context.scene,
+            #     context.view_layer,
+            #     context.space_data,
+            #     context.region,
+            #     matrix,
+            #     projection_matrix,
+            #     do_color_management=False
+            # )
         depth = np.array(fb.read_depth(0, 0, width, height).to_list())
-        depth = 1 - depth
+        # depth = 1 - depth
         depth = np.interp(depth, [np.ma.masked_equal(depth, 0, copy=False).min(), depth.max()], [0, 1]).clip(0, 1)
     offscreen.free()
-    return depth
+    return depth, position_map
+
+#region view3d_utils
+def region_2d_to_origin_3d(width, height, view_matrix, projection_matrix, coord, *, clamp=None, is_perspective=True):
+    """
+    Modified from https://github.com/blender/blender/blob/master/release/scripts/modules/bpy_extras/view3d_utils.py
+    to take a `view_matrix` and `projection_matrix` instead of region data.
+    """
+    viewinv = view_matrix.inverted()
+    perspective_matrix = projection_matrix * viewinv
+
+    if is_perspective:
+        origin_start = viewinv.translation.copy()
+    else:
+        persmat = perspective_matrix.copy()
+        dx = (2.0 * coord[0] / width) - 1.0
+        dy = (2.0 * coord[1] / height) - 1.0
+        persinv = persmat.inverted()
+        origin_start = (
+            (persinv.col[0].xyz * dx) +
+            (persinv.col[1].xyz * dy) +
+            persinv.translation
+        )
+
+        if clamp != 0.0:
+            # if view_perspective != 'CAMERA':
+            if True: # We only care about the viewport perspective.
+                # this value is scaled to the far clip already
+                origin_offset = persinv.col[2].xyz
+                if clamp is not None:
+                    if clamp < 0.0:
+                        origin_offset.negate()
+                        clamp = -clamp
+                    if origin_offset.length > clamp:
+                        origin_offset.length = clamp
+
+                origin_start -= origin_offset
+
+    return origin_start
+
+def region_2d_to_vector_3d(width, height, view_matrix, projection_matrix, coord, is_perspective=True):
+    """
+    Modified from https://github.com/blender/blender/blob/master/release/scripts/modules/bpy_extras/view3d_utils.py
+    to take a `view_matrix` and `projection_matrix` instead of region data.
+    """
+    viewinv = view_matrix.inverted()
+    perspective_matrix = projection_matrix * viewinv
+    if is_perspective:
+        persinv = perspective_matrix.inverted_safe()
+
+        out = mathutils.Vector((
+            (2.0 * coord[0] / width) - 1.0,
+            (2.0 * coord[1] / height) - 1.0,
+            -0.5
+        ))
+
+        w = out.dot(persinv[3].xyz) + persinv[3][3]
+
+        view_vector = ((persinv @ out) / w) - viewinv.translation
+    else:
+        view_vector = -viewinv.col[2].xyz
+
+    view_vector.normalize()
+
+    return view_vector
+
+def region_2d_to_location_3d(width, height, view_matrix, projection_matrix, coord, depth_location, is_perspective=True):
+    """
+    Modified from https://github.com/blender/blender/blob/master/release/scripts/modules/bpy_extras/view3d_utils.py
+    to take a `view_matrix` and `projection_matrix` instead of region data.
+    """
+    coord_vec = region_2d_to_vector_3d(width, height, view_matrix, projection_matrix, coord, is_perspective)
+    depth_location = mathutils.Vector(depth_location)
+
+    origin_start = region_2d_to_origin_3d(width, height, view_matrix, projection_matrix, coord, is_perspective=is_perspective)
+    origin_end = origin_start + coord_vec
+
+    if is_perspective:
+        viewinv = view_matrix.inverted()
+        view_vec = viewinv.col[2].copy()
+        return mathutils.geometry.intersect_line_plane(
+            origin_start,
+            origin_end,
+            depth_location,
+            view_vec, 1,
+        )
+    else:
+        return mathutils.geometry.intersect_point_line(
+            depth_location,
+            origin_start,
+            origin_end,
+        )[0]
+
+def location_3d_to_region_2d(width, height, view_matrix, projection_matrix, coord, *, default=None):
+    """
+    Modified from https://github.com/blender/blender/blob/master/release/scripts/modules/bpy_extras/view3d_utils.py
+    to take a `view_matrix` and `projection_matrix` instead of region data.
+    """
+    perspective_matrix = projection_matrix * view_matrix.inverted()
+    prj = perspective_matrix @ mathutils.Vector((coord[0], coord[1], coord[2], 1.0))
+    if prj.w > 0.0:
+        width_half = width / 2.0
+        height_half = height / 2.0
+
+        return mathutils.Vector((
+            width_half + width_half * (prj.x / prj.w),
+            height_half + height_half * (prj.y / prj.w),
+        ))
+    else:
+        return default
+#endregion
+
+def coordinate_mapping(
+    view_matrix1,
+    projection_matrix1,
+    depth1,
+    view_matrix2,
+    projection_matrix2,
+    depth2
+):
+    # Generate a grid of pixel indices for the first depth map
+    x, y = np.meshgrid(np.arange(depth1.shape[1]), np.arange(depth1.shape[0]))
+
+    # Calculate the 3D positions of all the pixels in the first depth map using the depth values, view matrix, and window matrix
+    positions_3d = np.einsum("ij,xyz->xyzj", np.linalg.inv(view_matrix1), np.stack((x, y, depth1, np.ones_like(depth1)), axis=-1))
+
+    # Project the 3D positions onto the second depth map using the second view matrix and window matrix
+    positions_2d = np.einsum("ij,xyzj->xyzj", view_matrix2, positions_3d)
+    positions_2d = positions_2d / positions_2d[:, :, 3, np.newaxis]
+    
+    positions_2d = np.einsum("ij,xyzj->xyzj", projection_matrix2, positions_2d)
+
+    # Round the 2D positions to the nearest pixel
+    return np.round(positions_2d[:, :, :2]).astype(int)
 
 class ProjectDreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture_project"
@@ -250,8 +443,9 @@ class ProjectDreamTexture(bpy.types.Operator):
             self.report({'ERROR'}, "Could not determine region size.")
 
         depth_maps = []
+        position_maps = []
         for perspective in context.scene.dream_textures_project_perspectives:
-            depth_maps.append(draw_depth_map(
+            depth, position = draw_depth_map(
                 region_width,
                 region_height,
                 context,
@@ -263,10 +457,13 @@ class ProjectDreamTexture(bpy.types.Operator):
                     mathutils.Vector(perspective.projection_matrix[i:i + 4])
                     for i in range(0, len(perspective.projection_matrix), 4)
                 ])
-            ))
+            )
+            depth_maps.append(depth)
+            position_maps.append(position)
         Generator.shared().depth_to_image(
             depth=depth_maps,
             image=[],
+            position_map=position_maps,
             **context.scene.dream_textures_project_prompt.generate_args()
         )
 

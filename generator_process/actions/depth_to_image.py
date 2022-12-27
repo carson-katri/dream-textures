@@ -1,4 +1,4 @@
-from typing import Union, Generator, Callable, List, Optional
+from typing import Union, Generator, Callable, List, Optional, Dict, Tuple
 import os
 from contextlib import nullcontext
 from numpy.typing import NDArray
@@ -18,6 +18,7 @@ def depth_to_image(
 
     depth: List[NDArray],
     image: List[NDArray],
+    position_map: List[NDArray],
     strength: float,
     prompt: str,
     steps: int,
@@ -43,6 +44,7 @@ def depth_to_image(
             import torch
             import PIL.Image
             import PIL.ImageOps
+            import PIL.ImageDraw
 
             rounded_size = (
                 int(8 * (width // 8)),
@@ -51,9 +53,16 @@ def depth_to_image(
             for x, i in enumerate(depth):
                 depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(i * 255)).convert('L')).resize(rounded_size)
                 depth_image.save(f'test/depth_{x}.png')
+            for x, i in enumerate(position_map):
+                position_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(i * 255)).convert('RGB')).resize(rounded_size)
+                position_image.save(f'test/position_{x}.png')
             for x, i in enumerate(image):
                 init_image = (PIL.Image.open(i) if isinstance(i, str) else PIL.Image.fromarray(i.astype(np.uint8))).convert('RGB').resize(rounded_size)
                 init_image.save(f'test/color_{x}.png')
+            output = np.zeros_like(depth[1])
+            index = np.argwhere(np.all(position_map[1] == position_map[0], axis=2))
+            output[index[:,0], index[:,1]] = depth[1][index[:,0], index[:,1]]
+            PIL.Image.fromarray(np.uint8(output * 255)).convert('L').resize(rounded_size).save('test/reproject.png')
             return
 
             class GeneratorPipeline(diffusers.StableDiffusionInpaintPipeline):

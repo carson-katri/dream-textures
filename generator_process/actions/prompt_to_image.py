@@ -131,6 +131,7 @@ class Optimizations:
     sequential_cpu_offload: bool = False
     channels_last_memory_format: bool = False
     # xformers_attention: bool = False # FIXME: xFormers is not yet available.
+    batch_size: int = 1
 
     cpu_only: bool = False
 
@@ -236,7 +237,7 @@ def prompt_to_image(
 
     optimizations: Optimizations,
 
-    prompt: str,
+    prompt: str | list[str],
     steps: int,
     width: int,
     height: int,
@@ -277,7 +278,7 @@ def prompt_to_image(
                     negative_prompt: Optional[Union[str, List[str]]] = None,
                     num_images_per_prompt: Optional[int] = 1,
                     eta: float = 0.0,
-                    generator: Optional[torch.Generator] = None,
+                    generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
                     latents: Optional[torch.FloatTensor] = None,
                     output_type: Optional[str] = "pil",
                     return_dict: bool = True,
@@ -347,14 +348,14 @@ def prompt_to_image(
                             case StepPreviewMode.NONE:
                                 yield ImageGenerationResult(
                                     None,
-                                    generator.initial_seed(),
+                                    generator[0].initial_seed(),
                                     i,
                                     False
                                 )
                             case StepPreviewMode.FAST:
                                 yield ImageGenerationResult(
                                     np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
-                                    generator.initial_seed(),
+                                    generator[0].initial_seed(),
                                     i,
                                     False
                                 )
@@ -362,7 +363,7 @@ def prompt_to_image(
                                 yield from [
                                     ImageGenerationResult(
                                         np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                                        generator.initial_seed(),
+                                        generator[0].initial_seed(),
                                         i,
                                         False
                                     )
@@ -377,14 +378,14 @@ def prompt_to_image(
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
-                    yield from [
+                    yield [
                         ImageGenerationResult(
                             np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                            generator.initial_seed(),
+                            generator[i].initial_seed(),
                             num_inference_steps,
                             True
                         )
-                        for image in self.numpy_to_pil(image)
+                        for i, image in enumerate(self.numpy_to_pil(image))
                     ]
             
             if optimizations.cpu_only:
@@ -427,10 +428,10 @@ def prompt_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
-            if seed is None:
-                seed = random.randrange(0, np.iinfo(np.uint32).max)
-            generator = generator.manual_seed(seed)
+            generator = []
+            for _ in range(len(prompt) if isinstance(prompt, list) else 1):
+                gen = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+                generator.append(gen.manual_seed(random.randrange(0, np.iinfo(np.uint32).max) if seed is None else seed))
             
             # Seamless
             _configure_model_padding(pipe.unet, seamless, seamless_axes)

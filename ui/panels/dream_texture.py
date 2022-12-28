@@ -297,6 +297,7 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             optimization("amp")
             optimization("half_precision")
             optimization("channels_last_memory_format")
+            optimization("batch_size")
     yield SpeedOptimizationPanel
 
     class MemoryOptimizationPanel(sub_panel):

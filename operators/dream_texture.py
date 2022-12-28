@@ -10,6 +10,9 @@ from ..generator_process.actions.prompt_to_image import ImageGenerationResult
 from ..generator_process.actions.huggingface_hub import ModelType
 
 def bpy_image(name, width, height, pixels, existing_image):
+    if existing_image is not None and (existing_image.size[0] != width or existing_image.size[1] != height):
+        bpy.data.images.remove(existing_image)
+        existing_image = None
     if existing_image is None:
         image = bpy.data.images.new(name, width=width, height=height)
     else:
@@ -77,7 +80,7 @@ class DreamTexture(bpy.types.Operator):
         last_data_block = None
         def step_callback(_, step_image: ImageGenerationResult):
             nonlocal last_data_block
-            if step_image.final:
+            if isinstance(step_image, list) or step_image.final:
                 return
             scene.dream_textures_progress = step_image.step
             if step_image.image is not None:
@@ -93,33 +96,36 @@ class DreamTexture(bpy.types.Operator):
             nonlocal iteration
             if hasattr(gen, '_active_generation_future'):
                 del gen._active_generation_future
-            image_result: ImageGenerationResult | list = future.result()
-            if isinstance(image_result, list):
-                image_result = image_result[-1]
-            image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel(), last_data_block)
-            last_data_block = None
-            if node_tree is not None:
-                nodes = node_tree.nodes
-                texture_node = nodes.new("ShaderNodeTexImage")
-                texture_node.image = image
-                nodes.active = texture_node
-            for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    area.spaces.active.image = image
-            scene.dream_textures_prompt.seed = str(image_result.seed) # update property in case seed was sourced randomly or from hash
-            # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
-            # and as custom property of the image. Needs to be a string because the int from the hash function is too large
-            image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
-            image['dream_textures_hash'] = image_hash
-            scene.dream_textures_prompt.hash = image_hash
-            history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
-            for key, value in history_template.items():
-                setattr(history_entry, key, value)
-            history_entry.seed = str(image_result.seed)
-            history_entry.hash = image_hash
-            if is_file_batch:
-                history_entry.prompt_structure_token_subject = file_batch_lines[iteration]
-            iteration += 1
+            results: list[ImageGenerationResult] = future.result()
+            if len(future._responses) > 1:
+                results = results[-1]
+            if not isinstance(results, list):
+                results = [results]
+            for image_result in results:
+                image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel(), last_data_block)
+                last_data_block = None
+                if node_tree is not None:
+                    nodes = node_tree.nodes
+                    texture_node = nodes.new("ShaderNodeTexImage")
+                    texture_node.image = image
+                    nodes.active = texture_node
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        area.spaces.active.image = image
+                scene.dream_textures_prompt.seed = str(image_result.seed) # update property in case seed was sourced randomly or from hash
+                # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
+                # and as custom property of the image. Needs to be a string because the int from the hash function is too large
+                image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
+                image['dream_textures_hash'] = image_hash
+                scene.dream_textures_prompt.hash = image_hash
+                history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
+                for key, value in history_template.items():
+                    setattr(history_entry, key, value)
+                history_entry.seed = str(image_result.seed)
+                history_entry.hash = image_hash
+                if is_file_batch:
+                    history_entry.prompt_structure_token_subject = file_batch_lines[iteration]
+                iteration += 1
             if iteration < iteration_limit and not future.cancelled:
                 generate_next()
             else:
@@ -134,10 +140,14 @@ class DreamTexture(bpy.types.Operator):
             self.report({'ERROR'}, str(exception))
             raise exception
 
+        original_prompt = generated_args["prompt"]
         gen = Generator.shared()
         def generate_next():
+            batch_size = min(generated_args["optimizations"].batch_size, iteration_limit-iteration)
             if is_file_batch:
-                generated_args["prompt"] = file_batch_lines[iteration]
+                generated_args["prompt"] = file_batch_lines[iteration: iteration+batch_size]
+            else:
+                generated_args["prompt"] = [original_prompt] * batch_size
             if init_image is not None:
                 match generated_args['init_img_action']:
                     case 'modify':

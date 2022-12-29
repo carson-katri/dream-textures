@@ -16,12 +16,12 @@ def depth_to_image(
 
     optimizations: Optimizations,
 
-    depth: List[NDArray],
-    image: List[NDArray],
-    position_map: List[NDArray],
+    depth: NDArray,
+    image: NDArray,
     strength: float,
     prompt: str,
     steps: int,
+    end_step: int | None,
     seed: int,
 
     width: int,
@@ -44,25 +44,8 @@ def depth_to_image(
             import torch
             import PIL.Image
             import PIL.ImageOps
-            import PIL.ImageDraw
 
-            rounded_size = (
-                int(8 * (width // 8)),
-                int(8 * (height // 8)),
-            )
-            for x, i in enumerate(depth):
-                depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(i * 255)).convert('L')).resize(rounded_size)
-                depth_image.save(f'test/depth_{x}.png')
-            for x, i in enumerate(position_map):
-                position_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(i * 255)).convert('RGB')).resize(rounded_size)
-                position_image.save(f'test/position_{x}.png')
-            for x, i in enumerate(image):
-                init_image = (PIL.Image.open(i) if isinstance(i, str) else PIL.Image.fromarray(i.astype(np.uint8))).convert('RGB').resize(rounded_size)
-                init_image.save(f'test/color_{x}.png')
-            output = np.zeros_like(depth[1])
-            index = np.argwhere(np.all(position_map[1] == position_map[0], axis=2))
-            output[index[:,0], index[:,1]] = depth[1][index[:,0], index[:,1]]
-            PIL.Image.fromarray(np.uint8(output * 255)).convert('L').resize(rounded_size).save('test/reproject.png')
+            PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(image * 255))).save('test/projected_0.png')
             return
 
             class GeneratorPipeline(diffusers.StableDiffusionInpaintPipeline):
@@ -266,7 +249,7 @@ def depth_to_image(
                     # 10. Denoising loop
                     num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
                     with self.progress_bar(total=num_inference_steps) as progress_bar:
-                        for i, t in enumerate(timesteps):
+                        for i, t in enumerate(timesteps[:end_step]):
                             # expand the latents if we are doing classifier free guidance
                             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
 

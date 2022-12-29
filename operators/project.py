@@ -7,6 +7,8 @@ from bpy_extras import view3d_utils
 from gpu_extras.batch import batch_for_shader
 import numpy as np
 
+from .project_helpers.draw_projected import draw_projected_map
+
 from .view_history import ImportPromptFile
 from ..property_groups.dream_prompt import pipeline_options
 from ..property_groups.project_perspective import ProjectPerspective
@@ -200,19 +202,23 @@ def dream_texture_projection_panels():
 
 def position_shader():
     vert_out = gpu.types.GPUStageInterfaceInfo("my_interface")
-    vert_out.smooth('VEC3', "position")
+    vert_out.smooth('FLOAT', "facing")
 
     shader_info = gpu.types.GPUShaderCreateInfo()
     shader_info.push_constant('MAT4', "ModelViewProjectionMatrix")
     shader_info.vertex_in(0, 'VEC3', "pos")
+    shader_info.vertex_in(1, 'VEC3', "normal")
     shader_info.vertex_out(vert_out)
     shader_info.fragment_out(0, 'VEC4', "fragColor")
 
     shader_info.vertex_source("""
 void main()
 {
-  position = pos;
   gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+
+  vec3 clipSpaceViewDir = -normalize(vec3(ModelViewProjectionMatrix * vec4(0.0, 0.0, 0.0, 1.0)));
+  vec3 viewDir = normalize((inverse(ModelViewProjectionMatrix) * vec4(clipSpaceViewDir, 0.0)).xyz);
+  facing = dot(viewDir, normalize(normal));
 
 #ifdef USE_WORLD_CLIP_PLANES
   world_clip_planes_calc_clip_distance((clipPlanes.ClipModelMatrix * vec4(pos, 1.0)).xyz);
@@ -223,7 +229,7 @@ void main()
     shader_info.fragment_source(
         "void main()"
         "{"
-        "  fragColor = vec4(position, 1.0);"
+        "  fragColor = vec4(facing, 0, 0, 1.0);"
         "}"
     )
 
@@ -243,49 +249,67 @@ def draw_depth_map(width, height, context, matrix, projection_matrix):
         with gpu.matrix.push_pop():
             gpu.matrix.load_matrix(matrix)
             gpu.matrix.load_projection_matrix(projection_matrix)
+            
+            offscreen.draw_view3d(
+                context.scene,
+                context.view_layer,
+                context.space_data,
+                context.region,
+                matrix,
+                projection_matrix,
+                do_color_management=False
+            )
+        depth = np.array(fb.read_depth(0, 0, width, height).to_list())
+        depth = 1 - depth
+        depth = np.interp(depth, [np.ma.masked_equal(depth, 0, copy=False).min(), depth.max()], [0, 1]).clip(0, 1)
+    offscreen.free()
+    return depth
 
-            # Render each object with the custom position shader.
+def draw_facing_map(width, height, context, matrix, projection_matrix):
+    """
+    Generate a facing map for the given matrices.
+    """
+    offscreen = gpu.types.GPUOffScreen(width, height)
+
+    with offscreen.bind():
+        fb = gpu.state.active_framebuffer_get()
+        fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+        gpu.state.depth_test_set('LESS_EQUAL')
+        gpu.state.depth_mask_set(True)
+        with gpu.matrix.push_pop():
+            gpu.matrix.load_matrix(matrix)
+            gpu.matrix.load_projection_matrix(projection_matrix)
+            
             for ob in context.scene.objects:
                 if (mesh := ob.data) is None:
                     continue
-                
-                mesh = mesh.copy()
 
                 if not hasattr(mesh, "transform"):
                     continue
+                
+                mesh = mesh.copy()
 
                 mesh.transform(ob.matrix_world)
                 mesh.calc_loop_triangles()
 
                 co = np.empty((len(mesh.vertices), 3), 'f')
+                normals = np.empty((len(mesh.vertices), 3), 'f')
                 vertices = np.empty((len(mesh.loop_triangles), 3), 'i')
 
                 mesh.vertices.foreach_get("co", co.ravel())
+                mesh.vertices.foreach_get("normal", normals.ravel())
                 mesh.loop_triangles.foreach_get("vertices", vertices.ravel())
 
                 shader = position_shader()
                 batch = batch_for_shader(
                     shader, 'TRIS',
-                    {"pos": co},
+                    {"pos": co, "normal": normals},
                     indices=vertices,
                 )
-                shader.bind()
                 batch.draw(shader)
-        position_map = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
-            # offscreen.draw_view3d(
-            #     context.scene,
-            #     context.view_layer,
-            #     context.space_data,
-            #     context.region,
-            #     matrix,
-            #     projection_matrix,
-            #     do_color_management=False
-            # )
-        depth = np.array(fb.read_depth(0, 0, width, height).to_list())
-        # depth = 1 - depth
-        depth = np.interp(depth, [np.ma.masked_equal(depth, 0, copy=False).min(), depth.max()], [0, 1]).clip(0, 1)
+        facing = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
     offscreen.free()
-    return depth, position_map
+    return facing
 
 #region view3d_utils
 def region_2d_to_origin_3d(width, height, view_matrix, projection_matrix, coord, *, clamp=None, is_perspective=True):
@@ -430,6 +454,15 @@ class ProjectDreamTexture(bpy.types.Operator):
     def poll(cls, context):
         return Generator.shared().can_use()
 
+    @classmethod
+    def get_uv_layer(cls, mesh: bmesh.types.BMesh):
+        for i in range(len(mesh.loops.layers.uv)):
+            uv = mesh.loops.layers.uv[i]
+            if uv.name.lower() == "projected uvs":
+                return uv
+            
+        return mesh.loops.layers.uv.new("Projected UVs")
+
     def execute(self, context):
         # Get region size
         region_width = region_height = None
@@ -442,12 +475,12 @@ class ProjectDreamTexture(bpy.types.Operator):
         if region_width is None or region_height is None:
             self.report({'ERROR'}, "Could not determine region size.")
 
+        # Capture depth
         depth_maps = []
-        position_maps = []
+        facing_maps = []
+        projected_maps = []
         for perspective in context.scene.dream_textures_project_perspectives:
-            depth, position = draw_depth_map(
-                region_width,
-                region_height,
+            projected = draw_projected_map(
                 context,
                 mathutils.Matrix([
                     mathutils.Vector(perspective.matrix[i:i + 4])
@@ -456,15 +489,105 @@ class ProjectDreamTexture(bpy.types.Operator):
                 mathutils.Matrix([
                     mathutils.Vector(perspective.projection_matrix[i:i + 4])
                     for i in range(0, len(perspective.projection_matrix), 4)
-                ])
+                ]),
+                np.load('test/color_1.npy')
             )
-            depth_maps.append(depth)
-            position_maps.append(position)
-        Generator.shared().depth_to_image(
-            depth=depth_maps,
-            image=[],
-            position_map=position_maps,
+            projected_maps.append(projected)
+            # depth = draw_depth_map(
+            #     region_width,
+            #     region_height,
+            #     context,
+            #     mathutils.Matrix([
+            #         mathutils.Vector(perspective.matrix[i:i + 4])
+            #         for i in range(0, len(perspective.matrix), 4)
+            #     ]),
+            #     mathutils.Matrix([
+            #         mathutils.Vector(perspective.projection_matrix[i:i + 4])
+            #         for i in range(0, len(perspective.projection_matrix), 4)
+            #     ])
+            # )
+            # depth_maps.append(depth)
+            # facing = draw_facing_map(
+            #     region_width,
+            #     region_height,
+            #     context,
+            #     mathutils.Matrix([
+            #         mathutils.Vector(perspective.matrix[i:i + 4])
+            #         for i in range(0, len(perspective.matrix), 4)
+            #     ]),
+            #     mathutils.Matrix([
+            #         mathutils.Vector(perspective.projection_matrix[i:i + 4])
+            #         for i in range(0, len(perspective.projection_matrix), 4)
+            #     ])
+            # )
+            # facing_maps.append(facing)
+
+        # Create material
+        # material = bpy.data.materials.new(name="diffused-material")
+        # material.use_nodes = True
+        # image_texture_node = material.node_tree.nodes.new("ShaderNodeTexImage")
+        # material.node_tree.links.new(image_texture_node.outputs[0], material.node_tree.nodes['Principled BSDF'].inputs[0])
+        # uv_map_node = material.node_tree.nodes.new("ShaderNodeUVMap")
+        # uv_map_node.uv_map = "Projected UVs"
+        # material.node_tree.links.new(uv_map_node.outputs[0], image_texture_node.inputs[0])
+        # for obj in bpy.context.selected_objects:
+        #     if not hasattr(obj, "data") or not hasattr(obj.data, "materials"):
+        #         continue
+        #     material_index = len(obj.material_slots)
+        #     obj.data.materials.append(material)
+        #     mesh = bmesh.from_edit_mesh(obj.data)
+        #     # Project from UVs view and update material index
+        #     mesh.verts.ensure_lookup_table()
+        #     mesh.verts.index_update()
+        #     def vert_to_uv(v):
+        #         screen_space = view3d_utils.location_3d_to_region_2d(context.region, context.space_data.region_3d, obj.matrix_world @ v.co)
+        #         if screen_space is None:
+        #             return None
+        #         return (screen_space[0] / context.region.width, screen_space[1] / context.region.height)
+        #     uv_layer = ProjectDreamTexture.get_uv_layer(mesh)
+        #     mesh.faces.ensure_lookup_table()
+        #     for face in mesh.faces:
+        #         if face.select:
+        #             for loop in face.loops:
+        #                 uv = vert_to_uv(mesh.verts[loop.vert.index])
+        #                 if uv is None:
+        #                     continue
+        #                 loop[uv_layer].uv = uv
+        #             face.material_index = material_index
+        #     bmesh.update_edit_mesh(obj.data)
+        
+        # Generate
+        texture = None
+        def on_response(_, response):
+            nonlocal texture
+            if texture is None:
+                texture = bpy.data.images.new(name="Step", width=response.image.shape[1], height=response.image.shape[0])
+            texture.name = f"Step {response.step}/{context.scene.dream_textures_project_prompt.steps}"
+            texture.pixels[:] = response.image.ravel()
+            texture.update()
+            image_texture_node.image = texture
+
+        def on_done(future):
+            nonlocal texture
+            generated = future.result()
+            if isinstance(generated, list):
+                generated = generated[-1]
+            if texture is None:
+                texture = bpy.data.images.new(name=str(generated.seed), width=generated.image.shape[1], height=generated.image.shape[0])
+            texture.name = str(generated.seed)
+            material.name = str(generated.seed)
+            texture.pixels[:] = generated.image.ravel()
+            texture.update()
+        #     image_texture_node.image = texture
+        
+        future = Generator.shared().depth_to_image(
+            # depth=depth_maps[0],
+            depth=None,
+            image=projected_maps[0],
+            end_step=None,
             **context.scene.dream_textures_project_prompt.generate_args()
         )
+        future.add_response_callback(on_response)
+        future.add_done_callback(on_done)
 
         return {'FINISHED'}

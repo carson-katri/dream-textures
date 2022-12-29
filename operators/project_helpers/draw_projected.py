@@ -9,7 +9,7 @@ def projected_shader():
 
     shader_info = gpu.types.GPUShaderCreateInfo()
     shader_info.push_constant('MAT4', "ModelViewProjectionMatrix")
-    shader_info.push_constant('VEC2', "RegionSize")
+    shader_info.push_constant('MAT4', "TargetModelViewProjectionMatrix")
     shader_info.sampler(0, 'FLOAT_2D', "image")
     shader_info.vertex_in(0, 'VEC3', "pos")
     shader_info.vertex_out(vert_out)
@@ -18,33 +18,35 @@ def projected_shader():
     shader_info.vertex_source("""
 void main()
 {
-  gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
-  uvInterp = gl_Position.xy / RegionSize;
+    gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+
+    vec4 clipPos = TargetModelViewProjectionMatrix * vec4(pos, 1.0);
+    uvInterp = ((clipPos.xyz / clipPos.w).xy + 1.0) / 2;
 
 #ifdef USE_WORLD_CLIP_PLANES
-  world_clip_planes_calc_clip_distance((clipPlanes.ClipModelMatrix * vec4(pos, 1.0)).xyz);
+    world_clip_planes_calc_clip_distance((clipPlanes.ClipModelMatrix * vec4(pos, 1.0)).xyz);
 #endif
 }
 """)
 
-    shader_info.fragment_source(
-        "void main()"
-        "{"
-        "  fragColor = texture(image, gl_FragCoord.xy / RegionSize);"
-        "}"
-    )
+    shader_info.fragment_source("""
+void main()
+{
+    fragColor = texture(image, uvInterp);
+}
+""")
 
     return gpu.shader.create_from_info(shader_info)
 
-def draw_projected_map(context, matrix, projection_matrix, image):
+def draw_projected_map(context, matrix, projection_matrix, target_matrix, target_projection_matrix, image):
     """
     Generate a facing map for the given matrices.
     """
     width, height = image.shape[:2]
     offscreen = gpu.types.GPUOffScreen(width, height)
 
-    buffer = gpu.types.Buffer('FLOAT', width * height * 4, np.float16(image / 255).ravel())
-    texture = gpu.types.GPUTexture(size=(width, height), data=buffer, format='RGB16F')
+    buffer = gpu.types.Buffer('FLOAT', width * height * 4, np.flipud(np.float32(image) / 255).ravel())
+    texture = gpu.types.GPUTexture(size=(width, height), data=buffer, format='RGBA16F')
 
     with offscreen.bind():
         fb = gpu.state.active_framebuffer_get()
@@ -81,7 +83,7 @@ def draw_projected_map(context, matrix, projection_matrix, image):
                     {"pos": co},
                     indices=vertices,
                 )
-                shader.uniform_float("RegionSize", (width, height))
+                shader.uniform_float("TargetModelViewProjectionMatrix", target_projection_matrix @ target_matrix @ ob.matrix_world)
                 shader.uniform_sampler("image", texture)
                 batch.draw(shader)
         projected = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())

@@ -490,6 +490,14 @@ class ProjectDreamTexture(bpy.types.Operator):
                     mathutils.Vector(perspective.projection_matrix[i:i + 4])
                     for i in range(0, len(perspective.projection_matrix), 4)
                 ]),
+                mathutils.Matrix([
+                    mathutils.Vector(context.scene.dream_textures_project_perspectives[1].matrix[i:i + 4])
+                    for i in range(0, len(context.scene.dream_textures_project_perspectives[1].matrix), 4)
+                ]),
+                mathutils.Matrix([
+                    mathutils.Vector(context.scene.dream_textures_project_perspectives[1].projection_matrix[i:i + 4])
+                    for i in range(0, len(context.scene.dream_textures_project_perspectives[1].projection_matrix), 4)
+                ]),
                 np.load('test/color_1.npy')
             )
             projected_maps.append(projected)

@@ -18,7 +18,7 @@ def bpy_image(name, width, height, pixels, existing_image):
     else:
         image = existing_image
         image.name = name
-    image.pixels[:] = pixels
+    image.pixels.foreach_set(pixels)
     image.pack()
     image.update()
     return image
@@ -96,12 +96,16 @@ class DreamTexture(bpy.types.Operator):
             nonlocal iteration
             if hasattr(gen, '_active_generation_future'):
                 del gen._active_generation_future
-            results: list[ImageGenerationResult] = future.result()
-            if len(future._responses) > 1:
-                results = results[-1]
-            if not isinstance(results, list):
+            results: list[ImageGenerationResult] = future.result(last_only=True)
+            if results is None:
+                # cancelled with no steps
+                results = []
+            elif not isinstance(results, list):
+                # cancelled with step
                 results = [results]
             for image_result in results:
+                if image_result.image is None:
+                    continue
                 image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel(), last_data_block)
                 last_data_block = None
                 if node_tree is not None:

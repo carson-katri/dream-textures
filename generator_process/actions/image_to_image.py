@@ -3,7 +3,7 @@ import os
 from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 import random
 
 def image_to_image(
@@ -19,7 +19,7 @@ def image_to_image(
     image: NDArray,
     fit: bool,
     strength: float,
-    prompt: str,
+    prompt: str | list[str],
     steps: int,
     width: int,
     height: int,
@@ -61,15 +61,13 @@ def image_to_image(
                     negative_prompt: Optional[Union[str, List[str]]] = None,
                     num_images_per_prompt: Optional[int] = 1,
                     eta: Optional[float] = 0.0,
-                    generator: Optional[torch.Generator] = None,
+                    generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
                     output_type: Optional[str] = "pil",
                     return_dict: bool = True,
                     callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
                     callback_steps: Optional[int] = 1,
                     **kwargs,
                 ):
-                    image = init_image or image
-
                     # 1. Check inputs
                     self.check_inputs(prompt, strength, callback_steps)
 
@@ -87,8 +85,7 @@ def image_to_image(
                     )
 
                     # 4. Preprocess image
-                    if isinstance(image, PIL.Image.Image):
-                        image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.preprocess(image)
+                    image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.preprocess(image)
 
                     # 5. set timesteps
                     self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -123,31 +120,7 @@ def image_to_image(
                             latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
                             # NOTE: Modified to yield the latents instead of calling a callback.
-                            match kwargs['step_preview_mode']:
-                                case StepPreviewMode.NONE:
-                                    yield ImageGenerationResult(
-                                        None,
-                                        generator.initial_seed(),
-                                        i,
-                                        False
-                                    )
-                                case StepPreviewMode.FAST:
-                                    yield ImageGenerationResult(
-                                        np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
-                                        generator.initial_seed(),
-                                        i,
-                                        False
-                                    )
-                                case StepPreviewMode.ACCURATE:
-                                    yield from [
-                                        ImageGenerationResult(
-                                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                                            generator.initial_seed(),
-                                            i,
-                                            False
-                                        )
-                                        for image in self.numpy_to_pil(self.decode_latents(latents))
-                                    ]
+                            yield ImageGenerationResult.step_preview(self, kwargs['step_preview_mode'], width, height, latents, generator, i)
 
                     # 9. Post-processing
                     image = self.decode_latents(latents)
@@ -157,15 +130,13 @@ def image_to_image(
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
-                    yield from [
-                        ImageGenerationResult(
-                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                            generator.initial_seed(),
-                            num_inference_steps,
-                            True
-                        )
-                        for image in self.numpy_to_pil(image)
-                    ]
+                    yield ImageGenerationResult(
+                        [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                            for i, image in enumerate(self.numpy_to_pil(image))],
+                        [gen.initial_seed() for gen in generator],
+                        num_inference_steps,
+                        True
+                    )
             
             if optimizations.cpu_only:
                 device = "cpu"
@@ -207,10 +178,10 @@ def image_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
-            if seed is None:
-                seed = random.randrange(0, np.iinfo(np.uint32).max)
-            generator = generator.manual_seed(seed)
+            generator = []
+            for _ in range(len(prompt) if isinstance(prompt, list) else 1):
+                gen = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+                generator.append(gen.manual_seed(random.randrange(0, np.iinfo(np.uint32).max) if seed is None else seed))
             
             # Seamless
             _configure_model_padding(pipe.unet, seamless, seamless_axes)
@@ -222,7 +193,7 @@ def image_to_image(
                     init_image = Image.fromarray(image).convert('RGB')
                     yield from pipe(
                         prompt=prompt,
-                        image=init_image if fit else init_image.resize((width, height)),
+                        image=[init_image if fit else init_image.resize((width, height))] * len(generator),
                         strength=strength,
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
@@ -267,8 +238,8 @@ def image_to_image(
                     if artifact.type == stability_sdk.interfaces.gooseai.generation.generation_pb2.ARTIFACT_IMAGE:
                         image = Image.open(io.BytesIO(artifact.binary))
                         yield ImageGenerationResult(
-                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                            seed,
+                            [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.],
+                            [seed],
                             steps,
                             True
                         )

@@ -229,7 +229,7 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                     box.label(text=warning, icon="ERROR")
                 if prompt.outpaint_origin[0] <= -prompt.width or prompt.outpaint_origin[1] <= -prompt.height:
                     _outpaint_warning_box("Outpaint has no overlap, so the result will not blend")
-                init_img = context.scene.init_img.width if prompt.init_img_src == 'file' else None
+                init_img = context.scene.init_img if prompt.init_img_src == 'file' else None
                 if init_img is None:
                     for area in context.screen.areas:
                         if area.type == 'IMAGE_EDITOR':

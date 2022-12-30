@@ -188,10 +188,55 @@ class StepPreviewMode(enum.Enum):
 
 @dataclass
 class ImageGenerationResult:
-    image: NDArray | None
-    seed: int
+    images: [NDArray]
+    seeds: [int]
     step: int
     final: bool
+
+    @staticmethod
+    def step_preview(pipe, mode, width, height, latents, generator, iteration):
+        from PIL import Image, ImageOps
+        seeds = [gen.initial_seed() for gen in generator]
+        match mode:
+            case StepPreviewMode.FAST:
+                return ImageGenerationResult(
+                    [np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents[-1:]))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.],
+                    seeds,
+                    iteration,
+                    False
+                )
+            case StepPreviewMode.FAST_BATCH:
+                images = [
+                    Image.fromarray(approximate_decoded_latents(latents[i:i + 1])).resize((width, height), Image.Resampling.NEAREST)
+                    for i in range(latents.size(0))
+                ]
+                return ImageGenerationResult(
+                    [tile_images(images)],
+                    seeds,
+                    iteration,
+                    False
+                )
+            case StepPreviewMode.ACCURATE:
+                return ImageGenerationResult(
+                    [np.asarray(ImageOps.flip(pipe.numpy_to_pil(pipe.decode_latents(latents[-1:]))[0]).convert('RGBA'),
+                                dtype=np.float32) / 255.],
+                    seeds,
+                    iteration,
+                    False
+                )
+            case StepPreviewMode.ACCURATE_BATCH:
+                return ImageGenerationResult(
+                    [tile_images(pipe.numpy_to_pil(pipe.decode_latents(latents)))],
+                    seeds,
+                    iteration,
+                    False
+                )
+        return ImageGenerationResult(
+            [],
+            seeds,
+            iteration,
+            False
+        )
 
 def choose_device(self) -> str:
     """
@@ -250,49 +295,6 @@ def tile_images(images):
         y *= height
         tiles[y: y + height, x: x + width] = np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
     return tiles
-
-def step_preview(self, mode: StepPreviewMode, width, height, latents, seed, iteration):
-    from PIL import Image, ImageOps
-    match mode:
-        case StepPreviewMode.FAST:
-            return ImageGenerationResult(
-                np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents[-1:]))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
-                seed,
-                iteration,
-                False
-            )
-        case StepPreviewMode.FAST_BATCH:
-            images = [
-                Image.fromarray(approximate_decoded_latents(latents[i:i+1])).resize((width, height), Image.Resampling.NEAREST)
-                for i in range(latents.size(0))
-            ]
-            return ImageGenerationResult(
-                tile_images(images),
-                seed,
-                iteration,
-                False
-            )
-        case StepPreviewMode.ACCURATE:
-            return ImageGenerationResult(
-                np.asarray(ImageOps.flip(self.numpy_to_pil(self.decode_latents(latents[-1:]))[0]).convert('RGBA'), dtype=np.float32) / 255.,
-                seed,
-                iteration,
-                False
-            )
-        case StepPreviewMode.ACCURATE_BATCH:
-            return ImageGenerationResult(
-                tile_images(self.numpy_to_pil(self.decode_latents(latents))),
-                seed,
-                iteration,
-                False
-            )
-    return ImageGenerationResult(
-        None,
-        seed,
-        iteration,
-        False
-    )
-
 
 def prompt_to_image(
     self,
@@ -411,7 +413,7 @@ def prompt_to_image(
                         latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
                         # NOTE: Modified to yield the latents instead of calling a callback.
-                        yield step_preview(self, kwargs['step_preview_mode'], width, height, latents, generator[0].initial_seed(), i)
+                        yield ImageGenerationResult.step_preview(self, kwargs['step_preview_mode'], width, height, latents, generator, i)
 
                     # 8. Post-processing
                     image = self.decode_latents(latents)
@@ -421,15 +423,13 @@ def prompt_to_image(
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
-                    yield [
-                        ImageGenerationResult(
-                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                            generator[i].initial_seed(),
-                            num_inference_steps,
-                            True
-                        )
-                        for i, image in enumerate(self.numpy_to_pil(image))
-                    ]
+                    yield ImageGenerationResult(
+                        [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                            for i, image in enumerate(self.numpy_to_pil(image))],
+                        [gen.initial_seed() for gen in generator],
+                        num_inference_steps,
+                        True
+                    )
             
             if optimizations.cpu_only:
                 device = "cpu"
@@ -529,8 +529,8 @@ def prompt_to_image(
                     if artifact.type == stability_sdk.interfaces.gooseai.generation.generation_pb2.ARTIFACT_IMAGE:
                         image = Image.open(io.BytesIO(artifact.binary))
                         yield ImageGenerationResult(
-                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                            seed,
+                            [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.],
+                            [seed],
                             steps,
                             True
                         )

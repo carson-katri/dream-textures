@@ -6,7 +6,7 @@ from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..generator_process import Generator
-from ..generator_process.actions.prompt_to_image import ImageGenerationResult
+from ..generator_process.actions.prompt_to_image import ImageGenerationResult, Pipeline
 from ..generator_process.actions.huggingface_hub import ModelType
 
 def bpy_image(name, width, height, pixels, existing_image):
@@ -80,11 +80,11 @@ class DreamTexture(bpy.types.Operator):
         last_data_block = None
         def step_callback(_, step_image: ImageGenerationResult):
             nonlocal last_data_block
-            if isinstance(step_image, list) or step_image.final:
+            if step_image.final:
                 return
             scene.dream_textures_progress = step_image.step
-            if step_image.image is not None:
-                last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.image.shape[1], step_image.image.shape[0], step_image.image.ravel(), last_data_block)
+            if len(step_image.images) > 0:
+                last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.images[0].shape[1], step_image.images[0].shape[0], step_image.images[0].ravel(), last_data_block)
                 for area in screen.areas:
                     if area.type == 'IMAGE_EDITOR':
                         area.spaces.active.image = last_data_block
@@ -96,17 +96,10 @@ class DreamTexture(bpy.types.Operator):
             nonlocal iteration
             if hasattr(gen, '_active_generation_future'):
                 del gen._active_generation_future
-            results: list[ImageGenerationResult] = future.result(last_only=True)
-            if results is None:
-                # cancelled with no steps
-                results = []
-            elif not isinstance(results, list):
-                # cancelled with step
-                results = [results]
-            for image_result in results:
-                if image_result.image is None:
-                    continue
-                image = bpy_image(str(image_result.seed), image_result.image.shape[1], image_result.image.shape[0], image_result.image.ravel(), last_data_block)
+            result: ImageGenerationResult = future.result(last_only=True)
+            for i, result_image in enumerate(result.images):
+                seed = result.seeds[i]
+                image = bpy_image(str(seed), result_image.shape[1], result_image.shape[0], result_image.ravel(), last_data_block)
                 last_data_block = None
                 if node_tree is not None:
                     nodes = node_tree.nodes
@@ -116,7 +109,7 @@ class DreamTexture(bpy.types.Operator):
                 for area in screen.areas:
                     if area.type == 'IMAGE_EDITOR':
                         area.spaces.active.image = image
-                scene.dream_textures_prompt.seed = str(image_result.seed) # update property in case seed was sourced randomly or from hash
+                scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
                 # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
                 # and as custom property of the image. Needs to be a string because the int from the hash function is too large
                 image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
@@ -125,7 +118,7 @@ class DreamTexture(bpy.types.Operator):
                 history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
                 for key, value in history_template.items():
                     setattr(history_entry, key, value)
-                history_entry.seed = str(image_result.seed)
+                history_entry.seed = str(seed)
                 history_entry.hash = image_hash
                 if is_file_batch:
                     history_entry.prompt_structure_token_subject = file_batch_lines[iteration]
@@ -148,6 +141,9 @@ class DreamTexture(bpy.types.Operator):
         gen = Generator.shared()
         def generate_next():
             batch_size = min(generated_args["optimizations"].batch_size, iteration_limit-iteration)
+            if generated_args['pipeline'] == Pipeline.STABILITY_SDK:
+                # Stability SDK can handle batch requests, but needs more work on the backend to be usable.
+                batch_size = 1
             if is_file_batch:
                 generated_args["prompt"] = file_batch_lines[iteration: iteration+batch_size]
             else:

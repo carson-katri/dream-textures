@@ -4,7 +4,7 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 
 def inpaint(
     self,
@@ -19,7 +19,7 @@ def inpaint(
     image: NDArray,
     fit: bool,
     strength: float,
-    prompt: str,
+    prompt: str | list[str],
     steps: int,
     width: int,
     height: int,
@@ -63,7 +63,7 @@ def inpaint(
                     negative_prompt: Optional[Union[str, List[str]]] = None,
                     num_images_per_prompt: Optional[int] = 1,
                     eta: float = 0.0,
-                    generator: Optional[torch.Generator] = None,
+                    generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
                     latents: Optional[torch.FloatTensor] = None,
                     output_type: Optional[str] = "pil",
                     return_dict: bool = True,
@@ -92,8 +92,7 @@ def inpaint(
                     )
 
                     # 4. Preprocess mask and image
-                    if isinstance(image, PIL.Image.Image) and isinstance(mask_image, PIL.Image.Image):
-                        mask, masked_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint.prepare_mask_and_masked_image(image, mask_image)
+                    mask, masked_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint.prepare_mask_and_masked_image(image, mask_image)
 
                     # 5. set timesteps
                     self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -159,31 +158,7 @@ def inpaint(
                             latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
                             # NOTE: Modified to yield the latents instead of calling a callback.
-                            match kwargs['step_preview_mode']:
-                                case StepPreviewMode.NONE:
-                                    yield ImageGenerationResult(
-                                        None,
-                                        generator.initial_seed(),
-                                        i,
-                                        False
-                                    )
-                                case StepPreviewMode.FAST:
-                                    yield ImageGenerationResult(
-                                        np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
-                                        generator.initial_seed(),
-                                        i,
-                                        False
-                                    )
-                                case StepPreviewMode.ACCURATE:
-                                    yield from [
-                                        ImageGenerationResult(
-                                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                                            generator.initial_seed(),
-                                            i,
-                                            False
-                                        )
-                                        for image in self.numpy_to_pil(self.decode_latents(latents))
-                                    ]
+                            yield ImageGenerationResult.step_preview(self, kwargs['step_preview_mode'], width, height, latents, generator, i)
 
                     # 11. Post-processing
                     image = self.decode_latents(latents)
@@ -193,15 +168,13 @@ def inpaint(
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
-                    yield from [
-                        ImageGenerationResult(
-                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                            generator.initial_seed(),
-                            num_inference_steps,
-                            True
-                        )
-                        for image in self.numpy_to_pil(image)
-                    ]
+                    yield ImageGenerationResult(
+                        [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                            for i, image in enumerate(self.numpy_to_pil(image))],
+                        [gen.initial_seed() for gen in generator],
+                        num_inference_steps,
+                        True
+                    )
             
             if optimizations.cpu_only:
                 device = "cpu"
@@ -243,10 +216,10 @@ def inpaint(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
-            if seed is None:
-                seed = random.randrange(0, np.iinfo(np.uint32).max)
-            generator = generator.manual_seed(seed)
+            generator = []
+            for _ in range(len(prompt) if isinstance(prompt, list) else 1):
+                gen = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+                generator.append(gen.manual_seed(random.randrange(0, np.iinfo(np.uint32).max) if seed is None else seed))
             
             # Seamless
             _configure_model_padding(pipe.unet, seamless, seamless_axes)
@@ -258,8 +231,8 @@ def inpaint(
                     init_image = Image.fromarray(image)
                     yield from pipe(
                         prompt=prompt,
-                        image=init_image.convert('RGB'),
-                        mask_image=ImageOps.invert(init_image.getchannel('A')),
+                        image=[init_image.convert('RGB')] * len(generator),
+                        mask_image=[ImageOps.invert(init_image.getchannel('A'))] * len(generator),
                         strength=strength,
                         height=init_image.size[1] if fit else height,
                         width=init_image.size[0] if fit else width,
@@ -310,8 +283,8 @@ def inpaint(
                     if artifact.type == stability_sdk.interfaces.gooseai.generation.generation_pb2.ARTIFACT_IMAGE:
                         image = Image.open(io.BytesIO(artifact.binary))
                         yield ImageGenerationResult(
-                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                            seed,
+                            [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.],
+                            [seed],
                             steps,
                             True
                         )

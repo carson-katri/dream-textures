@@ -10,11 +10,14 @@ from ..generator_process.actions.prompt_to_image import ImageGenerationResult
 from ..generator_process.actions.huggingface_hub import ModelType
 
 def bpy_image(name, width, height, pixels, existing_image):
+    gen_seed_string = str(name)
+    prompt_subject = bpy.data.scenes["Scene"].dream_textures_project_prompt.prompt_structure_token_subject
     if existing_image is None:
+        name_with_prompt = str(prompt_subject + gen_seed_string)
         image = bpy.data.images.new(name, width=width, height=height)
     else:
         image = existing_image
-        image.name = name
+        image.name = name_with_prompt
     image.pixels[:] = pixels
     image.pack()
     image.update()

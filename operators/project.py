@@ -156,9 +156,15 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
             if isinstance(generated, list):
                 generated = generated[-1]
             if texture is None:
-                texture = bpy.data.images.new(name=str(generated.seed), width=generated.image.shape[1], height=generated.image.shape[0])
-            texture.name = str(generated.seed)
-            material.name = str(generated.seed)
+                gen_seed_string = str(generated.seed)
+                prompt_subject = bpy.data.scenes["Scene"].dream_textures_project_prompt.prompt_structure_token_subject
+                name_with_prompt = str(prompt_subject + " " + gen_seed_string)
+                texture = bpy.data.images.new(name=name_with_prompt, width=generated.image.shape[1], height=generated.image.shape[0])
+            gen_seed_string = str(generated.seed)
+            prompt_subject = bpy.data.scenes["Scene"].dream_textures_project_prompt.prompt_structure_token_subject
+            name_with_prompt = str(prompt_subject + " " + gen_seed_string)
+            texture.name = name_with_prompt
+            material.name = name_with_prompt
             texture.pixels[:] = generated.image.ravel()
             texture.update()
             image_texture_node.image = texture

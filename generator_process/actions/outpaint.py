@@ -52,20 +52,14 @@ def outpaint(
         )
     )
 
-    # tiled batch preview can be saved for another time
-    if kwargs['step_preview_mode'] == StepPreviewMode.FAST_BATCH:
-        kwargs['step_preview_mode'] = StepPreviewMode.FAST
-    elif kwargs['step_preview_mode'] == StepPreviewMode.ACCURATE_BATCH:
-        kwargs['step_preview_mode'] = StepPreviewMode.ACCURATE
-
     def process(step: ImageGenerationResult):
         for i, result_image in enumerate(step.images):
             image = outpaint_bounds.copy()
             image.paste(
-                ImageOps.flip(Image.fromarray((result_image.image * 255.).astype(np.uint8))),
+                ImageOps.flip(Image.fromarray((result_image * 255.).astype(np.uint8))),
                 offset_origin
             )
-            step.images[i] = image
+            step.images[i] = np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
         return step
 
     for step in self.inpaint(

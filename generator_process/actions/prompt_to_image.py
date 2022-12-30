@@ -201,17 +201,17 @@ class ImageGenerationResult:
             case StepPreviewMode.FAST:
                 return ImageGenerationResult(
                     [np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents[-1:]))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.],
-                    seeds,
+                    seeds[-1:],
                     iteration,
                     False
                 )
             case StepPreviewMode.FAST_BATCH:
-                images = [
-                    Image.fromarray(approximate_decoded_latents(latents[i:i + 1])).resize((width, height), Image.Resampling.NEAREST)
-                    for i in range(latents.size(0))
-                ]
                 return ImageGenerationResult(
-                    [tile_images(images)],
+                    [
+                        np.asarray(Image.fromarray(approximate_decoded_latents(latents[i:i + 1])).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'),
+                                   dtype=np.float32) / 255.
+                        for i in range(latents.size(0))
+                    ],
                     seeds,
                     iteration,
                     False
@@ -220,23 +220,48 @@ class ImageGenerationResult:
                 return ImageGenerationResult(
                     [np.asarray(ImageOps.flip(pipe.numpy_to_pil(pipe.decode_latents(latents[-1:]))[0]).convert('RGBA'),
                                 dtype=np.float32) / 255.],
-                    seeds,
+                    seeds[-1:],
                     iteration,
                     False
                 )
             case StepPreviewMode.ACCURATE_BATCH:
                 return ImageGenerationResult(
-                    [tile_images(pipe.numpy_to_pil(pipe.decode_latents(latents)))],
+                    [
+                        np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                        for image in pipe.numpy_to_pil(pipe.decode_latents(latents))
+                    ],
                     seeds,
                     iteration,
                     False
                 )
         return ImageGenerationResult(
             [],
-            seeds,
+            [seeds],
             iteration,
             False
         )
+
+    def tile_images(self):
+        images = self.images
+        if len(images) == 0:
+            return None
+        elif len(images) == 1:
+            return images[0]
+        width = images[0].shape[1]
+        height = images[0].shape[0]
+        tiles_x = math.ceil(math.sqrt(len(images)))
+        tiles_y = math.ceil(len(images) / tiles_x)
+        tiles = np.zeros((height * tiles_y, width * tiles_x, 4), dtype=np.float32)
+        bottom_offset = (tiles_x*tiles_y-len(images)) * width // 2
+        for i, image in enumerate(images):
+            x = i % tiles_x
+            y = tiles_y - 1 - int((i - x) / tiles_x)
+            x *= width
+            y *= height
+            if y == 0:
+                x += bottom_offset
+            tiles[y: y + height, x: x + width] = image
+        return tiles
 
 def choose_device(self) -> str:
     """
@@ -274,27 +299,6 @@ def approximate_decoded_latents(latents):
                     .byte()).cpu()
 
     return latents_ubyte.numpy()
-
-def tile_images(images):
-    """
-    Takes a list of PIL images and attempts to tile them in an equal number of rows and columns.
-    Returns a numpy array converted for use in Blender.
-    Images are expected to have the same dimensions.
-    """
-    from PIL import ImageOps
-
-    width = images[0].width
-    height = images[0].height
-    tiles_x = math.ceil(math.sqrt(len(images)))
-    tiles_y = math.ceil(len(images) / tiles_x)
-    tiles = np.zeros((height * tiles_y, width * tiles_x, 4), dtype=np.float32)
-    for i, image in enumerate(images):
-        x = i % tiles_x
-        y = tiles_y - 1 - int((i - x) / tiles_x)
-        x *= width
-        y *= height
-        tiles[y: y + height, x: x + width] = np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-    return tiles
 
 def prompt_to_image(
     self,

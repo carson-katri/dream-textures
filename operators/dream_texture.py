@@ -84,7 +84,8 @@ class DreamTexture(bpy.types.Operator):
                 return
             scene.dream_textures_progress = step_image.step
             if len(step_image.images) > 0:
-                last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", step_image.images[0].shape[1], step_image.images[0].shape[0], step_image.images[0].ravel(), last_data_block)
+                image = step_image.tile_images()
+                last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", image.shape[1], image.shape[0], image.ravel(), last_data_block)
                 for area in screen.areas:
                     if area.type == 'IMAGE_EDITOR':
                         area.spaces.active.image = last_data_block

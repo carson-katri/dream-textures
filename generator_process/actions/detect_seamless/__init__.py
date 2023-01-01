@@ -116,7 +116,7 @@ def detect_seamless(self, image: NDArray) -> SeamlessAxes:
     if torch.cuda.is_available():
         device = 'cuda'
     elif torch.backends.mps.is_available():
-        device = 'mps'
+        device = 'cpu'
     else:
         device = 'cpu'
 

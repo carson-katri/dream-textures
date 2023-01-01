@@ -4,8 +4,9 @@ from .operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGener
 from .operators.view_history import SCENE_UL_HistoryList, RecallHistoryEntry, ClearHistory, RemoveHistorySelection, ExportHistorySelection, ImportPromptFile
 from .operators.inpaint_area_brush import InpaintAreaBrushActivated
 from .operators.upscale import Upscale
-from .operators.project import ProjectDreamTexture, dream_texture_projection_panels
+from .operators.project import ProjectDreamTexture, dream_texture_projection_panels, AddPerspective, RemovePerspective, LoadPerspective, SCENE_UL_ProjectPerspectiveList
 from .property_groups.dream_prompt import DreamPrompt
+from .property_groups.project_perspective import ProjectPerspective
 from .ui.panels import dream_texture, history, upscaling, render_properties
 from .preferences import OpenHuggingFace, OpenContributors, StableDiffusionPreferences, OpenDreamStudio, ImportWeights, Model, ModelSearch, InstallModel, PREFERENCES_UL_ModelList
 
@@ -27,6 +28,10 @@ CLASSES = (
     InpaintAreaBrushActivated,
     Upscale,
     ProjectDreamTexture,
+    AddPerspective,
+    RemovePerspective,
+    LoadPerspective,
+    SCENE_UL_ProjectPerspectiveList,
 
     DREAM_PT_AdvancedPresets,
     DREAM_MT_AdvancedPresets,
@@ -48,6 +53,7 @@ PREFERENCE_CLASSES = (
                       InstallModel,
                       Model,
                       DreamPrompt,
+                      ProjectPerspective,
                       InstallDependencies,
                       OpenHuggingFace,
                       ImportWeights,

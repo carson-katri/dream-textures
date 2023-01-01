@@ -44,6 +44,7 @@ if current_process().name != "__actor__":
     from .tools import TOOLS
     from .operators.dream_texture import DreamTexture, kill_generator
     from .property_groups.dream_prompt import DreamPrompt
+    from .property_groups.project_perspective import ProjectPerspective
     from .preferences import StableDiffusionPreferences
     from .ui.presets import register_default_presets
 
@@ -96,6 +97,8 @@ if current_process().name != "__actor__":
         
         bpy.types.Scene.dream_textures_project_prompt = PointerProperty(type=DreamPrompt)
         bpy.types.Scene.dream_textures_project_framebuffer_arguments = EnumProperty(name="Inputs", items=framebuffer_arguments)
+        bpy.types.Scene.dream_textures_project_perspectives = CollectionProperty(type=ProjectPerspective)
+        bpy.types.Scene.dream_textures_project_active_perspective = IntProperty(name="Active Perspective")
 
         for cls in CLASSES:
             bpy.utils.register_class(cls)

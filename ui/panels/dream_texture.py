@@ -133,7 +133,7 @@ def prompt_panel(sub_panel, space_type, get_prompt, get_seamless_result=None):
                 if prompt.seamless_axes == SeamlessAxes.AUTO and get_seamless_result is not None:
                     auto_row = self.layout.row()
                     auto_row.enabled = False
-                    auto_row.prop(get_seamless_result(context, prompt), "result", text="Auto-detected")
+                    auto_row.prop(get_seamless_result(context, prompt), "result")
 
     yield PromptPanel
 

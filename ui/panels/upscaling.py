@@ -55,7 +55,7 @@ def upscaling_panels():
                     context.scene.dream_textures_upscale_seamless_result.check(init_image)
                     auto_row = layout.row()
                     auto_row.enabled = False
-                    auto_row.prop(context.scene.dream_textures_upscale_seamless_result, "result", text="Auto-detected")
+                    auto_row.prop(context.scene.dream_textures_upscale_seamless_result, "result")
 
                 if context.scene.dream_textures_upscale_tile_size > 128:
                     warning_box = layout.box()

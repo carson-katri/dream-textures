@@ -18,7 +18,7 @@ class SeamlessResult(bpy.types.PropertyGroup):
     bl_idname = "dream_textures.SeamlessResult"
 
     image: bpy.props.PointerProperty(type=bpy.types.Image)
-    result: bpy.props.StringProperty(update=update, default=SeamlessAxes.OFF.text)
+    result: bpy.props.StringProperty(name="Auto-detected", update=update, default=SeamlessAxes.OFF.text)
 
     def check(self, image):
         if image == self.image or not Generator.shared().can_use():

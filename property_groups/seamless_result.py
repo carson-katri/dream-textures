@@ -24,15 +24,16 @@ class SeamlessResult(bpy.types.PropertyGroup):
         if image == self.image or not Generator.shared().can_use():
             return
 
-        if (hash_string := image.get('dream_textures_hash', None)) is not None:
+        if image is not None and (hash_string := image.get('dream_textures_hash', None)) is not None:
             res = None
             def hash_init():
                 self.image = image
                 self.result = res
             for args in bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history:
-                if args.get('hash', None) == hash_string:
+                if args.get('hash', None) == hash_string and args.seamless_axes != SeamlessAxes.AUTO:
                     res = SeamlessAxes(args.seamless_axes).text
                     bpy.app.timers.register(hash_init)
+                    return
 
         can_process = image is not None and image.size[0] >= 8 and image.size[1] >= 8
 

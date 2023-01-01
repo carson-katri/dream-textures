@@ -1,7 +1,10 @@
 import bpy
 import gpu
+import gpu.texture
+from gpu_extras.batch import batch_for_shader
 import bmesh
 from bpy_extras import view3d_utils
+import mathutils
 import numpy as np
 
 from .view_history import ImportPromptFile
@@ -94,6 +97,12 @@ def dream_texture_projection_panels():
                 layout.prop(context.scene, "dream_textures_project_framebuffer_arguments")
                 if context.scene.dream_textures_project_framebuffer_arguments == 'color':
                     layout.prop(get_prompt(context), "strength")
+                
+                col = layout.column()
+                col.prop(context.scene, "dream_textures_project_bake")
+                if context.scene.dream_textures_project_bake:
+                    for obj in context.selected_objects:
+                        col.prop_search(obj.data.uv_layers, "active", obj.data, "uv_layers", text=f"{obj.name} Target UVs")
 
                 row = layout.row()
                 row.scale_y = 1.5
@@ -103,8 +112,8 @@ def dream_texture_projection_panels():
                     else:
                         r = row.row()
                         r.operator(ProjectDreamTexture.bl_idname, icon="MOD_UVPROJECT")
-                        r.enabled = Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth() and bpy.context.object.mode == 'EDIT'
-                        if bpy.context.object.mode != 'EDIT':
+                        r.enabled = Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth() and context.object.mode == 'EDIT'
+                        if context.object.mode != 'EDIT':
                             box = layout.box()
                             box.label(text="Enter Edit Mode", icon="ERROR")
                             box.label(text="In edit mode, select the faces to project onto.")
@@ -148,6 +157,81 @@ def draw_depth_map(width, height, context, matrix, projection_matrix):
         depth = np.interp(depth, [np.ma.masked_equal(depth, 0, copy=False).min(), depth.max()], [0, 1]).clip(0, 1)
     offscreen.free()
     return depth
+
+def bake(context, src, dest, src_uv, dest_uv):
+    def bake_shader():
+        vert_out = gpu.types.GPUStageInterfaceInfo("my_interface")
+        vert_out.smooth('VEC2', "uvInterp")
+
+        shader_info = gpu.types.GPUShaderCreateInfo()
+        shader_info.sampler(0, 'FLOAT_2D', "image")
+        shader_info.vertex_in(0, 'VEC2', "src_uv")
+        shader_info.vertex_in(1, 'VEC2', "dest_uv")
+        shader_info.vertex_out(vert_out)
+        shader_info.fragment_out(0, 'VEC4', "fragColor")
+
+        shader_info.vertex_source("""
+    void main()
+    {
+        gl_Position = vec4(dest_uv * 2 - 1, 0.0, 1.0);
+        uvInterp = src_uv;
+    }
+    """)
+
+        shader_info.fragment_source("""
+    void main()
+    {
+        fragColor = texture(image, uvInterp);
+    }
+    """)
+
+        return gpu.shader.create_from_info(shader_info)
+
+    width, height = dest.size[0], dest.size[1]
+    offscreen = gpu.types.GPUOffScreen(width, height)
+
+    texture = gpu.texture.from_image(src)
+
+    with offscreen.bind():
+        fb = gpu.state.active_framebuffer_get()
+        fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+        gpu.state.depth_test_set('LESS_EQUAL')
+        gpu.state.depth_mask_set(True)
+        with gpu.matrix.push_pop():
+            gpu.matrix.load_matrix(mathutils.Matrix.Identity(4))
+            gpu.matrix.load_projection_matrix(mathutils.Matrix.Identity(4))
+
+            for ob in context.scene.objects:
+                if (mesh := ob.data) is None:
+                    continue
+
+                if not hasattr(mesh, "transform"):
+                    continue
+
+                mesh = mesh.copy()
+
+                mesh.transform(ob.matrix_world)
+                bm = bmesh.new()
+                bm.from_mesh(mesh)
+                bmesh.ops.split_edges(bm, edges=bm.edges)
+                bm.to_mesh(mesh)
+                bm.clear()
+                mesh.calc_loop_triangles()
+
+                vertices = np.empty((len(mesh.loop_triangles), 3), 'i')
+                mesh.loop_triangles.foreach_get("vertices", vertices.ravel())
+
+                shader = bake_shader()
+                batch = batch_for_shader(
+                    shader, 'TRIS',
+                    {"src_uv": src_uv, "dest_uv": dest_uv},
+                    indices=vertices,
+                )
+                shader.uniform_sampler("image", texture)
+                batch.draw(shader)
+        projected = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
+    offscreen.free()
+    dest.pixels[:] = projected.ravel()
 
 class ProjectDreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture_project"
@@ -226,6 +310,7 @@ class ProjectDreamTexture(bpy.types.Operator):
         uv_map_node = material.node_tree.nodes.new("ShaderNodeUVMap")
         uv_map_node.uv_map = "Projected UVs"
         material.node_tree.links.new(uv_map_node.outputs[0], image_texture_node.inputs[0])
+        projected_uv_layers = {}
         for obj in bpy.context.selected_objects:
             if not hasattr(obj, "data") or not hasattr(obj.data, "materials"):
                 continue
@@ -241,6 +326,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                     return None
                 return (screen_space[0] / context.region.width, screen_space[1] / context.region.height)
             uv_layer = ProjectDreamTexture.get_uv_layer(mesh)
+            projected_uv_layers[obj] = uv_layer
             mesh.faces.ensure_lookup_table()
             for face in mesh.faces:
                 if face.select:
@@ -288,6 +374,23 @@ class ProjectDreamTexture(bpy.types.Operator):
             texture.pixels[:] = generated.image.ravel()
             texture.update()
             image_texture_node.image = texture
+            if context.scene.dream_textures_project_bake:
+                for obj in bpy.context.selected_objects:
+                    bpy.context.view_layer.objects.active = obj
+                    dest = bpy.data.images.new(name="Baked Result", width=texture.size[0], height=texture.size[1])
+                    
+                    bm = bmesh.from_edit_mesh(obj.data)
+                    bmesh.ops.split_edges(bm, edges=bm.edges)
+                    src_uv_layer = projected_uv_layers[obj]
+                    dest_uv_layer = bm.loops.layers.uv.active
+                    src_uvs = np.empty((len(bm.verts), 2), dtype=np.float32)
+                    dest_uvs = np.empty((len(bm.verts), 2), dtype=np.float32)
+                    for face in bm.faces:
+                        for loop in face.loops:
+                            # Store the UV coordinates of the vertex in the array
+                            src_uvs[loop.vert.index] = loop[src_uv_layer].uv
+                            dest_uvs[loop.vert.index] = loop[dest_uv_layer].uv
+                    bake(context, texture, dest, src_uvs, dest_uvs)
         
         def on_exception(_, exception):
             context.scene.dream_textures_info = ""

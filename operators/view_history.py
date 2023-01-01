@@ -46,14 +46,10 @@ class RecallHistoryEntry(bpy.types.Operator):
                 existing_image = None
                 # accessing custom properties for image datablocks in Blender is still a bit cumbersome
                 for i in bpy.data.images:
-                    try:
-                        # this will fail for images without the dream_textures_hash custom property
-                        if i['dream_textures_hash'] == hash_string:
-                            existing_image = i
-                            break
-                    except:
-                        continue
-                if existing_image != None:
+                    if i.get('dream_textures_hash', None) == hash_string:
+                        existing_image = i
+                        break
+                if existing_image is not None:
                     for area in context.screen.areas:
                         if area.type != 'IMAGE_EDITOR':
                             continue

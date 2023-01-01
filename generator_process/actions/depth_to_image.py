@@ -1,10 +1,13 @@
 from typing import Union, Generator, Callable, List, Optional
 import os
 from contextlib import nullcontext
+
 from numpy.typing import NDArray
 import numpy as np
 import random
 from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, approximate_decoded_latents, ImageGenerationResult, _configure_model_padding
+from .detect_seamless import SeamlessAxes
+
 
 def depth_to_image(
     self,
@@ -29,9 +32,8 @@ def depth_to_image(
     cfg_scale: float,
     use_negative_prompt: bool,
     negative_prompt: str,
-    
-    seamless: bool,
-    seamless_axes: list[str],
+
+    seamless_axes: SeamlessAxes | str | bool | tuple[bool, bool] | None,
 
     step_preview_mode: StepPreviewMode,
 
@@ -354,19 +356,30 @@ def depth_to_image(
                 seed = random.randrange(0, np.iinfo(np.uint32).max)
             generator = generator.manual_seed(seed)
 
-            # Seamless
-            _configure_model_padding(pipe.unet, seamless, seamless_axes)
-            _configure_model_padding(pipe.vae, seamless, seamless_axes)
-
-            # Inference
+            # Init Image
             rounded_size = (
                 int(8 * (width // 8)),
                 int(8 * (height // 8)),
             )
+            depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255)).convert('L')).resize(rounded_size) if depth is not None else None
+            init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
+
+            # Seamless
+            if seamless_axes == SeamlessAxes.AUTO:
+                init_sa = None if init_image is None else self.detect_seamless(np.array(init_image) / 255)
+                depth_sa = None if depth_image is None else self.detect_seamless(np.array(depth_image.convert('RGB')) / 255)
+                if init_sa is not None and depth_sa is not None:
+                    seamless_axes = SeamlessAxes((init_sa.x and depth_sa.x, init_sa.y and depth_sa.y))
+                elif init_sa is not None:
+                    seamless_axes = init_sa
+                elif depth_sa is not None:
+                    seamless_axes = depth_sa
+            _configure_model_padding(pipe.unet, seamless_axes)
+            _configure_model_padding(pipe.vae, seamless_axes)
+
+            # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                 (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255)).convert('L')).resize(rounded_size) if depth is not None else None
-                init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
                 yield from pipe(
                     prompt=prompt,
                     depth_image=depth_image,

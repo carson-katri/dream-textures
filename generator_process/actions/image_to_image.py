@@ -1,10 +1,13 @@
 from typing import Union, Generator, Callable, List, Optional
 import os
 from contextlib import nullcontext
+
 from numpy.typing import NDArray
 import numpy as np
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
 import random
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
+from .detect_seamless import SeamlessAxes
+
 
 def image_to_image(
     self,
@@ -29,8 +32,7 @@ def image_to_image(
     use_negative_prompt: bool,
     negative_prompt: str,
     
-    seamless: bool,
-    seamless_axes: list[str],
+    seamless_axes: SeamlessAxes | str | bool | tuple[bool, bool] | None,
 
     iterations: int,
 
@@ -211,15 +213,19 @@ def image_to_image(
             if seed is None:
                 seed = random.randrange(0, np.iinfo(np.uint32).max)
             generator = generator.manual_seed(seed)
+
+            # Init Image
+            init_image = Image.fromarray(image).convert('RGB')
             
             # Seamless
-            _configure_model_padding(pipe.unet, seamless, seamless_axes)
-            _configure_model_padding(pipe.vae, seamless, seamless_axes)
+            if seamless_axes == SeamlessAxes.AUTO:
+                seamless_axes = self.detect_seamless(np.array(init_image) / 255)
+            _configure_model_padding(pipe.unet, seamless_axes)
+            _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                    init_image = Image.fromarray(image).convert('RGB')
                     yield from pipe(
                         prompt=prompt,
                         image=init_image if fit else init_image.resize((width, height)),

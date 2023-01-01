@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from .detect_seamless import SeamlessAxes
 
 

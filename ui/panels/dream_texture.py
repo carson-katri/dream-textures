@@ -345,6 +345,7 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             optimization("sequential_cpu_offload")
             optimization("cpu_only")
             # optimization("xformers_attention") # FIXME: xFormers is not yet available.
+            optimization("vae_slicing")
     yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):

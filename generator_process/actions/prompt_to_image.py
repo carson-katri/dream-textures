@@ -136,6 +136,7 @@ class Optimizations:
     channels_last_memory_format: bool = False
     # xformers_attention: bool = False # FIXME: xFormers is not yet available.
     batch_size: int = 1
+    vae_slicing: bool = True
 
     cpu_only: bool = False
 
@@ -180,6 +181,16 @@ class Optimizations:
         # FIXME: xFormers wheels are not yet available (https://github.com/facebookresearch/xformers/issues/533)
         # if self.can_use("xformers_attention", device):
         #     pipeline.enable_xformers_memory_efficient_attention()
+
+        try:
+            if self.can_use("vae_slicing", device):
+                # Not many pipelines implement the enable_vae_slicing()/disable_vae_slicing()
+                # methods but all they do is forward their call to the vae anyway.
+                pipeline.vae.enable_slicing()
+            else:
+                pipeline.vae.disable_slicing()
+        except: pass
+
         return pipeline
 
 class StepPreviewMode(enum.Enum):
@@ -211,7 +222,7 @@ class ImageGenerationResult:
             case StepPreviewMode.FAST_BATCH:
                 return ImageGenerationResult(
                     [
-                        np.asarray(Image.fromarray(approximate_decoded_latents(latents[i:i + 1])).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'),
+                        np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents[i:i + 1]))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'),
                                    dtype=np.float32) / 255.
                         for i in range(latents.size(0))
                     ],

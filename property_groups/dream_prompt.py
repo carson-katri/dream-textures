@@ -3,6 +3,8 @@ from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, St
 import os
 import sys
 from typing import _AnnotatedAlias
+
+from ..generator_process.actions.detect_seamless import SeamlessAxes
 from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode, Pipeline
 from ..generator_process.actions.huggingface_hub import ModelType
 from ..prompt_engineering import *
@@ -44,9 +46,11 @@ def inpaint_mask_sources_filtered(self, context):
     return list(filter(lambda x: x[0] in available, inpaint_mask_sources))
 
 seamless_axes = [
-    ('x', 'X', '', 1),
-    ('y', 'Y', '', 2),
-    ('xy', 'Both', '', 3),
+    SeamlessAxes.AUTO.bpy_enum('Detect from source image when modifying or inpainting, off otherwise', -1),
+    SeamlessAxes.OFF.bpy_enum('', 0),
+    SeamlessAxes.HORIZONTAL.bpy_enum('', 1),
+    SeamlessAxes.VERTICAL.bpy_enum('', 2),
+    SeamlessAxes.BOTH.bpy_enum('', 3),
 ]
 
 def modify_action_source_type(self, context):
@@ -107,8 +111,7 @@ attributes = {
     "height": IntProperty(name="Height", default=512, min=64, step=64),
 
     # Simple Options
-    "seamless": BoolProperty(name="Seamless", default=False, description="Enables seamless/tilable image generation"),
-    "seamless_axes": EnumProperty(name="Seamless Axes", items=seamless_axes, default='xy', description="Specify which axes should be seamless/tilable"),
+    "seamless_axes": EnumProperty(name="Seamless Axes", items=seamless_axes, default=SeamlessAxes.AUTO.id, description="Specify which axes should be seamless/tilable"),
 
     # Advanced
     "show_advanced": BoolProperty(name="", default=False),
@@ -238,6 +241,7 @@ def generate_args(self):
     args['pipeline'] = Pipeline[args['pipeline']]
     args['outpaint_origin'] = (args['outpaint_origin'][0], args['outpaint_origin'][1])
     args['key'] = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key
+    args['seamless_axes'] = SeamlessAxes(args['seamless_axes'])
     return args
 
 DreamPrompt.generate_prompt = generate_prompt

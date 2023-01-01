@@ -6,6 +6,7 @@ from .operators.inpaint_area_brush import InpaintAreaBrushActivated
 from .operators.upscale import Upscale
 from .operators.project import ProjectDreamTexture, dream_texture_projection_panels
 from .property_groups.dream_prompt import DreamPrompt
+from .property_groups.seamless_result import SeamlessResult
 from .ui.panels import dream_texture, history, upscaling, render_properties
 from .preferences import OpenHuggingFace, OpenContributors, StableDiffusionPreferences, OpenDreamStudio, ImportWeights, Model, ModelSearch, InstallModel, PREFERENCES_UL_ModelList
 
@@ -48,6 +49,7 @@ PREFERENCE_CLASSES = (
                       InstallModel,
                       Model,
                       DreamPrompt,
+                      SeamlessResult,
                       InstallDependencies,
                       OpenHuggingFace,
                       ImportWeights,

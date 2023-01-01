@@ -21,7 +21,7 @@ def depth_to_image(
     strength: float,
     prompt: str,
     steps: int,
-    end_step: int | None,
+    step_range: Tuple[int | None, int] | None,
     seed: int,
 
     width: int,
@@ -44,9 +44,6 @@ def depth_to_image(
             import torch
             import PIL.Image
             import PIL.ImageOps
-
-            PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(image * 255))).save('test/projected_0.png')
-            return
 
             class GeneratorPipeline(diffusers.StableDiffusionInpaintPipeline):
                 def prepare_depth(self, depth, image, dtype, device):
@@ -101,7 +98,7 @@ def depth_to_image(
                     depth = torch.cat([depth] * 2) if do_classifier_free_guidance else depth
                     return depth
 
-                def prepare_img2img_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None, image=None, timestep=None):
+                def prepare_img2img_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None, image=None, timestep=None, step_range=None):
                     shape = (batch_size, num_channels_latents, height // self.vae_scale_factor, width // self.vae_scale_factor)
                     if latents is None:
                         if device.type == "mps":
@@ -120,23 +117,31 @@ def depth_to_image(
                     if image is not None:
                         image = image.to(device=device, dtype=dtype)
                         image_latents = self.vae.encode(image).latent_dist.sample(generator=generator)
-                        image_latents = torch.nn.functional.interpolate(
-                            image_latents, size=(height // self.vae_scale_factor, width // self.vae_scale_factor)
-                        )
-                        image_latents = 0.18215 * image_latents
-                        noise = torch.randn(image_latents.shape, generator=generator, device=device, dtype=dtype)
-                        latents = self.scheduler.add_noise(image_latents, noise, timestep)
+                        # NOTE: Modified to handle `step_range`
+                        if step_range is not None and step_range[0] is not None:
+                            image_latents = 0.18215 * image_latents
+                            latents = image_latents
+                        else:
+                            image_latents = torch.nn.functional.interpolate(
+                                image_latents, size=(height // self.vae_scale_factor, width // self.vae_scale_factor)
+                            )
+                            image_latents = 0.18215 * image_latents
+                            noise = torch.randn(image_latents.shape, generator=generator, device=device, dtype=dtype)
+                            latents = self.scheduler.add_noise(image_latents, noise, timestep)
 
                     return latents
 
-
-                def get_timesteps(self, num_inference_steps, strength, device):
+                # NOTE: Modified to use a `step_range` parameter.
+                def get_timesteps(self, num_inference_steps, strength, step_range, device):
                     # get the original timestep using init_timestep
                     offset = self.scheduler.config.get("steps_offset", 0)
-                    init_timestep = int(num_inference_steps * strength) + offset
-                    init_timestep = min(init_timestep, num_inference_steps)
+                    if step_range is not None and step_range[0] is not None:
+                        t_start = step_range[0]
+                    else:
+                        init_timestep = int(num_inference_steps * strength) + offset
+                        init_timestep = min(init_timestep, num_inference_steps)
 
-                    t_start = max(num_inference_steps - init_timestep + offset, 0)
+                        t_start = max(num_inference_steps - init_timestep + offset, 0)
                     timesteps = self.scheduler.timesteps[t_start:]
 
                     return timesteps, num_inference_steps - t_start
@@ -194,7 +199,7 @@ def depth_to_image(
                     self.scheduler.set_timesteps(num_inference_steps, device=device)
                     timesteps = self.scheduler.timesteps
                     if image is not None:
-                        timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, strength, device)
+                        timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, strength, kwargs['step_range'], device)
 
                     # 6. Prepare latent variables
                     num_channels_latents = self.vae.config.latent_channels
@@ -210,7 +215,8 @@ def depth_to_image(
                             generator,
                             latents,
                             image,
-                            latent_timestep
+                            latent_timestep,
+                            kwargs['step_range']
                         )
                     else:
                         latents = self.prepare_latents(
@@ -249,7 +255,8 @@ def depth_to_image(
                     # 10. Denoising loop
                     num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
                     with self.progress_bar(total=num_inference_steps) as progress_bar:
-                        for i, t in enumerate(timesteps[:end_step]):
+                        # NOTE: Modified to use a `step_range` parameter.
+                        for i, t in enumerate(timesteps[:kwargs['step_range'][1] if kwargs['step_range'] is not None else None]):
                             # expand the latents if we are doing classifier free guidance
                             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
 
@@ -371,6 +378,8 @@ def depth_to_image(
                 (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                 depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255)).convert('L')).resize(rounded_size) if depth is not None else None
                 init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
+                if image is not None:
+                    print(image)
                 yield from pipe(
                     prompt=prompt,
                     depth_image=depth_image,
@@ -389,7 +398,8 @@ def depth_to_image(
                     return_dict=True,
                     callback=None,
                     callback_steps=1,
-                    step_preview_mode=step_preview_mode
+                    step_preview_mode=step_preview_mode,
+                    step_range=step_range
                 )
         case Pipeline.STABILITY_SDK:
             import stability_sdk

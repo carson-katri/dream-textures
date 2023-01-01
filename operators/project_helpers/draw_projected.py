@@ -2,6 +2,7 @@ import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
 import numpy as np
+from numpy.typing import NDArray
 
 def projected_shader():
     vert_out = gpu.types.GPUStageInterfaceInfo("my_interface")
@@ -45,7 +46,8 @@ def draw_projected_map(context, matrix, projection_matrix, target_matrix, target
     width, height = image.shape[:2]
     offscreen = gpu.types.GPUOffScreen(width, height)
 
-    buffer = gpu.types.Buffer('FLOAT', width * height * 4, np.flipud(np.float32(image) / 255).ravel())
+    # buffer = gpu.types.Buffer('FLOAT', width * height * 4, np.interp(image, [image.min(), image.max()], [0, 1]).ravel())
+    buffer = gpu.types.Buffer('FLOAT', width * height * 4, image.ravel())
     texture = gpu.types.GPUTexture(size=(width, height), data=buffer, format='RGBA16F')
 
     with offscreen.bind():
@@ -87,5 +89,21 @@ def draw_projected_map(context, matrix, projection_matrix, target_matrix, target
                 shader.uniform_sampler("image", texture)
                 batch.draw(shader)
         projected = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
+        # projected = np.interp(projected, [projected.min(), projected.max()], [image.min(), image.max()])
     offscreen.free()
     return projected
+
+def blend_projections(
+    a: NDArray,
+    projected_b: NDArray,
+    projected_facing_b: NDArray
+):
+    # projected_b *= 255
+    # projected_b = projected_b.clip(0,1)
+    # projected_facing_b *= 255
+    # projected_facing_b = projected_facing_b.clip(0,1)
+    projected_facing_b_r = projected_facing_b[:, :, 0]
+    projected_facing_b = np.stack((projected_facing_b_r, projected_facing_b_r, projected_facing_b_r, projected_facing_b_r), axis=-1)
+    projected_facing_b[projected_facing_b < 0.5] = 0
+
+    return ((1 - projected_facing_b) * a) + (projected_facing_b * projected_b)

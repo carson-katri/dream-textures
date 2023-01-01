@@ -119,71 +119,35 @@ def dream_texture_projection_panels():
         return ActionsPanel
     yield create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, actions_panel, get_prompt)
 
-def draw(context, init_img_path, image_texture_node, material, cleanup):
-    try:
-        context.scene.dream_textures_info = "Rendering viewport depth..."
-        framebuffer = gpu.state.active_framebuffer_get()
-        viewport = gpu.state.viewport_get()
-        width, height = viewport[2], viewport[3]
-        depth = np.array(framebuffer.read_depth(0, 0, width, height).to_list())
+def draw_depth_map(width, height, context, matrix, projection_matrix):
+    """
+    Generate a depth map for the given matrices.
+    """
+    offscreen = gpu.types.GPUOffScreen(width, height)
 
+    with offscreen.bind():
+        fb = gpu.state.active_framebuffer_get()
+        fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+        gpu.state.depth_test_set('LESS_EQUAL')
+        gpu.state.depth_mask_set(True)
+        with gpu.matrix.push_pop():
+            gpu.matrix.load_matrix(matrix)
+            gpu.matrix.load_projection_matrix(projection_matrix)
+
+            offscreen.draw_view3d(
+                context.scene,
+                context.view_layer,
+                context.space_data,
+                context.region,
+                matrix,
+                projection_matrix,
+                do_color_management=False
+            )
+        depth = np.array(fb.read_depth(0, 0, width, height).to_list())
         depth = 1 - depth
         depth = np.interp(depth, [np.ma.masked_equal(depth, 0, copy=False).min(), depth.max()], [0, 1]).clip(0, 1)
-
-        gen = Generator.shared()
-        
-        texture = None
-
-        def on_response(_, response):
-            nonlocal texture
-            if response.final:
-                return
-            context.scene.dream_textures_progress = response.step
-            if texture is None:
-                texture = bpy.data.images.new(name="Step", width=response.image.shape[1], height=response.image.shape[0])
-            texture.name = f"Step {response.step}/{context.scene.dream_textures_project_prompt.steps}"
-            texture.pixels[:] = response.image.ravel()
-            texture.update()
-            image_texture_node.image = texture
-
-        def on_done(future):
-            nonlocal texture
-            if hasattr(gen, '_active_generation_future'):
-                del gen._active_generation_future
-            context.scene.dream_textures_info = ""
-            context.scene.dream_textures_progress = 0
-            generated = future.result()
-            if isinstance(generated, list):
-                generated = generated[-1]
-            if texture is None:
-                texture = bpy.data.images.new(name=str(generated.seed), width=generated.image.shape[1], height=generated.image.shape[0])
-            texture.name = str(generated.seed)
-            material.name = str(generated.seed)
-            texture.pixels[:] = generated.image.ravel()
-            texture.update()
-            image_texture_node.image = texture
-        
-        def on_exception(_, exception):
-            context.scene.dream_textures_info = ""
-            context.scene.dream_textures_progress = 0
-            if hasattr(gen, '_active_generation_future'):
-                del gen._active_generation_future
-            raise exception
-        
-        context.scene.dream_textures_info = "Starting..."
-        future = gen.depth_to_image(
-            depth=depth,
-            image=init_img_path,
-            **context.scene.dream_textures_project_prompt.generate_args()
-        )
-        gen._active_generation_future = future
-        future.call_done_on_exception = False
-        future.add_response_callback(on_response)
-        future.add_done_callback(on_done)
-        future.add_exception_callback(on_exception)
-
-    finally:
-        cleanup()
+    offscreen.free()
+    return depth
 
 class ProjectDreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture_project"
@@ -214,6 +178,17 @@ class ProjectDreamTexture(bpy.types.Operator):
             return None
         bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=context.scene.dream_textures_project_prompt.steps, update=step_progress_update)
         context.scene.dream_textures_info = "Starting..."
+
+        # Get region size
+        region_width = region_height = None
+        for area in context.screen.areas:
+            if area.type == 'VIEW_3D':
+                for region in area.regions:
+                    if region.type == 'WINDOW':
+                        region_width, region_height = region.width, region.height
+
+        if region_width is None or region_height is None:
+            self.report({'ERROR'}, "Could not determine region size.")
 
         # Render the viewport
         if context.scene.dream_textures_project_framebuffer_arguments == 'color':
@@ -277,20 +252,61 @@ class ProjectDreamTexture(bpy.types.Operator):
                     face.material_index = material_index
             bmesh.update_edit_mesh(obj.data)
 
-        context.scene.dream_textures_info = "Requesting redraw..."
-        handle = None
-        handle = bpy.types.SpaceView3D.draw_handler_add(
-            draw,
-            (
-                context,
-                init_img_path,
-                image_texture_node,
-                material,
-                lambda: bpy.types.SpaceView3D.draw_handler_remove(handle, 'WINDOW'),
-            ),
-            'WINDOW',
-            'POST_VIEW'
+        context.scene.dream_textures_info = "Rendering viewport depth..."
+
+        depth = draw_depth_map(region_width, region_height, context, context.space_data.region_3d.view_matrix, context.space_data.region_3d.window_matrix)
+        
+        gen = Generator.shared()
+        
+        texture = None
+
+        def on_response(_, response):
+            nonlocal texture
+            if response.final:
+                return
+            context.scene.dream_textures_progress = response.step
+            if texture is None:
+                texture = bpy.data.images.new(name="Step", width=response.image.shape[1], height=response.image.shape[0])
+            texture.name = f"Step {response.step}/{context.scene.dream_textures_project_prompt.steps}"
+            texture.pixels[:] = response.image.ravel()
+            texture.update()
+            image_texture_node.image = texture
+
+        def on_done(future):
+            nonlocal texture
+            if hasattr(gen, '_active_generation_future'):
+                del gen._active_generation_future
+            context.scene.dream_textures_info = ""
+            context.scene.dream_textures_progress = 0
+            generated = future.result()
+            if isinstance(generated, list):
+                generated = generated[-1]
+            if texture is None:
+                texture = bpy.data.images.new(name=str(generated.seed), width=generated.image.shape[1], height=generated.image.shape[0])
+            texture.name = str(generated.seed)
+            material.name = str(generated.seed)
+            texture.pixels[:] = generated.image.ravel()
+            texture.update()
+            image_texture_node.image = texture
+        
+        def on_exception(_, exception):
+            context.scene.dream_textures_info = ""
+            context.scene.dream_textures_progress = 0
+            if hasattr(gen, '_active_generation_future'):
+                del gen._active_generation_future
+            raise exception
+        
+        context.scene.dream_textures_info = "Starting..."
+        future = gen.depth_to_image(
+            depth=depth,
+            image=init_img_path,
+            **context.scene.dream_textures_project_prompt.generate_args()
         )
+        gen._active_generation_future = future
+        future.call_done_on_exception = False
+        future.add_response_callback(on_response)
+        future.add_done_callback(on_done)
+        future.add_exception_callback(on_exception)
 
         for area in context.screen.areas:
             if area.type == 'VIEW_3D':

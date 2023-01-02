@@ -236,28 +236,6 @@ class ProjectDreamTexture(bpy.types.Operator):
         return mesh.loops.layers.uv.new("Projected UVs"), len(mesh.loops.layers.uv) - 1
 
     def execute(self, context):
-        # texture = bpy.data.images["3974651707"]
-        # for obj in bpy.context.selected_objects:
-        #     dest = bpy.data.images.new(name=f"{texture.name} (Baked)", width=texture.size[0], height=texture.size[1])
-            
-        #     bm = bmesh.new()
-        #     bm.from_mesh(obj.data.copy())
-        #     bmesh.ops.split_edges(bm, edges=bm.edges)
-        #     bmesh.ops.delete(bm, geom=[f for f in bm.faces if not f.select], context='FACES')
-            
-        #     src_uv_layer = bm.loops.layers.uv[1]
-        #     dest_uv_layer = bm.loops.layers.uv.active
-        #     src_uvs = np.empty((len(bm.verts), 2), dtype=np.float32)
-        #     dest_uvs = np.empty((len(bm.verts), 2), dtype=np.float32)
-        #     for face in bm.faces:
-        #         for loop in face.loops:
-        #             # Store the UV coordinates of the vertex in the array
-        #             src_uvs[loop.vert.index] = loop[src_uv_layer].uv
-        #             dest_uvs[loop.vert.index] = loop[dest_uv_layer].uv
-        #     bake(context, bm, texture, dest, src_uvs, dest_uvs)
-        #     dest.update()
-        # return {'FINISHED'}
-
         # Setup the progress indicator
         def step_progress_update(self, context):
             if hasattr(context.area, "regions"):

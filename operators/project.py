@@ -214,6 +214,7 @@ def bake(context, src, dest, src_uv, dest_uv):
                 bm = bmesh.new()
                 bm.from_mesh(mesh)
                 bmesh.ops.split_edges(bm, edges=bm.edges)
+                bmesh.ops.delete(bm, geom=[f for f in bm.faces if not f.select], context='FACES')
                 bm.to_mesh(mesh)
                 bm.clear()
                 mesh.calc_loop_triangles()
@@ -381,6 +382,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                     
                     bm = bmesh.from_edit_mesh(obj.data)
                     bmesh.ops.split_edges(bm, edges=bm.edges)
+                    bmesh.ops.delete(bm, geom=[f for f in bm.faces if not f.select], context='FACES')
                     src_uv_layer = projected_uv_layers[obj]
                     dest_uv_layer = bm.loops.layers.uv.active
                     src_uvs = np.empty((len(bm.verts), 2), dtype=np.float32)

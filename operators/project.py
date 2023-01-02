@@ -203,9 +203,6 @@ void main()
 
             vertices = np.array([[l.vert.index for l in loop] for loop in mesh.calc_loop_triangles()], dtype='i')
 
-            # vertices = np.empty((len(mesh.loop_triangles), 3), 'i')
-            # mesh.loop_triangles.foreach_get("vertices", vertices.ravel())
-
             shader = bake_shader()
             batch = batch_for_shader(
                 shader, 'TRIS',
@@ -293,7 +290,7 @@ class ProjectDreamTexture(bpy.types.Operator):
         image_texture_node = material.node_tree.nodes.new("ShaderNodeTexImage")
         material.node_tree.links.new(image_texture_node.outputs[0], material.node_tree.nodes['Principled BSDF'].inputs[0])
         uv_map_node = material.node_tree.nodes.new("ShaderNodeUVMap")
-        uv_map_node.uv_map = "Projected UVs"
+        uv_map_node.uv_map = bpy.context.selected_objects[0].data.uv_layers.active.name if context.scene.dream_textures_project_bake else "Projected UVs"
         material.node_tree.links.new(uv_map_node.outputs[0], image_texture_node.inputs[0])
         projected_uv_layers = {}
         cached_meshes = {}
@@ -349,7 +346,6 @@ class ProjectDreamTexture(bpy.types.Operator):
             texture.name = f"Step {response.step}/{context.scene.dream_textures_project_prompt.steps}"
             texture.pixels[:] = response.image.ravel()
             texture.update()
-            texture.pack()
             image_texture_node.image = texture
 
         def on_done(future):
@@ -367,10 +363,11 @@ class ProjectDreamTexture(bpy.types.Operator):
             material.name = str(generated.seed)
             texture.pixels[:] = generated.image.ravel()
             texture.update()
+            texture.pack()
             image_texture_node.image = texture
             if context.scene.dream_textures_project_bake:
                 for obj in bpy.context.selected_objects:
-                    dest = bpy.data.images.new(name="Baked Result", width=texture.size[0], height=texture.size[1])
+                    dest = bpy.data.images.new(name=f"{texture.name} (Baked)", width=texture.size[0], height=texture.size[1])
                     
                     bm = cached_meshes[obj]
                     
@@ -384,8 +381,9 @@ class ProjectDreamTexture(bpy.types.Operator):
                             src_uvs[loop.vert.index] = loop[src_uv_layer].uv
                             dest_uvs[loop.vert.index] = loop[dest_uv_layer].uv
                     bake(context, bm, texture, dest, src_uvs, dest_uvs)
-                    dest.pack()
                     dest.update()
+                    dest.pack()
+                    image_texture_node.image = dest
         
         def on_exception(_, exception):
             context.scene.dream_textures_info = ""

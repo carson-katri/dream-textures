@@ -112,8 +112,8 @@ def dream_texture_projection_panels():
                     else:
                         r = row.row()
                         r.operator(ProjectDreamTexture.bl_idname, icon="MOD_UVPROJECT")
-                        r.enabled = Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth() and context.object.mode == 'EDIT'
-                        if context.object.mode != 'EDIT':
+                        r.enabled = Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth() and context.object is not None and context.object.mode == 'EDIT'
+                        if context.object is not None and context.object.mode != 'EDIT':
                             box = layout.box()
                             box.label(text="Enter Edit Mode", icon="ERROR")
                             box.label(text="In edit mode, select the faces to project onto.")
@@ -190,7 +190,8 @@ void main()
     width, height = dest.size[0], dest.size[1]
     offscreen = gpu.types.GPUOffScreen(width, height)
 
-    texture = gpu.texture.from_image(src)
+    buffer = gpu.types.Buffer('FLOAT', width * height * 4, src)
+    texture = gpu.types.GPUTexture(size=(width, height), data=buffer, format='RGBA16F')
 
     with offscreen.bind():
         fb = gpu.state.active_framebuffer_get()
@@ -235,6 +236,28 @@ class ProjectDreamTexture(bpy.types.Operator):
         return mesh.loops.layers.uv.new("Projected UVs"), len(mesh.loops.layers.uv) - 1
 
     def execute(self, context):
+        # texture = bpy.data.images["3974651707"]
+        # for obj in bpy.context.selected_objects:
+        #     dest = bpy.data.images.new(name=f"{texture.name} (Baked)", width=texture.size[0], height=texture.size[1])
+            
+        #     bm = bmesh.new()
+        #     bm.from_mesh(obj.data.copy())
+        #     bmesh.ops.split_edges(bm, edges=bm.edges)
+        #     bmesh.ops.delete(bm, geom=[f for f in bm.faces if not f.select], context='FACES')
+            
+        #     src_uv_layer = bm.loops.layers.uv[1]
+        #     dest_uv_layer = bm.loops.layers.uv.active
+        #     src_uvs = np.empty((len(bm.verts), 2), dtype=np.float32)
+        #     dest_uvs = np.empty((len(bm.verts), 2), dtype=np.float32)
+        #     for face in bm.faces:
+        #         for loop in face.loops:
+        #             # Store the UV coordinates of the vertex in the array
+        #             src_uvs[loop.vert.index] = loop[src_uv_layer].uv
+        #             dest_uvs[loop.vert.index] = loop[dest_uv_layer].uv
+        #     bake(context, bm, texture, dest, src_uvs, dest_uvs)
+        #     dest.update()
+        # return {'FINISHED'}
+
         # Setup the progress indicator
         def step_progress_update(self, context):
             if hasattr(context.area, "regions"):
@@ -292,8 +315,7 @@ class ProjectDreamTexture(bpy.types.Operator):
         uv_map_node = material.node_tree.nodes.new("ShaderNodeUVMap")
         uv_map_node.uv_map = bpy.context.selected_objects[0].data.uv_layers.active.name if context.scene.dream_textures_project_bake else "Projected UVs"
         material.node_tree.links.new(uv_map_node.outputs[0], image_texture_node.inputs[0])
-        projected_uv_layers = {}
-        cached_meshes = {}
+        target_objects = []
         for obj in bpy.context.selected_objects:
             if not hasattr(obj, "data") or not hasattr(obj.data, "materials"):
                 continue
@@ -313,9 +335,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             bm = mesh.copy()
             bmesh.ops.split_edges(bm, edges=bm.edges)
             bmesh.ops.delete(bm, geom=[f for f in bm.faces if not f.select], context='FACES')
-            cached_meshes[obj] = bm
-
-            projected_uv_layers[obj] = bm.loops.layers.uv[uv_layer_index]
+            target_objects.append((bm, bm.loops.layers.uv[uv_layer_index]))
 
             mesh.faces.ensure_lookup_table()
             for face in mesh.faces:
@@ -366,21 +386,17 @@ class ProjectDreamTexture(bpy.types.Operator):
             texture.pack()
             image_texture_node.image = texture
             if context.scene.dream_textures_project_bake:
-                for obj in bpy.context.selected_objects:
+                for bm, src_uv_layer in target_objects:
                     dest = bpy.data.images.new(name=f"{texture.name} (Baked)", width=texture.size[0], height=texture.size[1])
                     
-                    bm = cached_meshes[obj]
-                    
-                    src_uv_layer = projected_uv_layers[obj]
                     dest_uv_layer = bm.loops.layers.uv.active
                     src_uvs = np.empty((len(bm.verts), 2), dtype=np.float32)
                     dest_uvs = np.empty((len(bm.verts), 2), dtype=np.float32)
                     for face in bm.faces:
                         for loop in face.loops:
-                            # Store the UV coordinates of the vertex in the array
                             src_uvs[loop.vert.index] = loop[src_uv_layer].uv
                             dest_uvs[loop.vert.index] = loop[dest_uv_layer].uv
-                    bake(context, bm, texture, dest, src_uvs, dest_uvs)
+                    bake(context, bm, generated.image.ravel(), dest, src_uvs, dest_uvs)
                     dest.update()
                     dest.pack()
                     image_texture_node.image = dest

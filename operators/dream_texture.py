@@ -1,6 +1,7 @@
 import bpy
 import hashlib
 import numpy as np
+import math
 
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
@@ -45,6 +46,7 @@ class DreamTexture(bpy.types.Operator):
             history_template["prompt_structure"] = custom_structure.id
 
         node_tree = context.material.node_tree if hasattr(context, 'material') and hasattr(context.material, 'node_tree') else None
+        node_tree_center = np.array(node_tree.view_center) if node_tree is not None else None
         screen = context.screen
         scene = context.scene
 
@@ -94,6 +96,7 @@ class DreamTexture(bpy.types.Operator):
 
         iteration = 0
         iteration_limit = len(file_batch_lines) if is_file_batch else generated_args['iterations']
+        iteration_square = math.ceil(math.sqrt(iteration_limit))
         def done_callback(future):
             nonlocal last_data_block
             nonlocal iteration
@@ -108,6 +111,7 @@ class DreamTexture(bpy.types.Operator):
                     nodes = node_tree.nodes
                     texture_node = nodes.new("ShaderNodeTexImage")
                     texture_node.image = image
+                    texture_node.location = node_tree_center + ((iteration % iteration_square) * 260, -(iteration // iteration_square) * 297)
                     nodes.active = texture_node
                 for area in screen.areas:
                     if area.type == 'IMAGE_EDITOR':

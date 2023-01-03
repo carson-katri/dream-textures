@@ -5,6 +5,7 @@ from numpy.typing import NDArray
 import numpy as np
 import random
 from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, approximate_decoded_latents, _configure_model_padding
+from .detect_seamless import SeamlessAxes
 
 def inpaint(
     self,
@@ -29,8 +30,7 @@ def inpaint(
     use_negative_prompt: bool,
     negative_prompt: str,
     
-    seamless: bool,
-    seamless_axes: list[str],
+    seamless_axes: SeamlessAxes | str | bool | tuple[bool, bool] | None,
 
     iterations: int,
 
@@ -247,15 +247,19 @@ def inpaint(
             if seed is None:
                 seed = random.randrange(0, np.iinfo(np.uint32).max)
             generator = generator.manual_seed(seed)
+
+            # Init Image
+            init_image = Image.fromarray(image)
             
             # Seamless
-            _configure_model_padding(pipe.unet, seamless, seamless_axes)
-            _configure_model_padding(pipe.vae, seamless, seamless_axes)
+            if seamless_axes == SeamlessAxes.AUTO:
+                seamless_axes = self.detect_seamless(np.array(init_image) / 255)
+            _configure_model_padding(pipe.unet, seamless_axes)
+            _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                    init_image = Image.fromarray(image)
                     yield from pipe(
                         prompt=prompt,
                         image=init_image.convert('RGB'),

@@ -15,5 +15,3 @@ scipy # LMSDiscreteScheduler
 stability-sdk # DreamStudio
 
 opencolorio==2.1.2 # color management
-
-tiler # Upscaler tiling

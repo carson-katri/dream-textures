@@ -272,6 +272,7 @@ def draw_facing_map(width, height, context, matrix, projection_matrix):
     with offscreen.bind():
         fb = gpu.state.active_framebuffer_get()
         fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+        depth_test_setting = gpu.state.depth_test_get()
         gpu.state.depth_test_set('LESS_EQUAL')
         gpu.state.depth_mask_set(True)
         with gpu.matrix.push_pop():
@@ -306,6 +307,7 @@ def draw_facing_map(width, height, context, matrix, projection_matrix):
                 )
                 batch.draw(shader)
         facing = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
+        gpu.state.depth_test_set(depth_test_setting)
     offscreen.free()
     return facing
 
@@ -588,6 +590,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                 projected_maps.append(res)
             prev_projected_maps.clear()
             # Blend each perspective together.
+            print("Blending perspectives")
             for i, perspective in enumerate(context.scene.dream_textures_project_perspectives):
                 for j, perspective_b in enumerate(context.scene.dream_textures_project_perspectives):
                     if i == j:
@@ -633,5 +636,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                 texture.pixels[:] = map.ravel()
                 texture.update()
             image_texture_node.image = texture
+
+        print("Finished generating")
 
         return {'FINISHED'}

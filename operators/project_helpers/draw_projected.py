@@ -53,6 +53,7 @@ def draw_projected_map(context, matrix, projection_matrix, target_matrix, target
     with offscreen.bind():
         fb = gpu.state.active_framebuffer_get()
         fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+        depth_test_setting = gpu.state.depth_test_get()
         gpu.state.depth_test_set('LESS_EQUAL')
         gpu.state.depth_mask_set(True)
         with gpu.matrix.push_pop():
@@ -90,6 +91,7 @@ def draw_projected_map(context, matrix, projection_matrix, target_matrix, target
                 batch.draw(shader)
         projected = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
         # projected = np.interp(projected, [projected.min(), projected.max()], [image.min(), image.max()])
+        gpu.state.depth_test_set(depth_test_setting)
     offscreen.free()
     return projected
 

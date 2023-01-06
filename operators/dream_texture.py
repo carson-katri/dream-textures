@@ -149,7 +149,8 @@ class DreamTexture(bpy.types.Operator):
         def generate_next():
             batch_size = min(generated_args["optimizations"].batch_size, iteration_limit-iteration)
             if generated_args['pipeline'] == Pipeline.STABILITY_SDK:
-                # Stability SDK can handle batch requests, but needs more work on the backend to be usable.
+                # Stability SDK is able to accept a list of prompts, but I can
+                # only ever get it to generate multiple of the first one.
                 batch_size = 1
             if is_file_batch:
                 generated_args["prompt"] = file_batch_lines[iteration: iteration+batch_size]

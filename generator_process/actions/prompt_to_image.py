@@ -1,3 +1,4 @@
+import functools
 from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional
 import enum
 import os
@@ -8,6 +9,7 @@ from numpy.typing import NDArray
 import numpy as np
 import random
 from .detect_seamless import SeamlessAxes
+from ...absolute_path import absolute_path
 
 
 class Pipeline(enum.IntEnum):
@@ -17,8 +19,11 @@ class Pipeline(enum.IntEnum):
 
     @staticmethod
     def local_available():
-        from ...absolute_path import absolute_path
         return os.path.exists(absolute_path(".python_dependencies/diffusers"))
+
+    @staticmethod
+    def directml_available():
+        return os.path.exists(absolute_path(".python_dependencies/torch_directml"))
 
     def __str__(self):
         return self.name
@@ -123,6 +128,8 @@ class Scheduler(enum.Enum):
             case _:
                 raise ValueError(f"{self} cannot be used with DreamStudio.")
 
+dml_patches: Optional[List] = None
+
 @dataclass(eq=True)
 class Optimizations:
     attention_slicing: bool = True
@@ -164,8 +171,18 @@ class Optimizations:
         except: pass
         
         try:
-            if self.can_use("sequential_cpu_offload", device):
-                pipeline.enable_sequential_cpu_offload()
+            if self.can_use("sequential_cpu_offload", device) and device in ["cuda", "privateuseone"]:
+                # Doesn't allow for selecting execution device
+                # pipeline.enable_sequential_cpu_offload()
+
+                from accelerate import cpu_offload
+
+                for cpu_offloaded_model in [pipeline.unet, pipeline.text_encoder, pipeline.vae]:
+                    if cpu_offloaded_model is not None:
+                        cpu_offload(cpu_offloaded_model, device)
+
+                if pipeline.safety_checker is not None:
+                    cpu_offload(pipeline.safety_checker.vision_model, device)
         except: pass
         
         try:
@@ -178,6 +195,64 @@ class Optimizations:
         # FIXME: xFormers wheels are not yet available (https://github.com/facebookresearch/xformers/issues/533)
         # if self.can_use("xformers_attention", device):
         #     pipeline.enable_xformers_memory_efficient_attention()
+
+        global dml_patches
+        if device == "privateuseone" and dml_patches is None:
+            dml_patches = []
+            def dml_patch(object, name, patched):
+                original = getattr(object, name)
+                setattr(object, name, functools.partial(patched, pre_patch=original))
+                dml_patches.append({"object": object, "name": name, "original": original})
+
+            def dml_patch_method(object, name, patched):
+                original = getattr(object, name)
+                setattr(object, name, functools.partialmethod(patched, pre_patch=original))
+                dml_patches.append({"object": object, "name": name, "original": original})
+
+            def group_norm(input, num_groups, weight, bias, eps, affine, *, pre_patch):
+                return pre_patch(input.to('cpu'), num_groups, weight.to('cpu'), bias.to('cpu'), eps, affine).to(input.device)
+            dml_patch(torch, "group_norm", group_norm)
+
+            def tensor_offload(self, other, *, pre_patch):
+                """Fix for operations usually involving float64 values"""
+                try:
+                    return pre_patch(self, other)
+                except RuntimeError:
+                    device = self.device
+                    self = self.to("cpu")
+                    if torch.is_tensor(other):
+                        other = other.to("cpu")
+                    return pre_patch(self, other).to(device)
+
+            # Not all places where the patches have an effect are listed.
+
+            # LMSDiscreteScheduler.scale_model_input()
+            dml_patch_method(torch.Tensor, "__eq__", tensor_offload)
+            # LMSDiscreteScheduler.step()
+            dml_patch_method(torch.Tensor, "__rsub__", tensor_offload)
+
+            def tensor_ensure_device(self, other, *, pre_patch):
+                """Fix for operations where one tensor is DML and the other is CPU"""
+                try:
+                    return pre_patch(self, other)
+                except RuntimeError:
+                    if torch.is_tensor(other) and self.device != other.device:
+                        if self.device.type != "cpu":
+                            other = other.to(self.device)
+                        else:
+                            self = self.to(other.device)
+                        return pre_patch(self, other)
+                    raise
+
+            # PNDMScheduler.step()
+            dml_patch_method(torch.Tensor, "__mul__", tensor_ensure_device)
+            # PNDMScheduler.step()
+            dml_patch_method(torch.Tensor, "__sub__", tensor_ensure_device)
+        elif device != "privateuseone" and dml_patches is not None:
+            for patch in dml_patches:
+                setattr(patch["object"], patch["name"], patch["original"])
+            dml_patches = None
+
         return pipeline
 
 class StepPreviewMode(enum.Enum):
@@ -201,8 +276,12 @@ def choose_device(self) -> str:
         return "cuda"
     elif torch.backends.mps.is_available():
         return "mps"
-    else:
-        return "cpu"
+    if Pipeline.directml_available():
+        import torch_directml
+        if torch_directml.is_available():
+            # can be named better when torch.utils.rename_privateuse1_backend() is released
+            return "privateuseone"
+    return "cpu"
 
 def approximate_decoded_latents(latents):
     """
@@ -415,7 +494,8 @@ def prompt_to_image(
                     revision="fp16" if optimizations.can_use("half_precision", device) else None,
                     torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
                 )
-                pipe = pipe.to(device)
+                if not use_cpu_offload:
+                    pipe = pipe.to(device)
                 setattr(self, "_cached_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
 
             # Scheduler
@@ -429,7 +509,7 @@ def prompt_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+            generator = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
             if seed is None:
                 seed = random.randrange(0, np.iinfo(np.uint32).max)
             generator = generator.manual_seed(seed)
@@ -439,7 +519,7 @@ def prompt_to_image(
             _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if device != 'mps' else nullcontext()), \
+            with (torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext()), \
                 (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     yield from pipe(
                         prompt=prompt,

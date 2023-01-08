@@ -229,7 +229,8 @@ def inpaint(
                     revision="fp16" if optimizations.can_use("half_precision", device) else None,
                     torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
                 )
-                pipe = pipe.to(device)
+                if not use_cpu_offload:
+                    pipe = pipe.to(device)
                 setattr(self, "_cached_img2img_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
 
             # Scheduler
@@ -243,7 +244,7 @@ def inpaint(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+            generator = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
             if seed is None:
                 seed = random.randrange(0, np.iinfo(np.uint32).max)
             generator = generator.manual_seed(seed)
@@ -258,7 +259,7 @@ def inpaint(
             _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if device != 'mps' else nullcontext()), \
+            with (torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     yield from pipe(
                         prompt=prompt,

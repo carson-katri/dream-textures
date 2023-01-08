@@ -162,10 +162,11 @@ def upscale(
         torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32
     )
     pipe.scheduler = scheduler.create(pipe, None)
-    pipe = pipe.to(device)
+    if not optimizations.sequential_cpu_offload:
+        pipe = pipe.to(device)
     pipe = optimizations.apply(pipe, device)
 
-    generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+    generator = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
     if seed is None:
         seed = random.randrange(0, np.iinfo(np.uint32).max)
 

@@ -248,6 +248,8 @@ class Optimizations:
             dml_patch_method(torch.Tensor, "__mul__", tensor_ensure_device)
             # PNDMScheduler.step()
             dml_patch_method(torch.Tensor, "__sub__", tensor_ensure_device)
+            # DDIMScheduler.step() last timestep in image_to_image
+            dml_patch_method(torch.Tensor, "__truediv__", tensor_ensure_device)
         elif device != "privateuseone" and dml_patches is not None:
             for patch in dml_patches:
                 setattr(patch["object"], patch["name"], patch["original"])

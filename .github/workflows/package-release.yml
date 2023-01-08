@@ -73,7 +73,7 @@ jobs:
         uses: thedoctor0/zip-release@main
         with:
           type: zip
-          filename: dream_textures-windows-dml.zip
+          filename: dream_textures-windows-directml.zip
           exclusions: '*.git*'
       - name: Archive and upload artifact
         uses: actions/upload-artifact@v3

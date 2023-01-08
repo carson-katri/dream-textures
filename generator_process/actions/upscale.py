@@ -158,8 +158,8 @@ def upscale(
 
     pipe = diffusers.StableDiffusionUpscalePipeline.from_pretrained(
         "stabilityai/stable-diffusion-x4-upscaler",
-        revision="fp16" if optimizations.can_use("half_precision", device) else None,
-        torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32
+        revision="fp16" if optimizations.can_use_half(device) else None,
+        torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32
     )
     pipe.scheduler = scheduler.create(pipe, None)
     pipe = pipe.to(device)

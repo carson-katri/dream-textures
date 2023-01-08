@@ -180,12 +180,12 @@ def image_to_image(
             if hasattr(self, "_cached_img2img_pipe") and self._cached_img2img_pipe[1] == model and use_cpu_offload == self._cached_img2img_pipe[2]:
                 pipe = self._cached_img2img_pipe[0]
             else:
-                revision = "fp16" if optimizations.can_use("half_precision", device) else None
+                revision = "fp16" if optimizations.can_use_half(device) else None
                 snapshot_folder = model_snapshot_folder(model, revision)
                 pipe = GeneratorPipeline.from_pretrained(
                     snapshot_folder,
                     revision=revision,
-                    torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
+                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
                 )
                 pipe = pipe.to(device)
                 setattr(self, "_cached_img2img_pipe", (pipe, model, use_cpu_offload, snapshot_folder))

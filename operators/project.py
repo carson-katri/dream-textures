@@ -196,8 +196,6 @@ void main()
     with offscreen.bind():
         fb = gpu.state.active_framebuffer_get()
         fb.clear(color=(0.0, 0.0, 0.0, 0.0))
-        gpu.state.depth_test_set('LESS_EQUAL')
-        gpu.state.depth_mask_set(True)
         with gpu.matrix.push_pop():
             gpu.matrix.load_matrix(mathutils.Matrix.Identity(4))
             gpu.matrix.load_projection_matrix(mathutils.Matrix.Identity(4))

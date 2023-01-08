@@ -3,9 +3,12 @@ import enum
 import os
 from dataclasses import dataclass
 from contextlib import nullcontext
+
 from numpy.typing import NDArray
 import numpy as np
 import random
+from .detect_seamless import SeamlessAxes
+
 
 class Pipeline(enum.IntEnum):
     STABLE_DIFFUSION = 0
@@ -141,6 +144,13 @@ class Optimizations:
             annotation: _AnnotatedAlias = self.__annotations__[property]
             return annotation.__metadata__[0] == device
         return True
+
+    def can_use_half(self, device):
+        if self.half_precision and device == "cuda":
+            import torch
+            name = torch.cuda.get_device_name()
+            return not ("GTX 1650" in name or "GTX 1660" in name)
+        return False
     
     def apply(self, pipeline, device):
         """
@@ -246,8 +256,7 @@ def prompt_to_image(
     use_negative_prompt: bool,
     negative_prompt: str,
     
-    seamless: bool,
-    seamless_axes: list[str],
+    seamless_axes: SeamlessAxes | str | bool | tuple[bool, bool] | None,
 
     iterations: int,
 
@@ -410,8 +419,8 @@ def prompt_to_image(
                     snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
                 pipe = GeneratorPipeline.from_pretrained(
                     snapshot_folder,
-                    revision="fp16" if optimizations.can_use("half_precision", device) else None,
-                    torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
+                    revision="fp16" if optimizations.can_use_half(device) else None,
+                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
                 )
                 pipe = pipe.to(device)
                 setattr(self, "_cached_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
@@ -433,8 +442,8 @@ def prompt_to_image(
             generator = generator.manual_seed(seed)
             
             # Seamless
-            _configure_model_padding(pipe.unet, seamless, seamless_axes)
-            _configure_model_padding(pipe.vae, seamless, seamless_axes)
+            _configure_model_padding(pipe.unet, seamless_axes)
+            _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
@@ -502,17 +511,18 @@ def _conv_forward_asymmetric(self, input, weight, bias):
     working = nn.functional.pad(working, self.asymmetric_padding[1], mode=self.asymmetric_padding_mode[1])
     return nn.functional.conv2d(working, weight, bias, self.stride, nn.modules.utils._pair(0), self.dilation, self.groups)
 
-def _configure_model_padding(model, seamless, seamless_axes):
+def _configure_model_padding(model, seamless_axes):
     import torch.nn as nn
     """
     Modifies the 2D convolution layers to use a circular padding mode based on the `seamless` and `seamless_axes` options.
     """
+    seamless_axes = SeamlessAxes(seamless_axes)
     for m in model.modules():
         if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-            if seamless:
+            if seamless_axes.x or seamless_axes.y:
                 m.asymmetric_padding_mode = (
-                    'circular' if ('x' in seamless_axes) else 'constant',
-                    'circular' if ('y' in seamless_axes) else 'constant'
+                    'circular' if seamless_axes.x else 'constant',
+                    'circular' if seamless_axes.y else 'constant'
                 )
                 m.asymmetric_padding = (
                     (m._reversed_padding_repeated_twice[0], m._reversed_padding_repeated_twice[1], 0, 0),

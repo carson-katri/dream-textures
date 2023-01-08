@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - "releases/**"
+  workflow_dispatch:
 
 # This is complicated without native ARM runners. For now, macOS builds can be deployed manually.
 # jobs:

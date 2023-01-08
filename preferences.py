@@ -96,7 +96,9 @@ class PREFERENCES_UL_ModelList(bpy.types.UIList):
             split.label(text=str(item.likes), icon="HEART")
         if ModelType[item.model_type] != ModelType.UNKNOWN:
             split.label(text=item.model_type.replace('_', ' ').title())
-        layout.operator(InstallModel.bl_idname, text="", icon="FILE_FOLDER" if is_installed else "IMPORT").model = item.model
+        install_model = layout.operator(InstallModel.bl_idname, text="", icon="FILE_FOLDER" if is_installed else "IMPORT")
+        install_model.model = item.model
+        install_model.prefer_fp16_revision = data.prefer_fp16_revision
 
 @staticmethod
 def set_model_list(model_list: str, models: list):
@@ -128,6 +130,7 @@ class InstallModel(bpy.types.Operator):
     bl_options = {"REGISTER", "INTERNAL"}
 
     model: StringProperty(name="Model ID")
+    prefer_fp16_revision: bpy.props.BoolProperty(name="", default=True)
 
     def execute(self, context):
         if os.path.exists(self.model):
@@ -135,7 +138,7 @@ class InstallModel(bpy.types.Operator):
         else:
             global is_downloading
             is_downloading = True
-            f = Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token)
+            f = Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token, "fp16" if self.prefer_fp16_revision else None)
             def on_progress(_, response: DownloadStatus):
                 bpy.context.preferences.addons[__package__].preferences.download_file = response.file
                 bpy.context.preferences.addons[__package__].preferences.download_progress = int((response.index / response.total) * 100)
@@ -153,7 +156,7 @@ class InstallModel(bpy.types.Operator):
 def _model_search(self, context):
     def on_done(future):
         set_model_list('model_results', future.result())
-    Generator.shared().hf_list_models(self.model_query).add_done_callback(on_done)
+    Generator.shared().hf_list_models(self.model_query, self.hf_token).add_done_callback(on_done)
 
 def _update_ui(self, context):
     if hasattr(context.area, "regions"):
@@ -171,6 +174,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     model_results: CollectionProperty(type=Model)
     active_model_result: bpy.props.IntProperty(name="Active Model", default=0)
     hf_token: StringProperty(name="HuggingFace Token")
+    prefer_fp16_revision: bpy.props.BoolProperty(name="Prefer Half Precision Weights", description="Download fp16 weights if available for smaller file size. If you run with 'Half Precision' disabled, you should not use this setting", default=True)
 
     installed_models: CollectionProperty(type=Model)
     active_installed_model: bpy.props.IntProperty(name="Active Model", default=0)
@@ -207,7 +211,9 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                     if not weights_installed:
                         default_weights_box = layout.box()
                         default_weights_box.label(text="You need to download at least one model.")
-                        default_weights_box.operator(InstallModel.bl_idname, text="Download Stable Diffusion v2.1 (Recommended)", icon="IMPORT").model = "stabilityai/stable-diffusion-2-1"
+                        install_model = default_weights_box.operator(InstallModel.bl_idname, text="Download Stable Diffusion v2.1 (Recommended)", icon="IMPORT")
+                        install_model.model = "stabilityai/stable-diffusion-2-1"
+                        install_model.prefer_fp16_revision = self.prefer_fp16_revision
 
                     search_box = layout.box()
                     search_box.label(text="Find Models", icon="SETTINGS")
@@ -223,6 +229,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                     auth_row = search_box.row()
                     auth_row.prop(self, "hf_token", text="Token")
                     auth_row.operator(OpenHuggingFace.bl_idname, text="Get Your Token", icon="KEYINGSET")
+                    
+                    search_box.prop(self, "prefer_fp16_revision")
 
                 layout.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_installed_models", self, "installed_models", self, "active_installed_model")
                 layout.operator(ImportWeights.bl_idname, icon='IMPORT')

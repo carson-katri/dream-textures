@@ -217,7 +217,7 @@ class ImageGenerationResult:
     @staticmethod
     def step_preview(pipe, mode, width, height, latents, generator, iteration):
         from PIL import Image, ImageOps
-        seeds = [gen.initial_seed() for gen in generator]
+        seeds = [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()]
         match mode:
             case StepPreviewMode.FAST:
                 return ImageGenerationResult(
@@ -450,7 +450,7 @@ def prompt_to_image(
                     yield ImageGenerationResult(
                         [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
                             for i, image in enumerate(self.numpy_to_pil(image))],
-                        [gen.initial_seed() for gen in generator],
+                        [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
                         num_inference_steps,
                         True
                     )
@@ -495,10 +495,14 @@ def prompt_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
+            batch_size = len(prompt) if isinstance(prompt, list) else 1
             generator = []
-            for _ in range(len(prompt) if isinstance(prompt, list) else 1):
+            for _ in range(batch_size):
                 gen = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
                 generator.append(gen.manual_seed(random.randrange(0, np.iinfo(np.uint32).max) if seed is None else seed))
+            if batch_size == 1:
+                # Some schedulers don't handle a list of generators: https://github.com/huggingface/diffusers/issues/1909
+                generator = generator[0]
             
             # Seamless
             _configure_model_padding(pipe.unet, seamless_axes)

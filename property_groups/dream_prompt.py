@@ -163,7 +163,8 @@ attributes["optimizations_attention_slice_size_src"] = EnumProperty(name="Attent
     ("auto", "Automatic", "", 1),
     ("manual", "Manual", "", 2),
 ), default=1)
-attributes["optimizations_attention_slice_size"] = IntProperty(name="Attention Slice Size", default=1)
+attributes["optimizations_attention_slice_size"] = IntProperty(name="Attention Slice Size", default=1, min=1)
+attributes["optimizations_batch_size"] = IntProperty(name="Batch Size", default=1, min=1)
 
 def map_structure_token_items(value):
     return (value[0], value[1], '')

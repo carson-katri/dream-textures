@@ -53,7 +53,14 @@ class UpscaleTiler:
     def combined(self) -> NDArray:
         return self.canvas[:, :, :-1]
 
-    def __getitem__(self, key: tuple[int, int]) -> NDArray:
+    def index_to_xy(self, index: int):
+        key_y = index % len(self.y_tiles)
+        key_x = (index - key_y) // len(self.y_tiles)
+        return key_x, key_y
+
+    def __getitem__(self, key: int | tuple[int, int]) -> NDArray:
+        if isinstance(key, int):
+            key = self.index_to_xy(key)
         image = self.image
         tile_size = self.tile_size
         x0 = self.x_tiles[key[0]]
@@ -83,7 +90,9 @@ class UpscaleTiler:
             tile[y2:] = image[:tile_size - y2, x0:x1]
         return tile
 
-    def __setitem__(self, key: tuple[int, int], tile: NDArray):
+    def __setitem__(self, key: int | tuple[int, int], tile: NDArray):
+        if isinstance(key, int):
+            key = self.index_to_xy(key)
         canvas = self.canvas
         scale = self.scale
         tile_size = self.tile_size * scale
@@ -172,23 +181,30 @@ def upscale(
     if image.shape[2] == 4:
         image = image[:, :, :3]
     tiler = UpscaleTiler(image, 4, tile_size, blend, seamless_axes)
-    for i, tup in enumerate(tiler):
-        id, low_res_tile = tup
-        tiler[id] = np.array(pipe(
-            prompt=prompt,
-            image=Image.fromarray(low_res_tile),
+    for i in range(0, len(tiler), optimizations.batch_size):
+        batch_size = min(len(tiler)-i, optimizations.batch_size)
+        ids = list(range(i, i+batch_size))
+        low_res_tiles = [Image.fromarray(tiler[id]) for id in ids]
+        from time import time
+        t0 = time()
+        high_res_tiles = pipe(
+            prompt=[prompt] * batch_size,
+            image=low_res_tiles,
             num_inference_steps=steps,
             generator=generator.manual_seed(seed),
             guidance_scale=cfg_scale,
-        ).images[0])
+        ).images
+        print(batch_size, time()-t0)
+        for id, tile in zip(ids, high_res_tiles):
+            tiler[id] = np.array(tile)
         step = None
         if step_preview_mode != StepPreviewMode.NONE:
             step = Image.fromarray(tiler.combined().astype(np.uint8))
         yield ImageUpscaleResult(
             (np.asarray(ImageOps.flip(step).convert('RGBA'), dtype=np.float32) / 255.) if step is not None else None,
-            i + 1,
+            i + batch_size,
             len(tiler),
-            (i + 1) == len(tiler)
+            (i + batch_size) == len(tiler)
         )
     if step_preview_mode == StepPreviewMode.NONE:
         final = Image.fromarray(tiler.combined().astype(np.uint8))

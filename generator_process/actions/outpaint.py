@@ -1,7 +1,7 @@
 from typing import Tuple, Generator
 from numpy.typing import NDArray
 import numpy as np
-from .prompt_to_image import ImageGenerationResult
+from .prompt_to_image import ImageGenerationResult, StepPreviewMode
 
 def outpaint(
     self,
@@ -53,17 +53,14 @@ def outpaint(
     )
 
     def process(step: ImageGenerationResult):
-        image = outpaint_bounds.copy()
-        image.paste(
-            ImageOps.flip(Image.fromarray((step.image * 255.).astype(np.uint8))),
-            offset_origin
-        )
-        return ImageGenerationResult(
-            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-            step.seed,
-            step.step,
-            step.final
-        )
+        for i, result_image in enumerate(step.images):
+            image = outpaint_bounds.copy()
+            image.paste(
+                ImageOps.flip(Image.fromarray((result_image * 255.).astype(np.uint8))),
+                offset_origin
+            )
+            step.images[i] = np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+        return step
 
     for step in self.inpaint(
         image=np.array(inpaint_tile),

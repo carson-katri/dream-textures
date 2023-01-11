@@ -149,7 +149,7 @@ default_optimizations = Optimizations()
 if sys.platform == "darwin":
     inferred_device = "mps"
 elif Pipeline.directml_available():
-    inferred_device = "dml"
+    inferred_device = "privateuseone"
 else:
     inferred_device = "cuda"
 for optim in dir(Optimizations):

@@ -128,8 +128,6 @@ class Scheduler(enum.Enum):
             case _:
                 raise ValueError(f"{self} cannot be used with DreamStudio.")
 
-dml_patches: Optional[List] = None
-
 @dataclass(eq=True)
 class Optimizations:
     attention_slicing: bool = True
@@ -137,7 +135,7 @@ class Optimizations:
     cudnn_benchmark: Annotated[bool, "cuda"] = False
     tf32: Annotated[bool, "cuda"] = False
     amp: Annotated[bool, "cuda"] = False
-    half_precision: Annotated[bool, "cuda"] = True
+    half_precision: Annotated[bool, {"cuda", "privateuseone"}] = True
     sequential_cpu_offload: bool = False
     channels_last_memory_format: bool = False
     # xformers_attention: bool = False # FIXME: xFormers is not yet available.
@@ -149,7 +147,10 @@ class Optimizations:
             return False
         if isinstance(self.__annotations__.get(property, None), _AnnotatedAlias):
             annotation: _AnnotatedAlias = self.__annotations__[property]
-            return annotation.__metadata__[0] == device
+            opt_dev = annotation.__metadata__[0]
+            if isinstance(opt_dev, str):
+                return opt_dev == device
+            return device in opt_dev
         return True
     
     def apply(self, pipeline, device):
@@ -196,64 +197,11 @@ class Optimizations:
         # if self.can_use("xformers_attention", device):
         #     pipeline.enable_xformers_memory_efficient_attention()
 
-        global dml_patches
-        if device == "privateuseone" and dml_patches is None:
-            dml_patches = []
-            def dml_patch(object, name, patched):
-                original = getattr(object, name)
-                setattr(object, name, functools.partial(patched, pre_patch=original))
-                dml_patches.append({"object": object, "name": name, "original": original})
-
-            def dml_patch_method(object, name, patched):
-                original = getattr(object, name)
-                setattr(object, name, functools.partialmethod(patched, pre_patch=original))
-                dml_patches.append({"object": object, "name": name, "original": original})
-
-            def group_norm(input, num_groups, weight, bias, eps, affine, *, pre_patch):
-                return pre_patch(input.to('cpu'), num_groups, weight.to('cpu'), bias.to('cpu'), eps, affine).to(input.device)
-            dml_patch(torch, "group_norm", group_norm)
-
-            def tensor_offload(self, other, *, pre_patch):
-                """Fix for operations usually involving float64 values"""
-                try:
-                    return pre_patch(self, other)
-                except RuntimeError:
-                    device = self.device
-                    self = self.to("cpu")
-                    if torch.is_tensor(other):
-                        other = other.to("cpu")
-                    return pre_patch(self, other).to(device)
-
-            # Not all places where the patches have an effect are listed.
-
-            # LMSDiscreteScheduler.scale_model_input()
-            dml_patch_method(torch.Tensor, "__eq__", tensor_offload)
-            # LMSDiscreteScheduler.step()
-            dml_patch_method(torch.Tensor, "__rsub__", tensor_offload)
-
-            def tensor_ensure_device(self, other, *, pre_patch):
-                """Fix for operations where one tensor is DML and the other is CPU"""
-                try:
-                    return pre_patch(self, other)
-                except RuntimeError:
-                    if torch.is_tensor(other) and self.device != other.device:
-                        if self.device.type != "cpu":
-                            other = other.to(self.device)
-                        else:
-                            self = self.to(other.device)
-                        return pre_patch(self, other)
-                    raise
-
-            # PNDMScheduler.step()
-            dml_patch_method(torch.Tensor, "__mul__", tensor_ensure_device)
-            # PNDMScheduler.step()
-            dml_patch_method(torch.Tensor, "__sub__", tensor_ensure_device)
-            # DDIMScheduler.step() last timestep in image_to_image
-            dml_patch_method(torch.Tensor, "__truediv__", tensor_ensure_device)
-        elif device != "privateuseone" and dml_patches is not None:
-            for patch in dml_patches:
-                setattr(patch["object"], patch["name"], patch["original"])
-            dml_patches = None
+        from .. import directml_patches
+        if device == "privateuseone":
+            directml_patches.enable()
+        else:
+            directml_patches.disable()
 
         return pipeline
 

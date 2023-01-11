@@ -162,7 +162,7 @@ def upscale(
         torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32
     )
     pipe.scheduler = scheduler.create(pipe, None)
-    if not optimizations.sequential_cpu_offload:
+    if not optimizations.can_use("sequential_cpu_offload"):
         pipe = pipe.to(device)
     pipe = optimizations.apply(pipe, device)
 

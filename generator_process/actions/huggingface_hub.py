@@ -114,7 +114,7 @@ def hf_snapshot_download(
     from diffusers import StableDiffusionPipeline
     from diffusers.utils import DIFFUSERS_CACHE, WEIGHTS_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME
     from diffusers.schedulers.scheduling_utils import SCHEDULER_CONFIG_NAME
-    from diffusers.hub_utils import http_user_agent
+    from diffusers.utils.hub_utils import http_user_agent
     config_dict = StableDiffusionPipeline.get_config_dict(
         model,
         cache_dir=DIFFUSERS_CACHE,

@@ -49,7 +49,7 @@ def upscale(
     pipe = pipe.to(device)
     pipe = optimizations.apply(pipe, device)
 
-    low_res_image = Image.fromarray(image)
+    low_res_image = Image.open(image).convert("RGB")
 
     generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
     if seed is None:

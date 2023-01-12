@@ -18,12 +18,18 @@ def tensor_offload(self, other, *, pre_patch):
 
 
 def tensor_ensure_device(self, other, *, pre_patch):
-    """Fix for operations where one tensor is DML and the other is CPU"""
+    """Fix for operations where one tensor is DML and the other is CPU.
+    Or when DML gets confused by one tensor having an index and the other doesn't."""
     try:
         return pre_patch(self, other)
     except RuntimeError:
         if torch.is_tensor(other) and self.device != other.device:
-            if self.device.type != "cpu":
+            if self.device.type == "privateuseone" and other.device.type == "privateuseone":
+                if self.device.index is None:
+                    self = self.to(other.device)
+                else:
+                    other = other.to(self.device)
+            elif self.device.type != "cpu":
                 other = other.to(self.device)
             else:
                 self = self.to(other.device)
@@ -85,10 +91,7 @@ def zeros(*size, out=None, dtype=None, layout=torch.strided, device=None, pre_pa
 
 def clamp(self, min, max, *, pre_patch):
     if self.dtype == torch.float16 and self.device.type == "privateuseone":
-        # clamp() should only be called during float to ubyte image
-        # conversion so returning a higher precision doesn't matter.
-        # Wrongly converts NaN to max parameter, but that also doesn't matter.
-        return torch.clamp(self.to(torch.float32), min, max)
+        return pre_patch(self.to(torch.float32), min, max).to(torch.float16)
     return pre_patch(self, min, max)
 
 
@@ -102,7 +105,39 @@ def baddbmm(input, batch1, batch2, *, beta=1, alpha=1, out=None, pre_patch):
     return pre_patch(input, batch1, batch2, beta=beta, alpha=alpha, out=out)
 
 
-def enable():
+def pow(self, other, *, pre_patch):
+    if self.device.type == "privateuseone" and self.dtype == torch.float16 and isinstance(other, float):
+        if other == 0.5:
+            return self.sqrt()
+        return self.to(torch.float32).pow_(other).to(torch.float16)
+    return pre_patch(self, other)
+
+
+def pad(input, pad, mode="constant", value=None, *, pre_patch):
+    if input.device.type == "privateuseone" and mode == "constant":
+        pad_dims = torch.tensor(pad, dtype=torch.int32).view(-1, 2).flip(0)
+        both_ends = False
+        for pre, post in pad_dims:
+            if pre != 0 and post != 0:
+                both_ends = True
+                break
+        if input.dtype == torch.float16 or both_ends:
+            if value is None:
+                value = 0
+            value = torch.tensor(value, dtype=input.dtype, device=input.device)
+            if pad_dims.size(0) < input.ndim:
+                pad_dims = pre_patch(pad_dims, (0, 0, input.ndim-pad_dims.size(0), 0))
+            ret = torch.empty(torch.Size(torch.tensor(input.size(), dtype=pad_dims.dtype) + pad_dims.sum(dim=1)),
+                              dtype=input.dtype, device=input.device)
+            ret[:] = value
+            assign_slices = [slice(max(0, int(pre)), None if post <= 0 else -max(0, int(post))) for pre, post in pad_dims]
+            index_slices = [slice(max(0, -int(pre)), None if post >= 0 else -max(0, -int(post))) for pre, post in pad_dims]
+            ret[assign_slices] = input[index_slices]
+            return ret
+    return pre_patch(input, pad, mode=mode, value=value)
+
+
+def enable(pipe):
     global active_dml_patches
     if active_dml_patches is not None:
         return
@@ -143,10 +178,37 @@ def enable():
     # float16 patches
     dml_patch(torch, "layer_norm", layer_norm)
     dml_patch(torch, "zeros", zeros)
+    dml_patch(torch, "clamp", clamp)
     dml_patch_method(torch.Tensor, "clamp", clamp)
+    dml_patch_method(torch.Tensor, "__pow__", pow)
+    dml_patch(torch.nn.functional, "pad", pad)
+
+    def decorate_forward(name, module):
+        """Helper function to better find which modules DML fails in as it often does
+        not raise an exception and immediately crashes the python interpreter."""
+        original = module.forward
+
+        def func(self, *args, **kwargs):
+            print(f"{name} in module {type(self)}")
+
+            def nan_check(key, x):
+                if torch.is_tensor(x) and x.cpu().isnan().any():
+                    raise RuntimeError(f"{key} got NaN!")
+
+            for i, v in enumerate(args):
+                nan_check(i, v)
+            for k, v in kwargs.items():
+                nan_check(k, v)
+            return original(*args, **kwargs)
+        module.forward = func.__get__(module)
+
+    # only enable when testing
+    # for name, model in [("text_encoder", pipe.text_encoder), ("unet", pipe.unet), ("vae", pipe.vae)]:
+    #     for module in model.modules():
+    #         decorate_forward(name, module)
 
 
-def disable():
+def disable(pipe):
     global active_dml_patches
     if active_dml_patches is None:
         return

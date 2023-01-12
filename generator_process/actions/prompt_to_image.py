@@ -199,9 +199,9 @@ class Optimizations:
 
         from .. import directml_patches
         if device == "privateuseone":
-            directml_patches.enable()
+            directml_patches.enable(pipeline)
         else:
-            directml_patches.disable()
+            directml_patches.disable(pipeline)
 
         return pipeline
 

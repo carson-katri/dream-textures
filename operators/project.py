@@ -338,9 +338,9 @@ class ProjectDreamTexture(bpy.types.Operator):
                 return
             context.scene.dream_textures_progress = response.step
             if texture is None:
-                texture = bpy.data.images.new(name="Step", width=response.image.shape[1], height=response.image.shape[0])
+                texture = bpy.data.images.new(name="Step", width=response.images[0].shape[1], height=response.images[0].shape[0])
             texture.name = f"Step {response.step}/{context.scene.dream_textures_project_prompt.steps}"
-            texture.pixels[:] = response.image.ravel()
+            texture.pixels[:] = response.images[0].ravel()
             texture.update()
             image_texture_node.image = texture
 
@@ -354,10 +354,10 @@ class ProjectDreamTexture(bpy.types.Operator):
             if isinstance(generated, list):
                 generated = generated[-1]
             if texture is None:
-                texture = bpy.data.images.new(name=str(generated.seed), width=generated.image.shape[1], height=generated.image.shape[0])
-            texture.name = str(generated.seed)
-            material.name = str(generated.seed)
-            texture.pixels[:] = generated.image.ravel()
+                texture = bpy.data.images.new(name=str(generated.seeds[0]), width=generated.images[0].shape[1], height=generated.images[0].shape[0])
+            texture.name = str(generated.seeds[0])
+            material.name = str(generated.seeds[0])
+            texture.pixels[:] = generated.images[0].ravel()
             texture.update()
             texture.pack()
             image_texture_node.image = texture
@@ -372,7 +372,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                         for loop in face.loops:
                             src_uvs[loop.vert.index] = loop[src_uv_layer].uv
                             dest_uvs[loop.vert.index] = loop[dest_uv_layer].uv
-                    bake(context, bm, generated.image.ravel(), dest, src_uvs, dest_uvs)
+                    bake(context, bm, generated.images[0].ravel(), dest, src_uvs, dest_uvs)
                     dest.update()
                     dest.pack()
                     image_texture_node.image = dest

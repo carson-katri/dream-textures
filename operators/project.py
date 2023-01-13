@@ -140,9 +140,9 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
                 return
             context.scene.dream_textures_progress = response.step
             if texture is None:
-                texture = bpy.data.images.new(name="Step", width=response.image.shape[1], height=response.image.shape[0])
+                texture = bpy.data.images.new(name="Step", width=response.images[0].shape[1], height=response.images[0].shape[0])
             texture.name = f"Step {response.step}/{context.scene.dream_textures_project_prompt.steps}"
-            texture.pixels[:] = response.image.ravel()
+            texture.pixels.foreach_set(response.images[0].ravel())
             texture.update()
             image_texture_node.image = texture
 
@@ -152,14 +152,12 @@ def draw(context, init_img_path, image_texture_node, material, cleanup):
                 del gen._active_generation_future
             context.scene.dream_textures_info = ""
             context.scene.dream_textures_progress = 0
-            generated = future.result()
-            if isinstance(generated, list):
-                generated = generated[-1]
+            generated = future.result(last_only=True)
             if texture is None:
-                texture = bpy.data.images.new(name=str(generated.seed), width=generated.image.shape[1], height=generated.image.shape[0])
-            texture.name = str(generated.seed)
-            material.name = str(generated.seed)
-            texture.pixels[:] = generated.image.ravel()
+                texture = bpy.data.images.new(name=str(generated.seeds[0]), width=generated.images[0].shape[1], height=generated.images[0].shape[0])
+            texture.name = str(generated.seeds[0])
+            material.name = str(generated.seeds[0])
+            texture.pixels.foreach_set(generated.images[0].ravel())
             texture.update()
             image_texture_node.image = texture
         

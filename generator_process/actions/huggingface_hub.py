@@ -129,7 +129,7 @@ def hf_snapshot_download(
     from diffusers import StableDiffusionPipeline
     from diffusers.utils import DIFFUSERS_CACHE, WEIGHTS_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME
     from diffusers.schedulers.scheduling_utils import SCHEDULER_CONFIG_NAME
-    from diffusers.hub_utils import http_user_agent
+    from diffusers.utils.hub_utils import http_user_agent
     config_dict = StableDiffusionPipeline.get_config_dict(
         model,
         cache_dir=DIFFUSERS_CACHE,
@@ -142,8 +142,8 @@ def hf_snapshot_download(
     allow_patterns = [os.path.join(k, "*") for k in folder_names]
     allow_patterns += [WEIGHTS_NAME, SCHEDULER_CONFIG_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME, StableDiffusionPipeline.config_name]
 
-    # make sure we don't download flax weights
-    ignore_patterns = "*.msgpack"
+    # make sure we don't download flax, safetensors, or ckpt weights.
+    ignore_patterns = ["*.msgpack", "*.safetensors", "*.ckpt"]
 
     requested_pipeline_class = config_dict.get("_class_name", StableDiffusionPipeline.__name__)
     user_agent = {"pipeline_class": requested_pipeline_class}

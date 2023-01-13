@@ -253,6 +253,8 @@ def model_snapshot_folder(model, preferred_revision: str | None = None):
             commit_hash = f.read()
 
         snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+        if len(os.listdir(snapshot_folder)) <= 1:
+            raise ValueError(f"revision \"{revision}\" is not installed for model {model}")
     return snapshot_folder
 
 def prompt_to_image(

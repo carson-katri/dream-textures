@@ -79,7 +79,7 @@ class Upscale(bpy.types.Operator):
                 last_data_block = None
             else:
                 bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=tile.tile, min=0, max=tile.total, update=step_progress_update)
-            if tile.final:
+            if tile.final or tile.image is None:
                 return
             
             scene.dream_textures_progress = tile.tile
@@ -93,9 +93,9 @@ class Upscale(bpy.types.Operator):
             if last_data_block is not None:
                 bpy.data.images.remove(last_data_block)
                 last_data_block = None
-            tile: ImageUpscaleResult = future.result()
-            if isinstance(tile, list):
-                tile = tile[-1]
+            tile: ImageUpscaleResult = future.result(last_only=True)
+            if tile.image is None:
+                return
             image = bpy_image(f"{input_image.name} (Upscaled)", tile.image.shape[0], tile.image.shape[1], tile.image.ravel())
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':

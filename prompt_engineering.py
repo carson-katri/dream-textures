@@ -134,10 +134,10 @@ file_batch_structure = PromptStructure(
 )
 
 prompt_structures = [
+    custom_structure,
     texture_structure,
     photography_structure,
     concept_art_structure,
-    custom_structure,
     file_batch_structure
 ]
 

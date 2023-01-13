@@ -250,7 +250,7 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                     box.label(text=warning, icon="ERROR")
                 if prompt.outpaint_origin[0] <= -prompt.width or prompt.outpaint_origin[1] <= -prompt.height:
                     _outpaint_warning_box("Outpaint has no overlap, so the result will not blend")
-                init_img = context.scene.init_img.width if prompt.init_img_src == 'file' else None
+                init_img = context.scene.init_img if prompt.init_img_src == 'file' else None
                 if init_img is None:
                     for area in context.screen.areas:
                         if area.type == 'IMAGE_EDITOR':
@@ -318,6 +318,7 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             optimization("amp")
             optimization("half_precision")
             optimization("channels_last_memory_format")
+            optimization("batch_size")
     yield SpeedOptimizationPanel
 
     class MemoryOptimizationPanel(sub_panel):
@@ -344,6 +345,7 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             optimization("sequential_cpu_offload")
             optimization("cpu_only")
             # optimization("xformers_attention") # FIXME: xFormers is not yet available.
+            optimization("vae_slicing")
     yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):

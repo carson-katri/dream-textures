@@ -1,5 +1,6 @@
 from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional
 import enum
+import math
 import os
 from dataclasses import dataclass
 from contextlib import nullcontext
@@ -134,6 +135,8 @@ class Optimizations:
     sequential_cpu_offload: bool = False
     channels_last_memory_format: bool = False
     # xformers_attention: bool = False # FIXME: xFormers is not yet available.
+    batch_size: int = 1
+    vae_slicing: bool = True
 
     cpu_only: bool = False
 
@@ -144,6 +147,13 @@ class Optimizations:
             annotation: _AnnotatedAlias = self.__annotations__[property]
             return annotation.__metadata__[0] == device
         return True
+
+    def can_use_half(self, device):
+        if self.half_precision and device == "cuda":
+            import torch
+            name = torch.cuda.get_device_name()
+            return not ("GTX 1650" in name or "GTX 1660" in name)
+        return False
     
     def apply(self, pipeline, device):
         """
@@ -178,19 +188,101 @@ class Optimizations:
         # FIXME: xFormers wheels are not yet available (https://github.com/facebookresearch/xformers/issues/533)
         # if self.can_use("xformers_attention", device):
         #     pipeline.enable_xformers_memory_efficient_attention()
+
+        try:
+            if self.can_use("vae_slicing", device):
+                # Not many pipelines implement the enable_vae_slicing()/disable_vae_slicing()
+                # methods but all they do is forward their call to the vae anyway.
+                pipeline.vae.enable_slicing()
+            else:
+                pipeline.vae.disable_slicing()
+        except: pass
+
         return pipeline
 
 class StepPreviewMode(enum.Enum):
     NONE = "None"
     FAST = "Fast"
+    FAST_BATCH = "Fast (Batch Tiled)"
     ACCURATE = "Accurate"
+    ACCURATE_BATCH = "Accurate (Batch Tiled)"
 
 @dataclass
 class ImageGenerationResult:
-    image: NDArray | None
-    seed: int
+    images: [NDArray]
+    seeds: [int]
     step: int
     final: bool
+
+    @staticmethod
+    def step_preview(pipe, mode, width, height, latents, generator, iteration):
+        from PIL import Image, ImageOps
+        seeds = [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()]
+        match mode:
+            case StepPreviewMode.FAST:
+                return ImageGenerationResult(
+                    [np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents[-1:]))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.],
+                    seeds[-1:],
+                    iteration,
+                    False
+                )
+            case StepPreviewMode.FAST_BATCH:
+                return ImageGenerationResult(
+                    [
+                        np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents[i:i + 1]))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'),
+                                   dtype=np.float32) / 255.
+                        for i in range(latents.size(0))
+                    ],
+                    seeds,
+                    iteration,
+                    False
+                )
+            case StepPreviewMode.ACCURATE:
+                return ImageGenerationResult(
+                    [np.asarray(ImageOps.flip(pipe.numpy_to_pil(pipe.decode_latents(latents[-1:]))[0]).convert('RGBA'),
+                                dtype=np.float32) / 255.],
+                    seeds[-1:],
+                    iteration,
+                    False
+                )
+            case StepPreviewMode.ACCURATE_BATCH:
+                return ImageGenerationResult(
+                    [
+                        np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                        for image in pipe.numpy_to_pil(pipe.decode_latents(latents))
+                    ],
+                    seeds,
+                    iteration,
+                    False
+                )
+        return ImageGenerationResult(
+            [],
+            [seeds],
+            iteration,
+            False
+        )
+
+    def tile_images(self):
+        images = self.images
+        if len(images) == 0:
+            return None
+        elif len(images) == 1:
+            return images[0]
+        width = images[0].shape[1]
+        height = images[0].shape[0]
+        tiles_x = math.ceil(math.sqrt(len(images)))
+        tiles_y = math.ceil(len(images) / tiles_x)
+        tiles = np.zeros((height * tiles_y, width * tiles_x, 4), dtype=np.float32)
+        bottom_offset = (tiles_x*tiles_y-len(images)) * width // 2
+        for i, image in enumerate(images):
+            x = i % tiles_x
+            y = tiles_y - 1 - int((i - x) / tiles_x)
+            x *= width
+            y *= height
+            if y == 0:
+                x += bottom_offset
+            tiles[y: y + height, x: x + width] = image
+        return tiles
 
 def choose_device(self) -> str:
     """
@@ -239,7 +331,7 @@ def prompt_to_image(
 
     optimizations: Optimizations,
 
-    prompt: str,
+    prompt: str | list[str],
     steps: int,
     width: int,
     height: int,
@@ -279,7 +371,7 @@ def prompt_to_image(
                     negative_prompt: Optional[Union[str, List[str]]] = None,
                     num_images_per_prompt: Optional[int] = 1,
                     eta: float = 0.0,
-                    generator: Optional[torch.Generator] = None,
+                    generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
                     latents: Optional[torch.FloatTensor] = None,
                     output_type: Optional[str] = "pil",
                     return_dict: bool = True,
@@ -345,31 +437,7 @@ def prompt_to_image(
                         latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
                         # NOTE: Modified to yield the latents instead of calling a callback.
-                        match kwargs['step_preview_mode']:
-                            case StepPreviewMode.NONE:
-                                yield ImageGenerationResult(
-                                    None,
-                                    generator.initial_seed(),
-                                    i,
-                                    False
-                                )
-                            case StepPreviewMode.FAST:
-                                yield ImageGenerationResult(
-                                    np.asarray(ImageOps.flip(Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
-                                    generator.initial_seed(),
-                                    i,
-                                    False
-                                )
-                            case StepPreviewMode.ACCURATE:
-                                yield from [
-                                    ImageGenerationResult(
-                                        np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                                        generator.initial_seed(),
-                                        i,
-                                        False
-                                    )
-                                    for image in self.numpy_to_pil(self.decode_latents(latents))
-                                ]
+                        yield ImageGenerationResult.step_preview(self, kwargs['step_preview_mode'], width, height, latents, generator, i)
 
                     # 8. Post-processing
                     image = self.decode_latents(latents)
@@ -379,15 +447,13 @@ def prompt_to_image(
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
-                    yield from [
-                        ImageGenerationResult(
-                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                            generator.initial_seed(),
-                            num_inference_steps,
-                            True
-                        )
-                        for image in self.numpy_to_pil(image)
-                    ]
+                    yield ImageGenerationResult(
+                        [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                            for i, image in enumerate(self.numpy_to_pil(image))],
+                        [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
+                        num_inference_steps,
+                        True
+                    )
             
             if optimizations.cpu_only:
                 device = "cpu"
@@ -412,8 +478,8 @@ def prompt_to_image(
                     snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
                 pipe = GeneratorPipeline.from_pretrained(
                     snapshot_folder,
-                    revision="fp16" if optimizations.can_use("half_precision", device) else None,
-                    torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
+                    revision="fp16" if optimizations.can_use_half(device) else None,
+                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
                 )
                 pipe = pipe.to(device)
                 setattr(self, "_cached_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
@@ -429,10 +495,14 @@ def prompt_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
-            if seed is None:
-                seed = random.randrange(0, np.iinfo(np.uint32).max)
-            generator = generator.manual_seed(seed)
+            batch_size = len(prompt) if isinstance(prompt, list) else 1
+            generator = []
+            for _ in range(batch_size):
+                gen = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+                generator.append(gen.manual_seed(random.randrange(0, np.iinfo(np.uint32).max) if seed is None else seed))
+            if batch_size == 1:
+                # Some schedulers don't handle a list of generators: https://github.com/huggingface/diffusers/issues/1909
+                generator = generator[0]
             
             # Seamless
             _configure_model_padding(pipe.unet, seamless_axes)
@@ -487,8 +557,8 @@ def prompt_to_image(
                     if artifact.type == stability_sdk.interfaces.gooseai.generation.generation_pb2.ARTIFACT_IMAGE:
                         image = Image.open(io.BytesIO(artifact.binary))
                         yield ImageGenerationResult(
-                            np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                            seed,
+                            [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.],
+                            [seed],
                             steps,
                             True
                         )

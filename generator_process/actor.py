@@ -6,9 +6,9 @@ import threading
 from typing import Type, TypeVar, Callable, Any, MutableSet, Generator
 import site
 import sys
+from ..absolute_path import absolute_path
 
 def _load_dependencies():
-    from ..absolute_path import absolute_path
     site.addsitedir(absolute_path(".python_dependencies"))
     deps = sys.path.pop(-1)
     sys.path.insert(0, deps)
@@ -42,7 +42,7 @@ class Future:
         self.cancelled = False
         self.call_done_on_exception = True
 
-    def result(self):
+    def result(self, last_only=False):
         """
         Get the result value (blocking).
         """
@@ -53,7 +53,7 @@ class Future:
                 case 1:
                     return self._responses[0]
                 case _:
-                    return self._responses
+                    return self._responses[-1] if last_only else self._responses
         if self._exception is not None:
             raise self._exception
         if self.done:
@@ -283,6 +283,13 @@ class Actor:
                 self._response_queue.put(response)
         except Exception as e:
             trace = traceback.format_exc()
+            try:
+                if sys.modules[e.__module__].__file__.startswith(absolute_path(".python_dependencies")):
+                    e = RuntimeError(repr(e))
+                    # might be more suitable to have specific substitute exceptions for cases
+                    # like torch.cuda.OutOfMemoryError for frontend handling in the future
+            except (AttributeError, KeyError):
+                pass
             self._response_queue.put(TracedError(e, trace))
         self._response_queue.put(Message.END)
 

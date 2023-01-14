@@ -138,16 +138,14 @@ def _render_dream_textures_pass(self, layer, size, scene, render_pass, render_re
         if step.final:
             return
         self.update_progress(step.step / generated_args['steps'])
-        if step.image is not None:
-            combined_pixels = step.image
+        if len(step.images) > 0:
+            combined_pixels = step.images[0]
             render_pass.rect.foreach_set(combined_pixels.reshape((size[0] * size[1], 4)))
             self.update_result(render_result) # This does not seem to have an effect.
     def on_done(future):
         nonlocal combined_pixels
-        result = future.result()
-        if isinstance(result, list):
-            result = result[-1]
-        combined_pixels = result.image
+        result = future.result(last_only=True)
+        combined_pixels = result.images[0]
         event.set()
     f.add_response_callback(on_step)
     f.add_done_callback(on_done)

@@ -52,6 +52,9 @@ class SeamlessResult(bpy.types.PropertyGroup):
             self.result = future.result().text
         Generator.shared().detect_seamless(pixels).add_done_callback(result)
 
-    def update_args(self, args: dict[str, any]):
+    def update_args(self, args: dict[str, any], as_id=False):
         if args['seamless_axes'] == SeamlessAxes.AUTO and self.result != 'Processing':
-            args['seamless_axes'] = SeamlessAxes(self.result)
+            if as_id:
+                args['seamless_axes'] = SeamlessAxes(self.result).id
+            else:
+                args['seamless_axes'] = SeamlessAxes(self.result)

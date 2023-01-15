@@ -78,7 +78,19 @@ git submodule update --init --recursive
     * Then install dependencies for development under *Add-ons* > *Dream Textures* > *Development Tools*
     * This will download all pip dependencies for the selected platform into `.python_dependencies`
 
-### Tips
+# Troubleshooting
+
+If you are experiencing trouble getting Dream Textures running, check the Blender Python console, in the top left under the Window dropdown next to File and Edit, for any error messages and search in the issues list with your error message and symptoms:
+
+ [Dream Textures Issues](https://github.com/carson-katri/dream-textures/issues?q=is%3Aissue) 
+
+![Troubleshooting With Blender Addons](docs/assets/readme-toggle-console.png)
+
+Features and feedback are also accepted on the issues page. If you have any issues that aren't listed, feel free to add them there!
+
+The [Discord](https://discord.gg/EmDJ8CaWZ7) also has a common issues list and strong community of helpful people, so feel free to come by for some help there as well.
+
+## Running On Apple
 
 1. On Apple Silicon, with the `requirements-dream-studio.txt` you may run into an error with gRPC using an incompatible binary. If so, please use the following command to install the correct gRPC version:
 ```sh

@@ -11,17 +11,14 @@ from ..generator_process.actions.prompt_to_image import ImageGenerationResult, P
 from ..generator_process.actions.huggingface_hub import ModelType
 
 def bpy_image(name, width, height, pixels, existing_image):
-    gen_seed_string = str(name)
-    prompt_subject = bpy.data.scenes["Scene"].dream_textures_project_prompt.prompt_structure_token_subject
     if existing_image is not None and (existing_image.size[0] != width or existing_image.size[1] != height):
         bpy.data.images.remove(existing_image)
         existing_image = None
     if existing_image is None:
-        name_with_prompt = str(prompt_subject + gen_seed_string)
         image = bpy.data.images.new(name, width=width, height=height)
     else:
         image = existing_image
-        image.name = name_with_prompt
+        image.name = name
     image.pixels.foreach_set(pixels)
     image.pack()
     image.update()
@@ -108,7 +105,9 @@ class DreamTexture(bpy.types.Operator):
             result: ImageGenerationResult = future.result(last_only=True)
             for i, result_image in enumerate(result.images):
                 seed = result.seeds[i]
-                image = bpy_image(str(seed), result_image.shape[1], result_image.shape[0], result_image.ravel(), last_data_block)
+                prompt_string = bpy.data.scenes["Scene"].dream_textures_prompt.prompt_structure_token_subject
+
+                image = bpy_image(str(prompt_string + " " + str(seed)), result_image.shape[1], result_image.shape[0], result_image.ravel(), last_data_block)
                 last_data_block = None
                 if node_tree is not None:
                     nodes = node_tree.nodes

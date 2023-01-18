@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, approximate_decoded_latents, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder
 from .detect_seamless import SeamlessAxes
 
 
@@ -22,7 +22,7 @@ def depth_to_image(
     depth: NDArray | None,
     image: NDArray | str | None,
     strength: float,
-    prompt: str,
+    prompt: str | list[str],
     steps: int,
     seed: int,
 
@@ -101,12 +101,24 @@ def depth_to_image(
 
                 def prepare_img2img_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None, image=None, timestep=None):
                     shape = (batch_size, num_channels_latents, height // self.vae_scale_factor, width // self.vae_scale_factor)
+                    if isinstance(generator, list) and len(generator) != batch_size:
+                        raise ValueError(
+                            f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
+                            f" size of {batch_size}. Make sure the batch size matches the length of the generators."
+                        )
+
                     if latents is None:
-                        if device.type == "mps":
-                            # randn does not work reproducibly on mps
-                            latents = torch.randn(shape, generator=generator, device="cpu", dtype=dtype).to(device)
+                        rand_device = "cpu" if device.type == "mps" else device
+
+                        if isinstance(generator, list):
+                            shape = (1,) + shape[1:]
+                            latents = [
+                                torch.randn(shape, generator=generator[i], device=rand_device, dtype=dtype)
+                                for i in range(batch_size)
+                            ]
+                            latents = torch.cat(latents, dim=0).to(device)
                         else:
-                            latents = torch.randn(shape, generator=generator, device=device, dtype=dtype)
+                            latents = torch.randn(shape, generator=generator, device=rand_device, dtype=dtype).to(device)
                     else:
                         if latents.shape != shape:
                             raise ValueError(f"Unexpected latents shape, got {latents.shape}, expected {shape}")
@@ -117,12 +129,28 @@ def depth_to_image(
 
                     if image is not None:
                         image = image.to(device=device, dtype=dtype)
-                        image_latents = self.vae.encode(image).latent_dist.sample(generator=generator)
+                        if isinstance(generator, list):
+                            image_latents = [
+                                self.vae.encode(image[0:1]).latent_dist.sample(generator[i]) for i in range(batch_size)
+                            ]
+                            image_latents = torch.cat(image_latents, dim=0)
+                        else:
+                            image_latents = self.vae.encode(image).latent_dist.sample(generator)
                         image_latents = torch.nn.functional.interpolate(
                             image_latents, size=(height // self.vae_scale_factor, width // self.vae_scale_factor)
                         )
                         image_latents = 0.18215 * image_latents
-                        noise = torch.randn(image_latents.shape, generator=generator, device=device, dtype=dtype)
+                        rand_device = "cpu" if device.type == "mps" else device
+                        shape = image_latents.shape
+                        if isinstance(generator, list):
+                            shape = (1,) + shape[1:]
+                            noise = [
+                                torch.randn(shape, generator=generator[i], device=rand_device, dtype=dtype) for i in
+                                range(batch_size)
+                            ]
+                            noise = torch.cat(noise, dim=0).to(device)
+                        else:
+                            noise = torch.randn(shape, generator=generator, device=rand_device, dtype=dtype).to(device)
                         latents = self.scheduler.add_noise(image_latents, noise, timestep)
 
                     return latents
@@ -153,7 +181,7 @@ def depth_to_image(
                     negative_prompt: Optional[Union[str, List[str]]] = None,
                     num_images_per_prompt: Optional[int] = 1,
                     eta: float = 0.0,
-                    generator: Optional[torch.Generator] = None,
+                    generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
                     latents: Optional[torch.FloatTensor] = None,
                     output_type: Optional[str] = "pil",
                     return_dict: bool = True,
@@ -266,32 +294,8 @@ def depth_to_image(
                             # compute the previous noisy sample x_t -> x_t-1
                             latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
-                            # call the callback, if provided
-                            match kwargs['step_preview_mode']:
-                                case StepPreviewMode.NONE:
-                                    yield ImageGenerationResult(
-                                        None,
-                                        generator.initial_seed(),
-                                        i,
-                                        False
-                                    )
-                                case StepPreviewMode.FAST:
-                                    yield ImageGenerationResult(
-                                        np.asarray(PIL.ImageOps.flip(PIL.Image.fromarray(approximate_decoded_latents(latents))).resize((width, height), PIL.Image.Resampling.NEAREST).convert('RGBA'), dtype=np.float32) / 255.,
-                                        generator.initial_seed(),
-                                        i,
-                                        False
-                                    )
-                                case StepPreviewMode.ACCURATE:
-                                    yield from [
-                                        ImageGenerationResult(
-                                            np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                                            generator.initial_seed(),
-                                            i,
-                                            False
-                                        )
-                                        for image in self.numpy_to_pil(self.decode_latents(latents))
-                                    ]
+                            # NOTE: Modified to yield the latents instead of calling a callback.
+                            yield ImageGenerationResult.step_preview(self, kwargs['step_preview_mode'], width, height, latents, generator, i)
 
                     # 11. Post-processing
                     image = self.decode_latents(latents)
@@ -301,15 +305,13 @@ def depth_to_image(
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
-                    yield from [
-                        ImageGenerationResult(
-                            np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.,
-                            generator.initial_seed(),
-                            num_inference_steps,
-                            True
-                        )
-                        for image in self.numpy_to_pil(image)
-                    ]
+                    yield ImageGenerationResult(
+                        [np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                            for i, image in enumerate(self.numpy_to_pil(image))],
+                        [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
+                        num_inference_steps,
+                        True
+                    )
             
             if optimizations.cpu_only:
                 device = "cpu"
@@ -322,20 +324,12 @@ def depth_to_image(
             if hasattr(self, "_cached_depth2img_pipe") and self._cached_depth2img_pipe[1] == model and use_cpu_offload == self._cached_depth2img_pipe[2]:
                 pipe = self._cached_depth2img_pipe[0]
             else:
-                storage_folder = model
-                if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
-                    snapshot_folder = storage_folder
-                else:
-                    revision = "main"
-                    ref_path = os.path.join(storage_folder, "refs", revision)
-                    with open(ref_path) as f:
-                        commit_hash = f.read()
-
-                    snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+                revision = "fp16" if optimizations.can_use_half(device) else None
+                snapshot_folder = model_snapshot_folder(model, revision)
                 pipe = GeneratorPipeline.from_pretrained(
                     snapshot_folder,
-                    revision="fp16" if optimizations.can_use("half_precision", device) else None,
-                    torch_dtype=torch.float16 if optimizations.can_use("half_precision", device) else torch.float32,
+                    revision=revision,
+                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
                 )
                 if not use_cpu_offload:
                     pipe = pipe.to(device)
@@ -352,10 +346,14 @@ def depth_to_image(
             pipe = optimizations.apply(pipe, device)
 
             # RNG
-            generator = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
-            if seed is None:
-                seed = random.randrange(0, np.iinfo(np.uint32).max)
-            generator = generator.manual_seed(seed)
+            batch_size = len(prompt) if isinstance(prompt, list) else 1
+            generator = []
+            for _ in range(batch_size):
+                gen = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
+                generator.append(gen.manual_seed(random.randrange(0, np.iinfo(np.uint32).max) if seed is None else seed))
+            if batch_size == 1:
+                # Some schedulers don't handle a list of generators: https://github.com/huggingface/diffusers/issues/1909
+                generator = generator[0]
 
             # Init Image
             rounded_size = (

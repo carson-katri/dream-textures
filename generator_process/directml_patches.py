@@ -1,6 +1,7 @@
 import functools
 
 import torch
+from torch import Tensor
 
 active_dml_patches: list | None = None
 
@@ -12,7 +13,7 @@ def tensor_offload(self, other, *, pre_patch):
     except RuntimeError:
         device = self.device
         self = self.to("cpu")
-        if torch.is_tensor(other):
+        if isinstance(other, Tensor):
             other = other.to("cpu")
         return pre_patch(self, other).to(device)
 
@@ -23,7 +24,7 @@ def tensor_ensure_device(self, other, *, pre_patch):
     try:
         return pre_patch(self, other)
     except RuntimeError:
-        if torch.is_tensor(other) and self.device != other.device:
+        if isinstance(other, Tensor) and self.device != other.device:
             if self.device.type == "privateuseone" and other.device.type == "privateuseone":
                 if self.device.index is None:
                     self = self.to(other.device)
@@ -89,7 +90,13 @@ def zeros(*size, out=None, dtype=None, layout=torch.strided, device=None, pre_pa
     return pre_patch(*size, out=out, dtype=dtype, layout=layout, device=device)
 
 
-def clamp(self, min, max, *, pre_patch):
+def clamp(self, min=None, max=None, *, out=None, pre_patch):
+    if self.dtype == torch.float16 and self.device.type == "privateuseone":
+        return pre_patch(self.to(torch.float32), min, max, out=out).to(torch.float16)
+    return pre_patch(self, min, max, out=out)
+
+
+def tensor_clamp(self, min=None, max=None, *, pre_patch):
     if self.dtype == torch.float16 and self.device.type == "privateuseone":
         return pre_patch(self.to(torch.float32), min, max).to(torch.float16)
     return pre_patch(self, min, max)
@@ -106,7 +113,7 @@ def baddbmm(input, batch1, batch2, *, beta=1, alpha=1, out=None, pre_patch):
 
 
 def pow(self, other, *, pre_patch):
-    if self.device.type == "privateuseone" and self.dtype == torch.float16 and isinstance(other, float):
+    if self.device.type == "privateuseone" and self.dtype == torch.float16 and isinstance(other, (int, float)):
         if other == 0.5:
             return self.sqrt()
         return self.to(torch.float32).pow_(other).to(torch.float16)
@@ -137,6 +144,20 @@ def pad(input, pad, mode="constant", value=None, *, pre_patch):
     return pre_patch(input, pad, mode=mode, value=value)
 
 
+def getitem(self, key, *, pre_patch):
+    if isinstance(key, Tensor) and "privateuseone" in [self.device.type, key.device.type] and key.numel() == 1:
+        return pre_patch(self, int(key))
+    return pre_patch(self, key)
+
+
+def compare(self, other, *, pre_patch):
+    if self.device.type == "privateuseone" and self.dtype == torch.float16:
+        if isinstance(other, Tensor) and other.dtype == torch.float16:
+            other = other.to(torch.float32)
+        return pre_patch(self.to(torch.float32), other)
+    return pre_patch(self, other)
+
+
 def enable(pipe):
     global active_dml_patches
     if active_dml_patches is not None:
@@ -158,16 +179,16 @@ def enable(pipe):
     dml_patch(torch, "group_norm", group_norm)
 
     # LMSDiscreteScheduler.scale_model_input()
-    dml_patch_method(torch.Tensor, "__eq__", tensor_offload)
+    dml_patch_method(Tensor, "__eq__", tensor_offload)
     # LMSDiscreteScheduler.step()
-    dml_patch_method(torch.Tensor, "__rsub__", tensor_offload)
+    dml_patch_method(Tensor, "__rsub__", tensor_offload)
 
     # PNDMScheduler.step()
-    dml_patch_method(torch.Tensor, "__mul__", tensor_ensure_device)
+    dml_patch_method(Tensor, "__mul__", tensor_ensure_device)
     # PNDMScheduler.step()
-    dml_patch_method(torch.Tensor, "__sub__", tensor_ensure_device)
+    dml_patch_method(Tensor, "__sub__", tensor_ensure_device)
     # DDIMScheduler.step() last timestep in image_to_image
-    dml_patch_method(torch.Tensor, "__truediv__", tensor_ensure_device)
+    dml_patch_method(Tensor, "__truediv__", tensor_ensure_device)
 
     # CrossAttention.get_attention_scores()
     # AttentionBlock.forward()
@@ -179,9 +200,16 @@ def enable(pipe):
     dml_patch(torch, "layer_norm", layer_norm)
     dml_patch(torch, "zeros", zeros)
     dml_patch(torch, "clamp", clamp)
-    dml_patch_method(torch.Tensor, "clamp", clamp)
-    dml_patch_method(torch.Tensor, "__pow__", pow)
+    dml_patch_method(Tensor, "clamp", tensor_clamp)
+    dml_patch_method(Tensor, "__pow__", pow)
     dml_patch(torch.nn.functional, "pad", pad)
+    # DDIMScheduler.step(), PNDMScheduler.step(), No error messages or crashes, just may randomly freeze.
+    dml_patch_method(Tensor, "__getitem__", getitem)
+    # EulerDiscreteScheduler.step()
+    dml_patch_method(Tensor, "__gt__", compare)
+    dml_patch_method(Tensor, "__ge__", compare)
+    dml_patch_method(Tensor, "__lt__", compare)
+    dml_patch_method(Tensor, "__le__", compare)
 
     def decorate_forward(name, module):
         """Helper function to better find which modules DML fails in as it often does
@@ -192,7 +220,7 @@ def enable(pipe):
             print(f"{name} in module {type(self)}")
 
             def nan_check(key, x):
-                if torch.is_tensor(x) and x.cpu().isnan().any():
+                if isinstance(x, Tensor) and x.cpu().isnan().any():
                     raise RuntimeError(f"{key} got NaN!")
 
             for i, v in enumerate(args):

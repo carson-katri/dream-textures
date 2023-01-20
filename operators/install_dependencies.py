@@ -135,6 +135,9 @@ class InstallDependencies(bpy.types.Operator):
     bl_description = ("Downloads and installs the required python packages into the '.python_dependencies' directory of the addon.")
     bl_options = {"REGISTER", "INTERNAL"}
 
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
     def execute(self, context):
         # Open the console so we can watch the progress.
         if sys.platform == 'win32':

@@ -271,10 +271,13 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
         if context.preferences.view.show_developer_ui: # If 'Developer Extras' is enabled, show addon development tools
             developer_box = layout.box()
             developer_box.label(text="Development Tools", icon="CONSOLE")
-            developer_box.label(text="This section is for addon development only. You are seeing this because you have 'Developer Extras' enabled.")
-            developer_box.label(text="Do not use any operators in this section unless you are setting up a development environment.")
+            warn_box = developer_box.box()
+            warn_box.label(text="WARNING", icon="ERROR")
+            warn_box.label(text="This section is for addon development only.")
+            warn_box.label(text="Do not use any operators in this section unless you are setting up a development environment.")
             if has_dependencies:
                 warn_box = developer_box.box()
                 warn_box.label(text="Dependencies already installed. Only install below if you developing the addon", icon="CHECKMARK")
             developer_box.prop(context.scene, 'dream_textures_requirements_path')
+            developer_box.operator_context = 'INVOKE_DEFAULT'
             developer_box.operator(InstallDependencies.bl_idname, icon="CONSOLE")

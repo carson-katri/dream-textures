@@ -80,9 +80,9 @@ git submodule update --init --recursive
 
 # Troubleshooting
 
-If you are experiencing trouble getting Dream Textures running, check the Blender Python console, in the top left under the Window dropdown next to File and Edit, for any error messages and search in the issues list with your error message and symptoms:
+If you are experiencing trouble getting Dream Textures running, check Blender's system console (in the top left under the "Window" dropdown next to "File" and "Edit") for any error messages. Then [search in the issues list](https://github.com/carson-katri/dream-textures/issues?q=is%3Aissue) with your error message and symptoms.
 
- [Dream Textures Issues](https://github.com/carson-katri/dream-textures/issues?q=is%3Aissue) 
+> **Note** On macOS there is no option to open the system console. Instead, you can get logs by opening the app *Terminal*, entering the command `/Applications/Blender.app/Contents/MacOS/Blender` and pressing the Enter key. This will launch Blender and any error messages will show up in the Terminal app.
 
 ![A screenshot of the "Window" > "Toggle System Console" menu action in Blender](docs/assets/readme-toggle-console.png)
 

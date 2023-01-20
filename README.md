@@ -88,7 +88,7 @@ If you are experiencing trouble getting Dream Textures running, check the Blende
 
 Features and feedback are also accepted on the issues page. If you have any issues that aren't listed, feel free to add them there!
 
-The [Discord](https://discord.gg/EmDJ8CaWZ7) also has a common issues list and strong community of helpful people, so feel free to come by for some help there as well.
+The [Dream Textures Discord server](https://discord.gg/EmDJ8CaWZ7) also has a common issues list and strong community of helpful people, so feel free to come by for some help there as well.
 
 ## Running On Apple
 

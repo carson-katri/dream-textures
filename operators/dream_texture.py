@@ -105,7 +105,7 @@ class DreamTexture(bpy.types.Operator):
             result: ImageGenerationResult = future.result(last_only=True)
             for i, result_image in enumerate(result.images):
                 seed = result.seeds[i]
-                prompt_string = bpy.data.scenes["Scene"].dream_textures_prompt.prompt_structure_token_subject
+                prompt_string = context.scene.dream_textures_prompt.prompt_structure_token_subject
 
                 image = bpy_image(f"{prompt_string} ({seed})", result_image.shape[1], result_image.shape[0], result_image.ravel(), last_data_block)
                 last_data_block = None

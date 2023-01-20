@@ -43,19 +43,5 @@ Select a different model below.""",
 Enter your API key below{', or change the pipeline' if Pipeline.local_available() else ''}.""",
                     lambda ctx, layout: layout.prop(ctx.preferences.addons[StableDiffusionPreferences.bl_idname].preferences, "dream_studio_key")
                 )
-    
-    # try:
-    #     snapshot_folder = model_snapshot_folder(self.model)
-    #     if snapshot_folder is None:
-    #         snapshot_folder = self.model
-    # except:
-    #     snapshot_folder = self.model
-    # model_index = os.path.join(snapshot_folder, 'unet', 'config.json')
-    # in_channels = 4
-    # if os.path.exists(model_index):
-    #     with open(model_index) as mi:
-    #         in_channels = json.load(mi)['in_channels']
-    
-    # task = 
 
     return True

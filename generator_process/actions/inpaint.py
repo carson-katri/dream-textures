@@ -4,7 +4,7 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder, load_pipe
 from .detect_seamless import SeamlessAxes
 
 def inpaint(
@@ -22,8 +22,8 @@ def inpaint(
     strength: float,
     prompt: str | list[str],
     steps: int,
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
     seed: int,
 
     cfg_scale: float,
@@ -181,26 +181,13 @@ def inpaint(
             else:
                 device = self.choose_device()
 
-            use_cpu_offload = optimizations.can_use("sequential_cpu_offload", device)
-
             # StableDiffusionPipeline w/ caching
-            if hasattr(self, "_cached_img2img_pipe") and self._cached_img2img_pipe[1] == model and use_cpu_offload == self._cached_img2img_pipe[2]:
-                pipe = self._cached_img2img_pipe[0]
-            else:
-                revision = "fp16" if optimizations.can_use_half(device) else None
-                snapshot_folder = model_snapshot_folder(model, revision)
-                pipe = GeneratorPipeline.from_pretrained(
-                    snapshot_folder,
-                    revision=revision,
-                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
-                )
-                pipe = pipe.to(device)
-                setattr(self, "_cached_img2img_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
+            pipe = load_pipe(self, GeneratorPipeline, model, optimizations, device)
 
             # Scheduler
             is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in model
             pipe.scheduler = scheduler.create(pipe, {
-                'model_path': self._cached_img2img_pipe[3],
+                'model_path': self._cached_pipe[3],
                 'subfolder': 'scheduler',
             } if is_stable_diffusion_2 else None)
 
@@ -266,8 +253,8 @@ def inpaint(
 
             answers = client.generate(
                 prompt=prompt,
-                width=width,
-                height=height,
+                width=width or 512,
+                height=height or 512,
                 cfg_scale=cfg_scale,
                 sampler=scheduler.stability_sdk(),
                 steps=steps,

@@ -16,7 +16,7 @@ from .dream_texture import CancelGenerator, ReleaseGenerator
 from ..preferences import StableDiffusionPreferences
 
 from ..generator_process import Generator
-from ..generator_process.actions.prompt_to_image import Pipeline
+from ..generator_process.models import Pipeline
 from ..generator_process.actions.huggingface_hub import ModelType
 import tempfile
 

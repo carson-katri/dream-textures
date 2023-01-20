@@ -32,6 +32,10 @@ class DreamTexture(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
+        try:
+            context.scene.dream_textures_prompt.validate(context)
+        except:
+            return False
         return Generator.shared().can_use()
 
     def execute(self, context):

@@ -8,8 +8,8 @@ def outpaint(
 
     image: NDArray,
 
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
 
     outpaint_origin: Tuple[int, int],
 
@@ -18,6 +18,8 @@ def outpaint(
     from PIL import Image, ImageOps
 
     init_image = Image.fromarray(image)
+    width = width or 512
+    height = height or 512
     
     if outpaint_origin[0] > init_image.size[0] or outpaint_origin[0] < -width:
         raise ValueError(f"Outpaint origin X ({outpaint_origin[0]}) must be between {-width} and {init_image.size[0]}")

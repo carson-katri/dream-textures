@@ -9,6 +9,7 @@ from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler
 from ..generator_process.actions.huggingface_hub import ModelType
 from ..prompt_engineering import *
 from ..preferences import StableDiffusionPreferences
+from .dream_prompt_validation import validate
 
 scheduler_options = [(scheduler.value, scheduler.value, '') for scheduler in Scheduler]
 
@@ -54,22 +55,22 @@ seamless_axes = [
 ]
 
 def modify_action_source_type(self, context):
-    def options():
-        yield ('color', 'Color', 'Use the color information from the image', 1)
-        models = list(filter(
-            lambda m: m.model == self.model,
-            context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
-        ))
-        if Pipeline[self.pipeline].depth() and len(models) > 0 and ModelType[models[0].model_type] == ModelType.DEPTH:
-            yield ('depth_generated', 'Color and Generated Depth', 'Use MiDaS to infer the depth of the initial image and include it in the conditioning. Can give results that more closely match the composition of the source image', 2)
-            yield ('depth_map', 'Color and Depth Map', 'Specify a secondary image to use as the depth map. Can give results that closely match the composition of the depth map', 3)
-            yield ('depth', 'Depth', 'Treat the initial image as a depth map, and ignore any color. Matches the composition of the source image without any color influence', 4)
-    return [*options()]
+    return [
+        ('color', 'Color', 'Use the color information from the image', 1),
+        ('depth_generated', 'Color and Generated Depth', 'Use MiDaS to infer the depth of the initial image and include it in the conditioning. Can give results that more closely match the composition of the source image', 2),
+        ('depth_map', 'Color and Depth Map', 'Specify a secondary image to use as the depth map. Can give results that closely match the composition of the depth map', 3),
+        ('depth', 'Depth', 'Treat the initial image as a depth map, and ignore any color. Matches the composition of the source image without any color influence', 4),
+    ]
 
 def model_options(self, context):
     match Pipeline[self.pipeline]:
         case Pipeline.STABLE_DIFFUSION:
-            return [(m.model, os.path.basename(m.model).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models)]
+            return [(
+                m.model,
+                os.path.basename(m.model).replace('models--', '').replace('--', '/'),
+                '',
+                i
+            ) for i, m in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models)]
         case Pipeline.STABILITY_SDK:
             return [(x, x, '') for x in [
                 "stable-diffusion-v1",
@@ -81,12 +82,10 @@ def model_options(self, context):
             ]]
 
 def pipeline_options(self, context):
-    def options():
-        if Pipeline.local_available():
-            yield (Pipeline.STABLE_DIFFUSION.name, 'Stable Diffusion', 'Stable Diffusion on your own hardware', 1)
-        if len(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key) > 0:
-            yield (Pipeline.STABILITY_SDK.name, 'DreamStudio', 'Cloud compute via DreamStudio', 2)
-    return [*options()]
+    return [
+        (Pipeline.STABLE_DIFFUSION.name, 'Stable Diffusion', 'Stable Diffusion on your own hardware', 1),
+        (Pipeline.STABILITY_SDK.name, 'DreamStudio', 'Cloud compute via DreamStudio', 2)
+    ]
 
 def seed_clamp(self, ctx):
     # clamp seed right after input to make it clear what the limits are
@@ -107,6 +106,7 @@ attributes = {
     "negative_prompt": StringProperty(name="Negative Prompt", description="The model will avoid aspects of the negative prompt"),
 
     # Size
+    "use_size": BoolProperty(name="Manual Size", default=False),
     "width": IntProperty(name="Width", default=512, min=64, step=64),
     "height": IntProperty(name="Height", default=512, min=64, step=64),
 
@@ -243,6 +243,8 @@ def generate_args(self):
     args['outpaint_origin'] = (args['outpaint_origin'][0], args['outpaint_origin'][1])
     args['key'] = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key
     args['seamless_axes'] = SeamlessAxes(args['seamless_axes'])
+    args['width'] = args['width'] if args['use_size'] else None
+    args['height'] = args['height'] if args['use_size'] else None
     return args
 
 DreamPrompt.generate_prompt = generate_prompt
@@ -250,3 +252,4 @@ DreamPrompt.get_prompt_subject = get_prompt_subject
 DreamPrompt.get_seed = get_seed
 DreamPrompt.get_optimizations = get_optimizations
 DreamPrompt.generate_args = generate_args
+DreamPrompt.validate = validate

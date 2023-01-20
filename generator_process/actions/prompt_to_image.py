@@ -10,71 +10,38 @@ import numpy as np
 import random
 from .detect_seamless import SeamlessAxes
 
+from ..models import Pipeline
 
-class Pipeline(enum.IntEnum):
-    STABLE_DIFFUSION = 0
+def load_pipe(self, generator_pipeline, model, optimizations, device):
+    """
+    Use a cached pipeline, or create the pipeline class and cache it.
+    
+    The cached pipeline will be invalidated if the model or use_cpu_offload options change.
+    """
+    import torch
+    import gc
 
-    STABILITY_SDK = 1
+    use_cpu_offload = optimizations.can_use("sequential_cpu_offload", device)
+    if hasattr(self, "_cached_pipe") and self._cached_pipe[1] == model and use_cpu_offload == self._cached_pipe[2]:
+        print("Using cached pipe")
+        pipe = self._cached_pipe[0]
+    else:
+        print("Creating new pipe")
+        # Release the cached pipe before loading the new one.
+        if hasattr(self, "_cached_pipe"):
+            del self._cached_pipe
+            gc.collect()
 
-    @staticmethod
-    def local_available():
-        from ...absolute_path import absolute_path
-        return os.path.exists(absolute_path(".python_dependencies/diffusers"))
-
-    def __str__(self):
-        return self.name
-    
-    def model(self):
-        return True
-
-    def init_img_actions(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return ['modify', 'inpaint', 'outpaint']
-            case Pipeline.STABILITY_SDK:
-                return ['modify', 'inpaint']
-    
-    def inpaint_mask_sources(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return ['alpha', 'prompt']
-            case Pipeline.STABILITY_SDK:
-                return ['alpha']
-    
-    def color_correction(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return True
-            case Pipeline.STABILITY_SDK:
-                return False
-    
-    def negative_prompts(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return True
-            case Pipeline.STABILITY_SDK:
-                return False
-    
-    def seamless(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return True
-            case Pipeline.STABILITY_SDK:
-                return False
-    
-    def upscaling(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return True
-            case Pipeline.STABILITY_SDK:
-                return False
-    
-    def depth(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return True
-            case Pipeline.STABILITY_SDK:
-                return False
+        revision = "fp16" if optimizations.can_use_half(device) else None
+        snapshot_folder = model_snapshot_folder(model, revision)
+        pipe = generator_pipeline.from_pretrained(
+            snapshot_folder,
+            revision=revision,
+            torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
+        )
+        pipe = pipe.to(device)
+        setattr(self, "_cached_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
+    return pipe
 
 class Scheduler(enum.Enum):
     LMS_DISCRETE = "LMS Discrete"
@@ -132,7 +99,7 @@ class Optimizations:
     tf32: Annotated[bool, "cuda"] = False
     amp: Annotated[bool, "cuda"] = False
     half_precision: Annotated[bool, "cuda"] = True
-    sequential_cpu_offload: bool = False
+    sequential_cpu_offload: Annotated[bool, "cuda"] = False
     channels_last_memory_format: bool = False
     # xformers_attention: bool = False # FIXME: xFormers is not yet available.
     batch_size: int = 1
@@ -209,8 +176,8 @@ class StepPreviewMode(enum.Enum):
 
 @dataclass
 class ImageGenerationResult:
-    images: [NDArray]
-    seeds: [int]
+    images: List[NDArray]
+    seeds: List[int]
     step: int
     final: bool
 
@@ -354,8 +321,8 @@ def prompt_to_image(
 
     prompt: str | list[str],
     steps: int,
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
     seed: int,
 
     cfg_scale: float,
@@ -481,21 +448,8 @@ def prompt_to_image(
             else:
                 device = self.choose_device()
 
-            use_cpu_offload = optimizations.can_use("sequential_cpu_offload", device)
-
             # StableDiffusionPipeline w/ caching
-            if hasattr(self, "_cached_pipe") and self._cached_pipe[1] == model and use_cpu_offload == self._cached_pipe[2]:
-                pipe = self._cached_pipe[0]
-            else:
-                revision = "fp16" if optimizations.can_use_half(device) else None
-                snapshot_folder = model_snapshot_folder(model, revision)
-                pipe = GeneratorPipeline.from_pretrained(
-                    snapshot_folder,
-                    revision=revision,
-                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
-                )
-                pipe = pipe.to(device)
-                setattr(self, "_cached_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
+            pipe = load_pipe(self, GeneratorPipeline, model, optimizations, device)
 
             # Scheduler
             is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in model
@@ -556,8 +510,8 @@ def prompt_to_image(
 
             answers = client.generate(
                 prompt=prompt,
-                width=width,
-                height=height,
+                width=width or 512,
+                height=height or 512,
                 cfg_scale=cfg_scale,
                 sampler=scheduler.stability_sdk(),
                 steps=steps,

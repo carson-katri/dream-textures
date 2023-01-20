@@ -15,9 +15,7 @@ from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
 from ...property_groups.dream_prompt import DreamPrompt, pipeline_options
 from ...generator_process.actions.detect_seamless import SeamlessAxes
-from ...generator_process.actions.prompt_to_image import Optimizations, Pipeline
-from ...generator_process.actions.huggingface_hub import ModelType
-from ...preferences import StableDiffusionPreferences
+from ...generator_process.models import Pipeline, FixItError
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -30,8 +28,8 @@ def dream_texture_panels():
             bl_region_type = 'UI'
 
             @classmethod
-            def poll(self, context):
-                if self.bl_space_type == 'NODE_EDITOR':
+            def poll(cls, context):
+                if cls.bl_space_type == 'NODE_EDITOR':
                     return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
                 else:
                     return True
@@ -46,8 +44,7 @@ def dream_texture_panels():
                 layout.use_property_split = True
                 layout.use_property_decorate = False
 
-                if len(pipeline_options(self, context)) > 1:
-                    layout.prop(context.scene.dream_textures_prompt, "pipeline")
+                layout.prop(context.scene.dream_textures_prompt, "pipeline")
                 if Pipeline[context.scene.dream_textures_prompt.pipeline].model():
                     layout.prop(context.scene.dream_textures_prompt, 'model')
 
@@ -144,7 +141,7 @@ def prompt_panel(sub_panel, space_type, get_prompt, get_seamless_result=None):
         bl_parent_id = PromptPanel.bl_idname
 
         @classmethod
-        def poll(self, context):
+        def poll(cls, context):
             return get_prompt(context).prompt_structure != file_batch_structure.id and Pipeline[get_prompt(context).pipeline].negative_prompts()
 
         def draw_header(self, context):
@@ -166,11 +163,16 @@ def size_panel(sub_panel, space_type, get_prompt):
         """Create a subpanel for size options"""
         bl_idname = f"DREAM_PT_dream_panel_size_{space_type}"
         bl_label = "Size"
+        bl_options = {'DEFAULT_CLOSED'}
+
+        def draw_header(self, context):
+            self.layout.prop(get_prompt(context), "use_size", text="")
 
         def draw(self, context):
             super().draw(context)
             layout = self.layout
             layout.use_property_split = True
+            layout.enabled = layout.enabled and get_prompt(context).use_size
 
             layout.prop(get_prompt(context), "width")
             layout.prop(get_prompt(context), "height")
@@ -360,9 +362,11 @@ def actions_panel(sub_panel, space_type, get_prompt):
             layout = self.layout
             layout.use_property_split = True
 
+            prompt = get_prompt(context)
+
             iterations_row = layout.row()
-            iterations_row.enabled = get_prompt(context).prompt_structure != file_batch_structure.id
-            iterations_row.prop(get_prompt(context), "iterations")
+            iterations_row.enabled = prompt.prompt_structure != file_batch_structure.id
+            iterations_row.prop(prompt, "iterations")
             
             row = layout.row()
             row.scale_y = 1.5
@@ -379,4 +383,16 @@ def actions_panel(sub_panel, space_type, get_prompt):
             if CancelGenerator.poll(context):
                 row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
             row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
+
+            # Validation
+            try:
+                prompt.validate(context)
+            except FixItError as e:
+                error_box = layout.box()
+                error_box.use_property_split = False
+                for i, line in enumerate(e.args[0].split('\n')):
+                    error_box.label(text=line, icon="ERROR" if i == 0 else "NONE")
+                e.draw(context, error_box)
+            except Exception as e:
+                print(e)
     return ActionsPanel

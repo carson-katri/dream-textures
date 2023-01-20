@@ -2,7 +2,7 @@ import bpy
 import cycles
 import numpy as np
 import os
-from .generator_process.actions.prompt_to_image import Pipeline, StepPreviewMode, ImageGenerationResult
+from .generator_process.actions.prompt_to_image import ImageGenerationResult
 from .generator_process import Generator
 import threading
 

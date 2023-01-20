@@ -84,7 +84,7 @@ If you are experiencing trouble getting Dream Textures running, check the Blende
 
  [Dream Textures Issues](https://github.com/carson-katri/dream-textures/issues?q=is%3Aissue) 
 
-![Troubleshooting With Blender Addons](docs/assets/readme-toggle-console.png)
+![A screenshot of the "Window" > "Toggle System Console" menu action in Blender](docs/assets/readme-toggle-console.png)
 
 Features and feedback are also accepted on the issues page. If you have any issues that aren't listed, feel free to add them there!
 

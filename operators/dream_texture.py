@@ -107,7 +107,7 @@ class DreamTexture(bpy.types.Operator):
                 seed = result.seeds[i]
                 prompt_string = bpy.data.scenes["Scene"].dream_textures_prompt.prompt_structure_token_subject
 
-                image = bpy_image(str(prompt_string + " " + str(seed)), result_image.shape[1], result_image.shape[0], result_image.ravel(), last_data_block)
+                image = bpy_image(f"{prompt_string} ({seed})", result_image.shape[1], result_image.shape[0], result_image.ravel(), last_data_block)
                 last_data_block = None
                 if node_tree is not None:
                     nodes = node_tree.nodes

@@ -351,14 +351,20 @@ class ProjectDreamTexture(bpy.types.Operator):
             context.scene.dream_textures_info = ""
             context.scene.dream_textures_progress = 0
             generated = future.result()
+            print(generated)
+            print(generated[0].seeds[0])
             prompt_subject = context.scene.dream_textures_project_prompt.prompt_structure_token_subject
-            name_with_prompt = f"{generated.seeds[0]} ({prompt_subject})"
+            seed = generated[0].seeds[0]
+            seed_str_length = len(str(seed))
+            trim_aware_name = (prompt_subject[:58 - seed_str_length] + '..') if len(prompt_subject) > 58 else prompt_subject
+            name_with_trimmed_prompt = f"{trim_aware_name} ({seed})"
+
             if isinstance(generated, list):
                 generated = generated[-1]
             if texture is None:
-                texture = bpy.data.images.new(name=name_with_prompt, width=generated.images[0].shape[1], height=generated.images[0].shape[0])
-            texture.name = name_with_prompt
-            material.name = name_with_prompt
+                texture = bpy.data.images.new(name=name_with_trimmed_prompt, width=generated.images[0].shape[1], height=generated.images[0].shape[0])
+            texture.name = name_with_trimmed_prompt
+            material.name = name_with_trimmed_prompt
             texture.pixels[:] = generated.images[0].ravel()
             texture.update()
             texture.pack()

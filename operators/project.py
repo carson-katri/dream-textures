@@ -351,8 +351,6 @@ class ProjectDreamTexture(bpy.types.Operator):
             context.scene.dream_textures_info = ""
             context.scene.dream_textures_progress = 0
             generated = future.result()
-            print(generated)
-            print(generated[0].seeds[0])
             prompt_subject = context.scene.dream_textures_project_prompt.prompt_structure_token_subject
             seed = generated[0].seeds[0]
             seed_str_length = len(str(seed))

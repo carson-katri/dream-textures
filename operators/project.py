@@ -351,9 +351,8 @@ class ProjectDreamTexture(bpy.types.Operator):
             context.scene.dream_textures_info = ""
             context.scene.dream_textures_progress = 0
             generated = future.result()
-            gen_seed_string = str(generated.seeds[0])
             prompt_subject = context.scene.dream_textures_project_prompt.prompt_structure_token_subject
-            name_with_prompt = str(prompt_subject + " " + gen_seed_string)
+            name_with_prompt = f"{generated.seeds[0]} ({prompt_subject})"
             if isinstance(generated, list):
                 generated = generated[-1]
             if texture is None:

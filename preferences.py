@@ -3,9 +3,11 @@ from bpy.props import CollectionProperty, StringProperty
 from bpy_extras.io_utils import ImportHelper
 import os
 import webbrowser
+import importlib.util
+import site
 
 from .absolute_path import absolute_path
-from .operators.install_dependencies import InstallDependencies
+from .operators.install_dependencies import InstallDependencies, UninstallDependencies
 from .operators.open_latest_version import OpenLatestVersion
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
 from .generator_process import Generator
@@ -15,14 +17,16 @@ from .generator_process.actions.convert_original_stable_diffusion_to_diffusers i
 
 is_downloading = False
 
-class OpenHuggingFace(bpy.types.Operator):
-    bl_idname = "dream_textures.open_hugging_face"
+class OpenURL(bpy.types.Operator):
+    bl_idname = "dream_textures.open_url"
     bl_label = "Get Access Token"
     bl_description = ("Opens huggingface.co to the tokens page")
     bl_options = {"REGISTER", "INTERNAL"}
 
+    url: bpy.props.StringProperty(name="URL")
+
     def execute(self, context):
-        webbrowser.open("https://huggingface.co/settings/tokens")
+        webbrowser.open(self.url)
         return {"FINISHED"}
 
 _model_config_options = [(m.name, m.value, '') for m in ModelConfig]
@@ -52,24 +56,6 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
         
         set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
 
-        return {"FINISHED"}
-
-class OpenContributors(bpy.types.Operator):
-    bl_idname = "dream_textures.open_contributors"
-    bl_label = "See All Contributors"
-
-    def execute(self, context):
-        webbrowser.open("https://github.com/carson-katri/dream-textures/graphs/contributors")
-        return {"FINISHED"}
-
-class OpenDreamStudio(bpy.types.Operator):
-    bl_idname = "dream_textures.open_dream_studio"
-    bl_label = "Find Your Key"
-    bl_description = ("Opens DreamStudio to the API key tab.")
-    bl_options = {"REGISTER", "INTERNAL"}
-
-    def execute(self, context):
-        webbrowser.open("https://beta.dreamstudio.ai/membership?tab=apiKeys")
         return {"FINISHED"}
 
 class Model(bpy.types.PropertyGroup):
@@ -208,6 +194,25 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                     progress_col.prop(self, "download_progress", slider=True)
                     progress_col.enabled = False
                 else:
+                    conflicting_packages = ["wandb", "k_diffusion"]
+                    conflicting_package_specs = {}
+                    for package in conflicting_packages:
+                        spec = importlib.util.find_spec(package)
+                        if spec is not None:
+                            conflicting_package_specs[package] = spec
+                    if len(conflicting_package_specs) > 0:
+                        conflicts_box = layout.box()
+                        conflicts_box.label(text="WARNING", icon="ERROR")
+                        conflicts_box.label(text=f"The following packages conflict with Dream Textures: {', '.join(conflicting_packages)}")
+                        conflicts_box.label(text=f"You may need to run Blender as an administrator to remove these packages")
+                        conflicts_box.operator(UninstallDependencies.bl_idname, text="Uninstall Conflicting Packages", icon="CANCEL").conflicts = ' '.join(conflicting_packages)
+                        conflicts_box.label(text=f"If the button above fails, you can remove the following folders manually:")
+                        for package in conflicting_packages:
+                            if package not in conflicting_package_specs:
+                                continue
+                            location = conflicting_package_specs[package].submodule_search_locations[0]
+                            conflicts_box.operator(OpenURL.bl_idname, text=f"Open '{location}'").url = f"file://{location}"
+
                     if not weights_installed:
                         default_weights_box = layout.box()
                         default_weights_box.label(text="You need to download at least one model.")
@@ -228,7 +233,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
                     auth_row = search_box.row()
                     auth_row.prop(self, "hf_token", text="Token")
-                    auth_row.operator(OpenHuggingFace.bl_idname, text="Get Your Token", icon="KEYINGSET")
+                    auth_row.operator(OpenURL.bl_idname, text="Get Your Token", icon="KEYINGSET").url = "https://huggingface.co/settings/tokens"
                     
                     search_box.prop(self, "prefer_fp16_revision")
 
@@ -240,7 +245,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             dream_studio_box.label(text=f"Link to your DreamStudio account to run in the cloud{' instead of locally.' if has_local else '.'}")
             key_row = dream_studio_box.row()
             key_row.prop(self, "dream_studio_key", text="Key")
-            key_row.operator(OpenDreamStudio.bl_idname, text="Find Your Key", icon="KEYINGSET")
+            key_row.operator(OpenURL.bl_idname, text="Find Your Key", icon="KEYINGSET").url = "https://beta.dreamstudio.ai/membership?tab=apiKeys"
 
             if weights_installed or len(self.dream_studio_key) > 0:
                 complete_box = layout.box()
@@ -266,7 +271,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
         contributors_box = layout.box()
         contributors_box.label(text="Contributors", icon="COMMUNITY")
         contributors_box.label(text="Dream Textures is made possible by the contributors on GitHub.")
-        contributors_box.operator(OpenContributors.bl_idname, icon="URL")
+        contributors_box.operator(OpenURL.bl_idname, text="See All Contributors", icon="URL").url = "https://github.com/carson-katri/dream-textures/graphs/contributors"
 
         if context.preferences.view.show_developer_ui: # If 'Developer Extras' is enabled, show addon development tools
             developer_box = layout.box()

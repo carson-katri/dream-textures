@@ -1,7 +1,3 @@
-import os
-import json
-import enum
-
 from ..preferences import StableDiffusionPreferences
 from ..generator_process.models import Pipeline, FixItError
 from ..generator_process.actions.huggingface_hub import ModelType

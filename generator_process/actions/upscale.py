@@ -188,8 +188,6 @@ def upscale(
         batch_size = min(len(tiler)-i, optimizations.batch_size)
         ids = list(range(i, i+batch_size))
         low_res_tiles = [Image.fromarray(tiler[id]) for id in ids]
-        from time import time
-        t0 = time()
         high_res_tiles = pipe(
             prompt=[prompt] * batch_size,
             image=low_res_tiles,
@@ -197,7 +195,6 @@ def upscale(
             generator=generator.manual_seed(seed),
             guidance_scale=cfg_scale,
         ).images
-        print(batch_size, time()-t0)
         for id, tile in zip(ids, high_res_tiles):
             tiler[id] = np.array(tile)
         step = None

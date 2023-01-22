@@ -137,7 +137,7 @@ class Optimizations:
     tf32: Annotated[bool, "cuda"] = False
     amp: Annotated[bool, "cuda"] = False
     half_precision: Annotated[bool, {"cuda", "privateuseone"}] = True
-    sequential_cpu_offload: bool = False
+    sequential_cpu_offload: Annotated[bool, {"cuda", "privateuseone"}] = False
     channels_last_memory_format: bool = False
     # xformers_attention: bool = False # FIXME: xFormers is not yet available.
     batch_size: int = 1
@@ -161,7 +161,7 @@ class Optimizations:
             import torch
             name = torch.cuda.get_device_name()
             return not ("GTX 1650" in name or "GTX 1660" in name)
-        return False
+        return self.can_use("half_precision", device)
     
     def apply(self, pipeline, device):
         """
@@ -351,17 +351,23 @@ def approximate_decoded_latents(latents):
 
 def model_snapshot_folder(model, preferred_revision: str | None = None):
     """ Try to find the preferred revision, but fallback to another revision if necessary. """
-    storage_folder = model
+    import diffusers
+    storage_folder = os.path.join(diffusers.utils.DIFFUSERS_CACHE, model)
     if os.path.exists(os.path.join(storage_folder, 'model_index.json')): # converted model
         snapshot_folder = storage_folder
     else: # hub model
-        ref_path = None
-        for revision in os.listdir(os.path.join(storage_folder, "refs")):
-            ref_path = os.path.join(storage_folder, "refs", revision)
-            if revision == preferred_revision:
-                break
-        if ref_path is None:
+        revisions = os.listdir(os.path.join(storage_folder, "refs"))
+        if len(revisions) == 0:
             return None
+        elif preferred_revision in revisions:
+            revision = preferred_revision
+        elif preferred_revision in [None, "fp16"] and "main" in revisions:
+            revision = "main"
+        elif preferred_revision in [None, "main"] and "fp16" in revisions:
+            revision = "fp16"
+        else:
+            revision = revisions[0]
+        ref_path = os.path.join(storage_folder, "refs", revision)
         with open(ref_path) as f:
             commit_hash = f.read()
 

@@ -69,7 +69,7 @@ def modify_action_source_type(self, context):
 def model_options(self, context):
     match Pipeline[self.pipeline]:
         case Pipeline.STABLE_DIFFUSION:
-            return [(m.model, os.path.basename(m.model).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models)]
+            return [(os.path.basename(m.model), os.path.basename(m.model).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models)]
         case Pipeline.STABILITY_SDK:
             return [(x, x, '') for x in [
                 "stable-diffusion-v1",

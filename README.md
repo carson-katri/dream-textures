@@ -79,7 +79,7 @@ git submodule update --init --recursive
     * This will download all pip dependencies for the selected platform into `.python_dependencies`
 
 
-### Apple Contribution Notes
+### macOS
 
 1. On Apple Silicon, with the `requirements-dream-studio.txt` you may run into an error with gRPC using an incompatible binary. If so, please use the following command to install the correct gRPC version:
 ```sh

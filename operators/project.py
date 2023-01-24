@@ -51,19 +51,9 @@ def dream_texture_projection_panels():
             layout.use_property_split = True
             layout.use_property_decorate = False
 
-            if len(pipeline_options(self, context)) > 1:
-                layout.prop(context.scene.dream_textures_project_prompt, "pipeline")
+            layout.prop(context.scene.dream_textures_project_prompt, "pipeline")
             if Pipeline[context.scene.dream_textures_project_prompt.pipeline].model():
                 layout.prop(context.scene.dream_textures_project_prompt, 'model')
-            
-            models = list(filter(
-                lambda m: m.model == context.scene.dream_textures_project_prompt.model,
-                context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
-            ))
-            if len(models) > 0 and ModelType[models[0].model_type] != ModelType.DEPTH:
-                box = layout.box()
-                box.label(text="Unsupported model", icon="ERROR")
-                box.label(text="Select a depth model, such as 'stabilityai/stable-diffusion-2-depth'")
 
             if is_force_show_download():
                 layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")

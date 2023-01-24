@@ -151,6 +151,16 @@ def _update_ui(self, context):
                 region.tag_redraw()
     return None
 
+def _template_model_download_progress(context, layout):
+    global is_downloading
+    preferences = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences
+    if is_downloading:
+        progress_col = layout.column()
+        progress_col.label(text=f"Downloading {preferences.download_file}")
+        progress_col.prop(preferences, "download_progress", slider=True)
+        progress_col.enabled = False
+    return is_downloading
+
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
@@ -188,12 +198,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
             has_local = Pipeline.local_available()
 
             if has_local:
-                if is_downloading:
-                    progress_col = layout.column()
-                    progress_col.label(text=f"Downloading {self.download_file}")
-                    progress_col.prop(self, "download_progress", slider=True)
-                    progress_col.enabled = False
-                else:
+                if not _template_model_download_progress(context, layout):
                     conflicting_packages = ["wandb", "k_diffusion"]
                     conflicting_package_specs = {}
                     for package in conflicting_packages:

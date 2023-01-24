@@ -28,6 +28,23 @@ class ModelType(enum.IntEnum):
     @classmethod
     def _missing_(cls, _):
         return cls.UNKNOWN
+    
+    def recommended_model(self) -> str:
+        """Provides a recommended model for a given task.
+
+        This method has a bias towards the latest version of official Stability AI models.
+        """
+        match self:
+            case ModelType.PROMPT_TO_IMAGE:
+                return "stabilityai/stable-diffusion-2-1"
+            case ModelType.DEPTH:
+                return "stabilityai/stable-diffusion-2-depth"
+            case ModelType.UPSCALING:
+                return "stabilityai/stable-diffusion-x4-upscaler"
+            case ModelType.INPAINTING:
+                return "stabilityai/stable-diffusion-2-inpainting"
+            case _:
+                return "stabilityai/stable-diffusion-2-1"
 
 @dataclass
 class Model:

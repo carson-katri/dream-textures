@@ -356,7 +356,16 @@ def model_snapshot_folder(model, preferred_revision: str | None = None):
     if os.path.exists(os.path.join(storage_folder, 'model_index.json')): # converted model
         snapshot_folder = storage_folder
     else: # hub model
-        revisions = os.listdir(os.path.join(storage_folder, "refs"))
+        revisions = {}
+        for revision in os.listdir(os.path.join(storage_folder, "refs")):
+            ref_path = os.path.join(storage_folder, "refs", revision)
+            with open(ref_path) as f:
+                commit_hash = f.read()
+
+            snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+            if len(os.listdir(snapshot_folder)) > 1:
+                revisions[revision] = snapshot_folder
+
         if len(revisions) == 0:
             return None
         elif preferred_revision in revisions:
@@ -366,14 +375,9 @@ def model_snapshot_folder(model, preferred_revision: str | None = None):
         elif preferred_revision in [None, "main"] and "fp16" in revisions:
             revision = "fp16"
         else:
-            revision = revisions[0]
-        ref_path = os.path.join(storage_folder, "refs", revision)
-        with open(ref_path) as f:
-            commit_hash = f.read()
+            revision = next(iter(revisions.keys()))
+        snapshot_folder = revisions[revision]
 
-        snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
-        if len(os.listdir(snapshot_folder)) <= 1:
-            raise ValueError(f"revision \"{revision}\" is not installed for model {model}")
     return snapshot_folder
 
 def prompt_to_image(

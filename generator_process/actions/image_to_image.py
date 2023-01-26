@@ -121,6 +121,8 @@ def image_to_image(
                             # compute the previous noisy sample x_t -> x_t-1
                             latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
+                            if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+                                progress_bar.update()
                             # NOTE: Modified to yield the latents instead of calling a callback.
                             yield ImageGenerationResult.step_preview(self, kwargs['step_preview_mode'], width, height, latents, generator, i)
 

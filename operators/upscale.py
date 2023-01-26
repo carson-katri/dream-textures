@@ -10,6 +10,20 @@ upscale_options = [
     ("8", "8x", "", 8),
 ]
 
+def bpy_image(name, width, height, pixels, existing_image):
+    if existing_image is not None and (existing_image.size[0] != width or existing_image.size[1] != height):
+        bpy.data.images.remove(existing_image)
+        existing_image = None
+    if existing_image is None:
+        image = bpy.data.images.new(name, width=width, height=height)
+    else:
+        image = existing_image
+        image.name = name
+    image.pixels.foreach_set(pixels)
+    image.pack()
+    image.update()
+    return image
+
 class Upscale(bpy.types.Operator):
     bl_idname = "shade.dream_textures_upscale"
     bl_label = "Upscale"
@@ -52,12 +66,6 @@ class Upscale(bpy.types.Operator):
                 .reshape((input_image.size[1], input_image.size[0], input_image.channels))
         )
 
-        def bpy_image(name, width, height, pixels):
-            image = bpy.data.images.new(name, width=width, height=height)
-            image.pixels.foreach_set(pixels)
-            image.pack()
-            return image
-
         generated_args = context.scene.dream_textures_upscale_prompt.generate_args()
         context.scene.dream_textures_upscale_seamless_result.update_args(generated_args)
 
@@ -74,16 +82,13 @@ class Upscale(bpy.types.Operator):
         last_data_block = None
         def on_tile_complete(_, tile: ImageUpscaleResult):
             nonlocal last_data_block
-            if last_data_block is not None:
-                bpy.data.images.remove(last_data_block)
-                last_data_block = None
-            else:
+            if last_data_block is None:
                 bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=tile.tile, min=0, max=tile.total, update=step_progress_update)
             if tile.final or tile.image is None:
                 return
             
             scene.dream_textures_progress = tile.tile
-            last_data_block = bpy_image(f"Tile {tile.tile}/{tile.total}", tile.image.shape[0], tile.image.shape[1], tile.image.ravel())
+            last_data_block = bpy_image(f"Tile {tile.tile}/{tile.total}", tile.image.shape[1], tile.image.shape[0], tile.image.ravel(), last_data_block)
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = last_data_block
@@ -96,7 +101,7 @@ class Upscale(bpy.types.Operator):
             tile: ImageUpscaleResult = future.result(last_only=True)
             if tile.image is None:
                 return
-            image = bpy_image(f"{input_image.name} (Upscaled)", tile.image.shape[0], tile.image.shape[1], tile.image.ravel())
+            image = bpy_image(f"{input_image.name} (Upscaled)", tile.image.shape[1], tile.image.shape[0], tile.image.ravel(), last_data_block)
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR':
                     area.spaces.active.image = image

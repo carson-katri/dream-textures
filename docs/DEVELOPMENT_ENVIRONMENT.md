@@ -85,3 +85,12 @@ All of the packages *must* be installed to `dream_textures/.python_dependencies`
 ## Using the Add-on
 
 Once you have the dependencies installed, the add-on will become fully usable. Continue setting up as described in the [setup guide](./SETUP.md).
+
+## Common Issues
+
+### macOS
+
+1. On Apple Silicon, with the `requirements-dream-studio.txt` you may run into an error with gRPC using an incompatible binary. If so, please use the following command to install the correct gRPC version:
+```sh
+pip install --no-binary :all: grpcio --ignore-installed --target .python_dependencies --upgrade
+```

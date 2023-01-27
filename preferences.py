@@ -52,6 +52,8 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
         try:
             Generator.shared().convert_original_stable_diffusion_to_diffusers(self.filepath, ModelConfig[self.model_config]).result()
         except Exception as e:
+            self.report({"ERROR"}, """Model conversion failed. Make sure you select the correct model configuration in the sidebar.
+Press 'N' or click the gear icon in the top right of the file selection popup to reveal the sidebar.""")
             self.report({"ERROR"}, str(e))
         
         set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())

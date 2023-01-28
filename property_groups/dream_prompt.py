@@ -11,6 +11,8 @@ from ..prompt_engineering import *
 from ..preferences import StableDiffusionPreferences
 from .dream_prompt_validation import validate
 
+from functools import reduce
+
 scheduler_options = [(scheduler.value, scheduler.value, '') for scheduler in Scheduler]
 
 step_preview_mode_options = [(mode.value, mode.value, '') for mode in StepPreviewMode]
@@ -65,12 +67,27 @@ def modify_action_source_type(self, context):
 def model_options(self, context):
     match Pipeline[self.pipeline]:
         case Pipeline.STABLE_DIFFUSION:
-            return [(
-                m.model,
-                os.path.basename(m.model).replace('models--', '').replace('--', '/'),
-                '',
-                i
-            ) for i, m in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models)]
+            def model_case(model, i):
+                return (
+                    model.model,
+                    os.path.basename(model.model).replace('models--', '').replace('--', '/'),
+                    model.model_type,
+                    i
+                )
+            models = {}
+            for i, model in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models):
+                if model.model_type not in models:
+                    models[model.model_type] = [model_case(model, i)]
+                else:
+                    models[model.model_type].append(model_case(model, i))
+            return reduce(
+                lambda a, b: a + [None] + sorted(b, key=lambda m: m[0]),
+                [
+                    models[group]
+                    for group in sorted(models.keys())
+                ],
+                []
+            )
         case Pipeline.STABILITY_SDK:
             return [(x, x, '') for x in [
                 "stable-diffusion-v1",

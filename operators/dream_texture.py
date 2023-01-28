@@ -107,7 +107,7 @@ class DreamTexture(bpy.types.Operator):
                 seed = result.seeds[i]
                 prompt_string = context.scene.dream_textures_prompt.prompt_structure_token_subject
                 seed_str_length = len(str(seed))
-                trim_aware_name = (prompt_string[:58 - seed_str_length] + '..') if len(prompt_string) > 58 else prompt_string
+                trim_aware_name = (prompt_string[:54 - seed_str_length] + '..') if len(prompt_string) > 54 else prompt_string
                 name_with_trimmed_prompt = f"{trim_aware_name} ({seed})"
                 image = bpy_image(name_with_trimmed_prompt, result_image.shape[1], result_image.shape[0], result_image.ravel(), last_data_block)
                 last_data_block = None

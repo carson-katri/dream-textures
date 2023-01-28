@@ -320,14 +320,7 @@ def depth_to_image(
                 device = self.choose_device()
 
             # StableDiffusionPipeline w/ caching
-            pipe = load_pipe(self, GeneratorPipeline, model, optimizations, device)
-
-            # Scheduler
-            is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in model
-            pipe.scheduler = scheduler.create(pipe, {
-                'model_path': self._cached_pipe[3],
-                'subfolder': 'scheduler',
-            } if is_stable_diffusion_2 else None)
+            pipe = load_pipe(self, GeneratorPipeline, model, optimizations, scheduler, device)
 
             # Optimizations
             pipe = optimizations.apply(pipe, device)
@@ -343,8 +336,9 @@ def depth_to_image(
                 generator = generator[0]
 
             # Init Image
-            height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
-            width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
+            # FIXME: The `unet.config.sample_size` of the depth model is `32`, not `64`. For now, this will be hardcoded to `512`.
+            height = height or 512
+            width = width or 512
             rounded_size = (
                 int(8 * (width // 8)),
                 int(8 * (height // 8)),

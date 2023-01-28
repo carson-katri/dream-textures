@@ -145,14 +145,7 @@ def image_to_image(
                 device = self.choose_device()
 
             # StableDiffusionPipeline w/ caching
-            pipe = load_pipe(self, GeneratorPipeline, model, optimizations, device)
-
-            # Scheduler
-            is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in model
-            pipe.scheduler = scheduler.create(pipe, {
-                'model_path': self._cached_pipe[3],
-                'subfolder': 'scheduler',
-            } if is_stable_diffusion_2 else None)
+            pipe = load_pipe(self, GeneratorPipeline, model, optimizations, scheduler, device)
 
             # Optimizations
             pipe = optimizations.apply(pipe, device)

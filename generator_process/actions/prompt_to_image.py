@@ -12,7 +12,7 @@ from .detect_seamless import SeamlessAxes
 
 from ..models import Pipeline
 
-def load_pipe(self, generator_pipeline, model, optimizations, device):
+def load_pipe(self, generator_pipeline, model, optimizations, scheduler, device):
     """
     Use a cached pipeline, or create the pipeline class and cache it.
     
@@ -23,10 +23,8 @@ def load_pipe(self, generator_pipeline, model, optimizations, device):
 
     use_cpu_offload = optimizations.can_use("sequential_cpu_offload", device)
     if hasattr(self, "_cached_pipe") and self._cached_pipe[1] == model and use_cpu_offload == self._cached_pipe[2]:
-        print("Using cached pipe")
         pipe = self._cached_pipe[0]
     else:
-        print("Creating new pipe")
         # Release the cached pipe before loading the new one.
         if hasattr(self, "_cached_pipe"):
             del self._cached_pipe
@@ -41,35 +39,57 @@ def load_pipe(self, generator_pipeline, model, optimizations, device):
         )
         pipe = pipe.to(device)
         setattr(self, "_cached_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
+    if 'scheduler' in os.listdir(self._cached_pipe[3]):
+        pipe.scheduler = scheduler.create(pipe, {
+            'model_path': self._cached_pipe[3],
+            'subfolder': 'scheduler',
+        })
+    else:
+        pipe.scheduler = scheduler.create(pipe, None)
     return pipe
 
 class Scheduler(enum.Enum):
-    LMS_DISCRETE = "LMS Discrete"
     DDIM = "DDIM"
-    PNDM = "PNDM"
     DDPM = "DDPM"
+    DEIS_MULTISTEP = "DEIS Multistep"
     DPM_SOLVER_MULTISTEP = "DPM Solver Multistep"
+    DPM_SOLVER_SINGLESTEP = "DPM Solver Singlestep"
     EULER_DISCRETE = "Euler Discrete"
     EULER_ANCESTRAL_DISCRETE = "Euler Ancestral Discrete"
+    HEUN_DISCRETE = "Heun Discrete"
+    KDPM2_DISCRETE = "KDPM2 Discrete" # Non-functional on mps
+    KDPM2_ANCESTRAL_DISCRETE = "KDPM2 Ancestral Discrete"
+    LMS_DISCRETE = "LMS Discrete"
+    PNDM = "PNDM"
 
     def create(self, pipeline, pretrained):
         import diffusers
         def scheduler_class():
             match self:
-                case Scheduler.LMS_DISCRETE:
-                    return diffusers.LMSDiscreteScheduler
                 case Scheduler.DDIM:
-                    return diffusers.DDIMScheduler
-                case Scheduler.PNDM:
-                    return diffusers.PNDMScheduler
+                    return diffusers.schedulers.DDIMScheduler
                 case Scheduler.DDPM:
-                    return diffusers.DDPMScheduler
+                    return diffusers.schedulers.DDPMScheduler
+                case Scheduler.DEIS_MULTISTEP:
+                    return diffusers.schedulers.DEISMultistepScheduler
                 case Scheduler.DPM_SOLVER_MULTISTEP:
-                    return diffusers.DPMSolverMultistepScheduler
+                    return diffusers.schedulers.DPMSolverMultistepScheduler
+                case Scheduler.DPM_SOLVER_SINGLESTEP:
+                    return diffusers.schedulers.DPMSolverSinglestepScheduler
                 case Scheduler.EULER_DISCRETE:
-                    return diffusers.EulerDiscreteScheduler
+                    return diffusers.schedulers.EulerDiscreteScheduler
                 case Scheduler.EULER_ANCESTRAL_DISCRETE:
-                    return diffusers.EulerAncestralDiscreteScheduler
+                    return diffusers.schedulers.EulerAncestralDiscreteScheduler
+                case Scheduler.HEUN_DISCRETE:
+                    return diffusers.schedulers.HeunDiscreteScheduler
+                case Scheduler.KDPM2_DISCRETE:
+                    return diffusers.schedulers.KDPM2DiscreteScheduler
+                case Scheduler.KDPM2_ANCESTRAL_DISCRETE:
+                    return diffusers.schedulers.KDPM2AncestralDiscreteScheduler
+                case Scheduler.LMS_DISCRETE:
+                    return diffusers.schedulers.LMSDiscreteScheduler
+                case Scheduler.PNDM:
+                    return diffusers.schedulers.PNDMScheduler
         if pretrained is not None:
             return scheduler_class().from_pretrained(pretrained['model_path'], subfolder=pretrained['subfolder'])
         else:
@@ -449,14 +469,7 @@ def prompt_to_image(
                 device = self.choose_device()
 
             # StableDiffusionPipeline w/ caching
-            pipe = load_pipe(self, GeneratorPipeline, model, optimizations, device)
-
-            # Scheduler
-            is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in model
-            pipe.scheduler = scheduler.create(pipe, {
-                'model_path': self._cached_pipe[3],
-                'subfolder': 'scheduler',
-            } if is_stable_diffusion_2 else None)
+            pipe = load_pipe(self, GeneratorPipeline, model, optimizations, scheduler, device)
 
             # Optimizations
             pipe = optimizations.apply(pipe, device)

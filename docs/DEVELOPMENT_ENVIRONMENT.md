@@ -78,8 +78,8 @@ All of the packages *must* be installed to `dream_textures/.python_dependencies`
 # macOS
 /Applications/Blender.app/Contents/Resources/3.4/python/bin/python3.10 -m pip install -r requirements/mac-mps-cpu.txt --target .python_dependencies
 
-# Linux
-/PATH_TO_BLENDER/python/bin/python.EXE -m pip install -r requirements/win-linux-cuda.txt --target .python_dependencies
+# Linux (via snap)
+/snap/blender/3132/3.4/python/bin/python3.10 -m pip install -r requirements/win-linux-cuda.txt --target .python_dependencies
 ```
 
 ## Using the Add-on

@@ -178,37 +178,6 @@ def size_panel(sub_panel, space_type, get_prompt):
             layout.prop(get_prompt(context), "height")
     return SizePanel
 
-class OpenClipSegDownload(bpy.types.Operator):
-    bl_idname = "dream_textures.open_clipseg_download"
-    bl_label = "Download Weights"
-    bl_description = ("Opens to where the weights can be downloaded.")
-    bl_options = {"REGISTER", "INTERNAL"}
-
-    def execute(self, context):
-        webbrowser.open("https://owncloud.gwdg.de/index.php/s/ioHbRzFx6th32hn")
-        return {"FINISHED"}
-
-class OpenClipSegWeightsDirectory(bpy.types.Operator, ImportHelper):
-    bl_idname = "dream_textures.open_clipseg_weights_directory"
-    bl_label = "Import Model Weights"
-    bl_description = ("Opens the directory that should contain the 'realesr-general-x4v3.pth' file")
-
-    filename_ext = ".pth"
-    filter_glob: bpy.props.StringProperty(
-        default="*.pth",
-        options={'HIDDEN'},
-        maxlen=255,
-    )
-
-    def execute(self, context):
-        _, extension = os.path.splitext(self.filepath)
-        if extension != '.pth':
-            self.report({"ERROR"}, "Select a valid '.pth' file.")
-            return {"FINISHED"}
-        shutil.copy(self.filepath, CLIPSEG_WEIGHTS_PATH)
-        
-        return {"FINISHED"}
-
 def init_image_panels(sub_panel, space_type, get_prompt):
     class InitImagePanel(sub_panel):
         """Create a subpanel for init image options"""
@@ -235,15 +204,8 @@ def init_image_panels(sub_panel, space_type, get_prompt):
             if prompt.init_img_action == 'inpaint':
                 layout.prop(prompt, "inpaint_mask_src")
                 if prompt.inpaint_mask_src == 'prompt':
-                    if not os.path.exists(CLIPSEG_WEIGHTS_PATH):
-                        layout.label(text="CLIP Segmentation model weights not installed.")
-                        layout.label(text="1. Download the file 'rd64-uni.pth'")
-                        layout.operator(OpenClipSegDownload.bl_idname, icon="URL")
-                        layout.label(text="2. Select the downloaded weights to install.")
-                        layout.operator(OpenClipSegWeightsDirectory.bl_idname, icon="IMPORT")
-                    else:
-                        layout.prop(prompt, "text_mask")
-                        layout.prop(prompt, "text_mask_confidence")
+                    layout.prop(prompt, "text_mask")
+                    layout.prop(prompt, "text_mask_confidence")
                 layout.prop(prompt, "inpaint_replace")
             elif prompt.init_img_action == 'outpaint':
                 layout.prop(prompt, "outpaint_origin")

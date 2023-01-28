@@ -36,6 +36,10 @@ def inpaint(
 
     step_preview_mode: StepPreviewMode,
 
+    inpaint_mask_src: str,
+    text_mask: str,
+    text_mask_confidence: float,
+
     # Stability SDK
     key: str | None = None,
 
@@ -209,10 +213,22 @@ def inpaint(
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
+                    match inpaint_mask_src:
+                        case 'alpha':
+                            mask_image = ImageOps.invert(init_image.getchannel('A'))
+                        case 'prompt':
+                            from transformers import AutoProcessor, CLIPSegForImageSegmentation
+
+                            processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+                            clipseg = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
+                            inputs = processor(text=[text_mask], images=[init_image.convert('RGB')], return_tensors="pt", padding=True)
+                            outputs = clipseg(**inputs)
+                            mask_image = Image.fromarray(np.uint8((1 - torch.sigmoid(outputs.logits).lt(text_mask_confidence).int().detach().numpy()) * 255), 'L').resize(init_image.size)
+
                     yield from pipe(
                         prompt=prompt,
                         image=[init_image.convert('RGB')] * batch_size,
-                        mask_image=[ImageOps.invert(init_image.getchannel('A'))] * batch_size,
+                        mask_image=[mask_image] * batch_size,
                         strength=strength,
                         height=init_image.size[1] if fit else height,
                         width=init_image.size[0] if fit else width,

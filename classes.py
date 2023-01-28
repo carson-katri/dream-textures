@@ -38,9 +38,6 @@ CLASSES = (
     *upscaling.upscaling_panels(),
     *history.history_panels(),
     *dream_texture_projection_panels(),
-
-    dream_texture.OpenClipSegDownload,
-    dream_texture.OpenClipSegWeightsDirectory,
 )
 
 PREFERENCE_CLASSES = (

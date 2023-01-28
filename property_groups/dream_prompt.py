@@ -71,7 +71,7 @@ def model_options(self, context):
                 return (
                     model.model,
                     os.path.basename(model.model).replace('models--', '').replace('--', '/'),
-                    model.model_type,
+                    ModelType[model.model_type].name,
                     i
                 )
             models = {}

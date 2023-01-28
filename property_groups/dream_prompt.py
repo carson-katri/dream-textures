@@ -89,14 +89,17 @@ def model_options(self, context):
                 []
             )
         case Pipeline.STABILITY_SDK:
-            return [(x, x, '') for x in [
-                "stable-diffusion-v1",
-                "stable-diffusion-v1-5",
-                "stable-diffusion-512-v2-0",
-                "stable-diffusion-768-v2-0",
-                "stable-inpainting-v1-0",
-                "stable-inpainting-512-v2-0"
-            ]]
+            return [
+                ("stable-diffusion-v1", "Stable Diffusion v1.4", ModelType.PROMPT_TO_IMAGE.name),
+                ("stable-diffusion-v1-5", "Stable Diffusion v1.5", ModelType.PROMPT_TO_IMAGE.name),
+                ("stable-diffusion-512-v2-0", "Stable Diffusion v2.0", ModelType.PROMPT_TO_IMAGE.name),
+                ("stable-diffusion-768-v2-0", "Stable Diffusion v2.0-768", ModelType.PROMPT_TO_IMAGE.name),
+                ("stable-diffusion-512-v2-1", "Stable Diffusion v2.1", ModelType.PROMPT_TO_IMAGE.name),
+                ("stable-diffusion-768-v2-1", "Stable Diffusion v2.1-768", ModelType.PROMPT_TO_IMAGE.name),
+                None,
+                ("stable-inpainting-v1-0", "Stable Inpainting v1.0", ModelType.INPAINTING.name),
+                ("stable-inpainting-512-v2-0", "Stable Inpainting v2.0", ModelType.INPAINTING.name),
+            ]
 
 def pipeline_options(self, context):
     return [

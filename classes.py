@@ -5,6 +5,7 @@ from .operators.view_history import SCENE_UL_HistoryList, RecallHistoryEntry, Cl
 from .operators.inpaint_area_brush import InpaintAreaBrushActivated
 from .operators.upscale import Upscale
 from .operators.project import ProjectDreamTexture, dream_texture_projection_panels
+from .operators.notify_result import NotifyResult
 from .property_groups.dream_prompt import DreamPrompt
 from .property_groups.seamless_result import SeamlessResult
 from .ui.panels import dream_texture, history, upscaling, render_properties
@@ -32,6 +33,8 @@ CLASSES = (
     DREAM_PT_AdvancedPresets,
     DREAM_MT_AdvancedPresets,
     AddAdvancedPreset,
+
+    NotifyResult,
     
     # The order these are registered in matters
     *dream_texture.dream_texture_panels(),

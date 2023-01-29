@@ -3,6 +3,7 @@ import hashlib
 import numpy as np
 import math
 
+from .notify_result import NotifyResult
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
@@ -145,7 +146,7 @@ class DreamTexture(bpy.types.Operator):
             scene.dream_textures_progress = 0
             if hasattr(gen, '_active_generation_future'):
                 del gen._active_generation_future
-            self.report({'ERROR'}, str(exception))
+            eval('bpy.ops.' + NotifyResult.bl_idname)('INVOKE_DEFAULT', exception=repr(exception))
             raise exception
 
         original_prompt = generated_args["prompt"]

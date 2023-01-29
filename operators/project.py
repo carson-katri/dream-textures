@@ -13,6 +13,7 @@ from .open_latest_version import OpenLatestVersion, is_force_show_download, new_
 
 from ..ui.panels.dream_texture import advanced_panel, create_panel, prompt_panel, size_panel
 from .dream_texture import CancelGenerator, ReleaseGenerator
+from .notify_result import NotifyResult
 from ..preferences import StableDiffusionPreferences
 
 from ..generator_process import Generator
@@ -385,6 +386,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             context.scene.dream_textures_progress = 0
             if hasattr(gen, '_active_generation_future'):
                 del gen._active_generation_future
+            eval('bpy.ops.' + NotifyResult.bl_idname)('INVOKE_DEFAULT', exception=repr(exception))
             raise exception
         
         context.scene.dream_textures_info = "Starting..."

@@ -1,6 +1,7 @@
 from ..preferences import StableDiffusionPreferences, _template_model_download_progress, InstallModel
 from ..generator_process.models import Pipeline, FixItError
 from ..generator_process.actions.huggingface_hub import ModelType
+from ..preferences import OpenURL
 
 def validate(self, context, task: ModelType | None = None) -> bool:
     if task is None:
@@ -64,5 +65,27 @@ Select a different model below.""",
 Enter your API key below{', or change the pipeline' if Pipeline.local_available() else ''}.""",
                     lambda ctx, layout: layout.prop(ctx.preferences.addons[StableDiffusionPreferences.bl_idname].preferences, "dream_studio_key")
                 )
+
+    init_image = None
+    if self.use_init_img:
+        match self.init_img_src:
+            case 'file':
+                init_image = context.scene.init_img
+            case 'open_editor':
+                for area in context.screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        if area.spaces.active.image is not None:
+                            init_image = area.spaces.active.image
+        if init_image is not None and init_image.type == 'RENDER_RESULT':
+            def fix_init_img(ctx, layout):
+                layout.prop(self, "init_img_src", expand=True)
+                if self.init_img_src == 'file':
+                    layout.template_ID(context.scene, "init_img", open="image.open")
+                layout.label(text="Or, enable the render pass to generate after each render.")
+                layout.operator(OpenURL.bl_idname, text="Learn More", icon="QUESTION").url = "https://github.com/carson-katri/dream-textures/blob/main/docs/RENDER_PASS.md"
+            raise FixItError("""'Render Result' cannot be used as a source image.
+Save the image then open the file to use it as a source image.""",
+                fix_init_img
+            )
 
     return True

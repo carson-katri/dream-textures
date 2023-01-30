@@ -69,6 +69,21 @@ In some cases, the *Install Dependencies* tool may not work. In this case, you c
 
 The best way to install dependencies is using the Python that ships with Blender. The command will differ depending on your operating system and Blender installation.
 
+On some platforms, Blender does not come with `pip` pre-installed. You can use `ensurepip` to install it if necessary.
+
+```sh
+# Windows
+"C:\Program Files\Blender Foundation\Blender 3.4\3.4\python\bin\python.exe" -m ensurepip
+
+# macOS
+/Applications/Blender.app/Contents/Resources/3.4/python/bin/python3.10 -m ensurepip
+
+# Linux (via snap)
+/snap/blender/3132/3.4/python/bin/python3.10 -m ensurepip
+```
+
+Once you have `pip`, the dependencies can be installed.
+
 All of the packages *must* be installed to `dream_textures/.python_dependencies`. The following commands assume they are being run from inside the `dream_textures` folder.
 
 ```sh

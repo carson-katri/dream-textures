@@ -320,7 +320,7 @@ def depth_to_image(
                 device = self.choose_device()
 
             # StableDiffusionPipeline w/ caching
-            pipe = load_pipe(self, GeneratorPipeline, model, optimizations, scheduler, device)
+            pipe = load_pipe(self, "depth", GeneratorPipeline, model, optimizations, scheduler, device)
 
             # Optimizations
             pipe = optimizations.apply(pipe, device)

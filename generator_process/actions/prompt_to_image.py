@@ -12,7 +12,7 @@ from .detect_seamless import SeamlessAxes
 
 from ..models import Pipeline
 
-def load_pipe(self, generator_pipeline, model, optimizations, scheduler, device):
+def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler, device):
     """
     Use a cached pipeline, or create the pipeline class and cache it.
     
@@ -21,8 +21,12 @@ def load_pipe(self, generator_pipeline, model, optimizations, scheduler, device)
     import torch
     import gc
 
-    use_cpu_offload = optimizations.can_use("sequential_cpu_offload", device)
-    if hasattr(self, "_cached_pipe") and self._cached_pipe[1] == model and use_cpu_offload == self._cached_pipe[2]:
+    compare = (
+        action, model, device,
+        optimizations.can_use("sequential_cpu_offload", device),
+        optimizations.can_use("half_precision", device),
+    )
+    if hasattr(self, "_cached_pipe") and self._cached_pipe[1] == compare:
         pipe = self._cached_pipe[0]
     else:
         # Release the cached pipe before loading the new one.
@@ -38,10 +42,10 @@ def load_pipe(self, generator_pipeline, model, optimizations, scheduler, device)
             torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
         )
         pipe = pipe.to(device)
-        setattr(self, "_cached_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
-    if 'scheduler' in os.listdir(self._cached_pipe[3]):
+        setattr(self, "_cached_pipe", (pipe, compare, snapshot_folder))
+    if 'scheduler' in os.listdir(self._cached_pipe[2]):
         pipe.scheduler = scheduler.create(pipe, {
-            'model_path': self._cached_pipe[3],
+            'model_path': self._cached_pipe[2],
             'subfolder': 'scheduler',
         })
     else:
@@ -469,7 +473,7 @@ def prompt_to_image(
                 device = self.choose_device()
 
             # StableDiffusionPipeline w/ caching
-            pipe = load_pipe(self, GeneratorPipeline, model, optimizations, scheduler, device)
+            pipe = load_pipe(self, "prompt", GeneratorPipeline, model, optimizations, scheduler, device)
 
             # Optimizations
             pipe = optimizations.apply(pipe, device)

@@ -171,10 +171,13 @@ def upscale(
         torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32
     )
     pipe.scheduler = scheduler.create(pipe, None)
-    pipe = pipe.to(device)
+    # vae would automatically be made float32 within the pipeline, but it fails to convert after offloading is enabled
+    pipe.vae.to(dtype=torch.float32)
+    if not optimizations.can_use("sequential_cpu_offload", device):
+        pipe = pipe.to(device)
     pipe = optimizations.apply(pipe, device)
 
-    generator = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+    generator = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
     if seed is None:
         seed = random.randrange(0, np.iinfo(np.uint32).max)
 
@@ -185,8 +188,6 @@ def upscale(
         batch_size = min(len(tiler)-i, optimizations.batch_size)
         ids = list(range(i, i+batch_size))
         low_res_tiles = [Image.fromarray(tiler[id]) for id in ids]
-        from time import time
-        t0 = time()
         high_res_tiles = pipe(
             prompt=[prompt] * batch_size,
             image=low_res_tiles,
@@ -194,7 +195,6 @@ def upscale(
             generator=generator.manual_seed(seed),
             guidance_scale=cfg_scale,
         ).images
-        print(batch_size, time()-t0)
         for id, tile in zip(ids, high_res_tiles):
             tiler[id] = np.array(tile)
         step = None

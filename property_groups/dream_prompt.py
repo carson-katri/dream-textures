@@ -69,7 +69,7 @@ def modify_action_source_type(self, context):
 def model_options(self, context):
     match Pipeline[self.pipeline]:
         case Pipeline.STABLE_DIFFUSION:
-            return [(m.model, os.path.basename(m.model).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models)]
+            return [(os.path.basename(m.model), os.path.basename(m.model).replace('models--', '').replace('--', '/'), '', i) for i, m in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models)]
         case Pipeline.STABILITY_SDK:
             return [(x, x, '') for x in [
                 "stable-diffusion-v1",
@@ -146,6 +146,12 @@ attributes = {
 }
 
 default_optimizations = Optimizations()
+if sys.platform == "darwin":
+    inferred_device = "mps"
+elif Pipeline.directml_available():
+    inferred_device = "privateuseone"
+else:
+    inferred_device = "cuda"
 for optim in dir(Optimizations):
     if optim.startswith('_'):
         continue
@@ -157,7 +163,7 @@ for optim in dir(Optimizations):
     if default is not None and not isinstance(getattr(default_optimizations, optim), bool):
         continue
     setattr(default_optimizations, optim, True)
-    if default_optimizations.can_use(optim, "mps" if sys.platform == "darwin" else "cuda"):
+    if default_optimizations.can_use(optim, inferred_device):
         attributes[f"optimizations_{optim}"] = BoolProperty(name=optim.replace('_', ' ').title(), default=default)
 attributes["optimizations_attention_slice_size_src"] = EnumProperty(name="Attention Slice Size", items=(
     ("auto", "Automatic", "", 1),

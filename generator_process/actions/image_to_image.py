@@ -121,6 +121,8 @@ def image_to_image(
                             # compute the previous noisy sample x_t -> x_t-1
                             latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
+                            if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+                                progress_bar.update()
                             # NOTE: Modified to yield the latents instead of calling a callback.
                             yield ImageGenerationResult.step_preview(self, kwargs['step_preview_mode'], width, height, latents, generator, i)
 
@@ -158,7 +160,8 @@ def image_to_image(
                     revision=revision,
                     torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
                 )
-                pipe = pipe.to(device)
+                if not use_cpu_offload:
+                    pipe = pipe.to(device)
                 setattr(self, "_cached_img2img_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
 
             # Scheduler
@@ -175,7 +178,7 @@ def image_to_image(
             batch_size = len(prompt) if isinstance(prompt, list) else 1
             generator = []
             for _ in range(batch_size):
-                gen = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+                gen = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
                 generator.append(gen.manual_seed(random.randrange(0, np.iinfo(np.uint32).max) if seed is None else seed))
             if batch_size == 1:
                 # Some schedulers don't handle a list of generators: https://github.com/huggingface/diffusers/issues/1909
@@ -191,7 +194,7 @@ def image_to_image(
             _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if device != 'mps' else nullcontext()), \
+            with (torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     yield from pipe(
                         prompt=prompt,

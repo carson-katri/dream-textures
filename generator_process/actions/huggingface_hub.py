@@ -84,27 +84,32 @@ def hf_list_installed_models(self) -> list[Model]:
     from diffusers.utils import DIFFUSERS_CACHE
     if not os.path.exists(DIFFUSERS_CACHE):
         return []
+
+    def detect_model_type(snapshot_folder):
+        unet_config = os.path.join(snapshot_folder, 'unet', 'config.json')
+        if os.path.exists(unet_config):
+            with open(unet_config, 'r') as f:
+                return ModelType(json.load(f)['in_channels'])
+        else:
+            return ModelType.UNKNOWN
+
     def _map_model(file):
         storage_folder = os.path.join(DIFFUSERS_CACHE, file)
+        model_type = ModelType.UNKNOWN
+
         if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
             snapshot_folder = storage_folder
+            model_type = detect_model_type(snapshot_folder)
         else:
-            revision = "main"
-            ref_path = None
             for revision in os.listdir(os.path.join(storage_folder, "refs")):
                 ref_path = os.path.join(storage_folder, "refs", revision)
-            if ref_path is None:
-                return None
-            with open(ref_path) as f:
-                commit_hash = f.read()
+                with open(ref_path) as f:
+                    commit_hash = f.read()
+                snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+                if (detected_type := detect_model_type(snapshot_folder)) != ModelType.UNKNOWN:
+                    model_type = detected_type
+                    break
 
-            snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
-        model_type = ModelType.UNKNOWN
-        try:
-            with open(os.path.join(snapshot_folder, 'unet', 'config.json'), 'r') as f:
-                model_type = ModelType(json.load(f)['in_channels'])
-        except:
-            pass
         return Model(
             storage_folder,
             "",

@@ -148,7 +148,7 @@ attributes = {
     "init_img_src": EnumProperty(name=" ", items=init_image_sources, default="file"),
     "init_img_action": EnumProperty(name="Action", items=init_image_actions_filtered, default=1),
     "strength": FloatProperty(name="Noise Strength", description="The ratio of noise:image. A higher value gives more 'creative' results", default=0.75, min=0, max=1, soft_min=0.01, soft_max=0.99),
-    "fit": BoolProperty(name="Fit to width/height", default=True),
+    "fit": BoolProperty(name="Fit to width/height", description="Resize the source image to match the specified size", default=True),
     "use_init_img_color": BoolProperty(name="Color Correct", default=True),
     "modify_action_source_type": EnumProperty(name="Image Type", items=modify_action_source_type, default=1, description="What kind of data is the source image"),
     

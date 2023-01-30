@@ -162,6 +162,14 @@ def image_to_image(
 
             # Init Image
             init_image = Image.fromarray(image).convert('RGB')
+
+            if fit:
+                height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
+                width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
+                init_image = init_image.resize((width, height))
+            else:
+                width = init_image.width
+                height = init_image.height
             
             # Seamless
             if seamless_axes == SeamlessAxes.AUTO:
@@ -169,15 +177,12 @@ def image_to_image(
             _configure_model_padding(pipe.unet, seamless_axes)
             _configure_model_padding(pipe.vae, seamless_axes)
 
-            height = height or self.unet.config.sample_size * self.vae_scale_factor
-            width = width or self.unet.config.sample_size * self.vae_scale_factor
-
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     yield from pipe(
                         prompt=prompt,
-                        image=[init_image.resize((width, height)) if fit else init_image] * batch_size,
+                        image=[init_image] * batch_size,
                         strength=strength,
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,

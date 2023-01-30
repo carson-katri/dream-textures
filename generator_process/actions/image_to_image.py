@@ -169,12 +169,15 @@ def image_to_image(
             _configure_model_padding(pipe.unet, seamless_axes)
             _configure_model_padding(pipe.vae, seamless_axes)
 
+            height = height or self.unet.config.sample_size * self.vae_scale_factor
+            width = width or self.unet.config.sample_size * self.vae_scale_factor
+
             # Inference
             with (torch.inference_mode() if device != 'mps' else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     yield from pipe(
                         prompt=prompt,
-                        image=[init_image if (fit or width is None or height is None) else init_image.resize((width, height))] * batch_size,
+                        image=[init_image.resize((width, height)) if fit else init_image] * batch_size,
                         strength=strength,
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,

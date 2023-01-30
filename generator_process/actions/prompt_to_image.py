@@ -1,4 +1,4 @@
-from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional
+from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional, Any
 import enum
 import math
 import os
@@ -12,6 +12,26 @@ from .detect_seamless import SeamlessAxes
 
 from ..models import Pipeline
 
+class CachedPipeline:
+    """A pipeline that has been cached for subsequent runs."""
+
+    pipeline: Any
+    """The diffusers pipeline to re-use"""
+
+    invalidation_properties: tuple
+    """Values that, when changed, will invalid this cached pipeline"""
+
+    snapshot_folder: str
+    """The snapshot folder containing the model"""
+
+    def __init__(self, pipeline: Any, invalidation_properties: tuple, snapshot_folder: str):
+        self.pipeline = pipeline
+        self.invalidation_properties = invalidation_properties
+        self.snapshot_folder = snapshot_folder
+
+    def is_valid(self, properties: tuple):
+        return properties == self.invalidation_properties
+
 def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler, device):
     """
     Use a cached pipeline, or create the pipeline class and cache it.
@@ -21,16 +41,17 @@ def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler,
     import torch
     import gc
 
-    compare = (
+    invalidation_properties = (
         action, model, device,
         optimizations.can_use("sequential_cpu_offload", device),
         optimizations.can_use("half_precision", device),
     )
-    if hasattr(self, "_cached_pipe") and self._cached_pipe[1] == compare:
-        pipe = self._cached_pipe[0]
+    cached_pipe: CachedPipeline = self._cached_pipe if hasattr(self, "_cached_pipe") else None
+    if cached_pipe is not None and cached_pipe.is_valid(invalidation_properties):
+        pipe = cached_pipe.pipeline
     else:
         # Release the cached pipe before loading the new one.
-        if hasattr(self, "_cached_pipe"):
+        if cached_pipe is not None:
             del self._cached_pipe
             gc.collect()
 
@@ -42,10 +63,11 @@ def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler,
             torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
         )
         pipe = pipe.to(device)
-        setattr(self, "_cached_pipe", (pipe, compare, snapshot_folder))
-    if 'scheduler' in os.listdir(self._cached_pipe[2]):
+        setattr(self, "_cached_pipe", CachedPipeline(pipe, invalidation_properties, snapshot_folder))
+        cached_pipe = self._cached_pipe
+    if 'scheduler' in os.listdir(cached_pipe.snapshot_folder):
         pipe.scheduler = scheduler.create(pipe, {
-            'model_path': self._cached_pipe[2],
+            'model_path': cached_pipe.snapshot_folder,
             'subfolder': 'scheduler',
         })
     else:

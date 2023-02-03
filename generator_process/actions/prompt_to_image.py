@@ -53,6 +53,7 @@ def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler,
         # Release the cached pipe before loading the new one.
         if cached_pipe is not None:
             del self._cached_pipe
+            del cached_pipe
             gc.collect()
 
         revision = "fp16" if optimizations.can_use_half(device) else None

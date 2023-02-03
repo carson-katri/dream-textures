@@ -192,7 +192,7 @@ void main()
 
     buffer = gpu.types.Buffer('FLOAT', width * height * 4, src)
     texture = gpu.types.GPUTexture(size=(width, height), data=buffer, format='RGBA16F')
-
+    
     with offscreen.bind():
         fb = gpu.state.active_framebuffer_get()
         fb.clear(color=(0.0, 0.0, 0.0, 0.0))
@@ -355,12 +355,18 @@ class ProjectDreamTexture(bpy.types.Operator):
             context.scene.dream_textures_info = ""
             context.scene.dream_textures_progress = 0
             generated = future.result()
+            prompt_subject = context.scene.dream_textures_project_prompt.prompt_structure_token_subject
+            seed = generated[0].seeds[0]
+            seed_str_length = len(str(seed))
+            trim_aware_name = (prompt_subject[:54 - seed_str_length] + '..') if len(prompt_subject) > 54 else prompt_subject
+            name_with_trimmed_prompt = f"{trim_aware_name} ({seed})"
+
             if isinstance(generated, list):
                 generated = generated[-1]
             if texture is None:
-                texture = bpy.data.images.new(name=str(generated.seeds[0]), width=generated.images[0].shape[1], height=generated.images[0].shape[0])
-            texture.name = str(generated.seeds[0])
-            material.name = str(generated.seeds[0])
+                texture = bpy.data.images.new(name=name_with_trimmed_prompt, width=generated.images[0].shape[1], height=generated.images[0].shape[0])
+            texture.name = name_with_trimmed_prompt
+            material.name = name_with_trimmed_prompt
             texture.pixels[:] = generated.images[0].ravel()
             texture.update()
             texture.pack()

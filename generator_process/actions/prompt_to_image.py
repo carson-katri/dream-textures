@@ -1,4 +1,9 @@
+<<<<<<< HEAD
 from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional, Any
+=======
+import functools
+from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional
+>>>>>>> 76a363ba3ad9998c277bee1d680d133732623abe
 import enum
 import math
 import os
@@ -9,6 +14,7 @@ from numpy.typing import NDArray
 import numpy as np
 import random
 from .detect_seamless import SeamlessAxes
+from ...absolute_path import absolute_path
 
 from ..models import Pipeline
 
@@ -18,11 +24,27 @@ class CachedPipeline:
     pipeline: Any
     """The diffusers pipeline to re-use"""
 
+<<<<<<< HEAD
     invalidation_properties: tuple
     """Values that, when changed, will invalid this cached pipeline"""
 
     snapshot_folder: str
     """The snapshot folder containing the model"""
+=======
+    @staticmethod
+    def local_available():
+        return os.path.exists(absolute_path(".python_dependencies/diffusers"))
+
+    @staticmethod
+    def directml_available():
+        return os.path.exists(absolute_path(".python_dependencies/torch_directml"))
+
+    def __str__(self):
+        return self.name
+    
+    def model(self):
+        return True
+>>>>>>> 76a363ba3ad9998c277bee1d680d133732623abe
 
     def __init__(self, pipeline: Any, invalidation_properties: tuple, snapshot_folder: str):
         self.pipeline = pipeline
@@ -145,8 +167,8 @@ class Optimizations:
     cudnn_benchmark: Annotated[bool, "cuda"] = False
     tf32: Annotated[bool, "cuda"] = False
     amp: Annotated[bool, "cuda"] = False
-    half_precision: Annotated[bool, "cuda"] = True
-    sequential_cpu_offload: Annotated[bool, "cuda"] = False
+    half_precision: Annotated[bool, {"cuda", "privateuseone"}] = True
+    sequential_cpu_offload: Annotated[bool, {"cuda", "privateuseone"}] = False
     channels_last_memory_format: bool = False
     # xformers_attention: bool = False # FIXME: xFormers is not yet available.
     batch_size: int = 1
@@ -159,7 +181,10 @@ class Optimizations:
             return False
         if isinstance(self.__annotations__.get(property, None), _AnnotatedAlias):
             annotation: _AnnotatedAlias = self.__annotations__[property]
-            return annotation.__metadata__[0] == device
+            opt_dev = annotation.__metadata__[0]
+            if isinstance(opt_dev, str):
+                return opt_dev == device
+            return device in opt_dev
         return True
 
     def can_use_half(self, device):
@@ -167,7 +192,7 @@ class Optimizations:
             import torch
             name = torch.cuda.get_device_name()
             return not ("GTX 1650" in name or "GTX 1660" in name)
-        return False
+        return self.can_use("half_precision", device)
     
     def apply(self, pipeline, device):
         """
@@ -188,8 +213,18 @@ class Optimizations:
         except: pass
         
         try:
-            if self.can_use("sequential_cpu_offload", device):
-                pipeline.enable_sequential_cpu_offload()
+            if self.can_use("sequential_cpu_offload", device) and device in ["cuda", "privateuseone"]:
+                # Doesn't allow for selecting execution device
+                # pipeline.enable_sequential_cpu_offload()
+
+                from accelerate import cpu_offload
+
+                for cpu_offloaded_model in [pipeline.unet, pipeline.text_encoder, pipeline.vae]:
+                    if cpu_offloaded_model is not None:
+                        cpu_offload(cpu_offloaded_model, device)
+
+                if pipeline.safety_checker is not None:
+                    cpu_offload(pipeline.safety_checker.vision_model, device)
         except: pass
         
         try:
@@ -211,6 +246,12 @@ class Optimizations:
             else:
                 pipeline.vae.disable_slicing()
         except: pass
+        
+        from .. import directml_patches
+        if device == "privateuseone":
+            directml_patches.enable(pipeline)
+        else:
+            directml_patches.disable(pipeline)
 
         return pipeline
 
@@ -307,8 +348,12 @@ def choose_device(self) -> str:
         return "cuda"
     elif torch.backends.mps.is_available():
         return "mps"
-    else:
-        return "cpu"
+    if Pipeline.directml_available():
+        import torch_directml
+        if torch_directml.is_available():
+            # can be named better when torch.utils.rename_privateuse1_backend() is released
+            return "privateuseone"
+    return "cpu"
 
 def approximate_decoded_latents(latents):
     """
@@ -337,23 +382,33 @@ def approximate_decoded_latents(latents):
 
 def model_snapshot_folder(model, preferred_revision: str | None = None):
     """ Try to find the preferred revision, but fallback to another revision if necessary. """
-    storage_folder = model
+    import diffusers
+    storage_folder = os.path.join(diffusers.utils.DIFFUSERS_CACHE, model)
     if os.path.exists(os.path.join(storage_folder, 'model_index.json')): # converted model
         snapshot_folder = storage_folder
     else: # hub model
-        ref_path = None
+        revisions = {}
         for revision in os.listdir(os.path.join(storage_folder, "refs")):
             ref_path = os.path.join(storage_folder, "refs", revision)
-            if revision == preferred_revision:
-                break
-        if ref_path is None:
-            return None
-        with open(ref_path) as f:
-            commit_hash = f.read()
+            with open(ref_path) as f:
+                commit_hash = f.read()
 
-        snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
-        if len(os.listdir(snapshot_folder)) <= 1:
-            raise ValueError(f"revision \"{revision}\" is not installed for model {model}")
+            snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+            if len(os.listdir(snapshot_folder)) > 1:
+                revisions[revision] = snapshot_folder
+
+        if len(revisions) == 0:
+            return None
+        elif preferred_revision in revisions:
+            revision = preferred_revision
+        elif preferred_revision in [None, "fp16"] and "main" in revisions:
+            revision = "main"
+        elif preferred_revision in [None, "main"] and "fp16" in revisions:
+            revision = "fp16"
+        else:
+            revision = next(iter(revisions.keys()))
+        snapshot_folder = revisions[revision]
+
     return snapshot_folder
 
 def prompt_to_image(
@@ -505,7 +560,7 @@ def prompt_to_image(
             batch_size = len(prompt) if isinstance(prompt, list) else 1
             generator = []
             for _ in range(batch_size):
-                gen = torch.Generator(device="cpu" if device == "mps" else device) # MPS does not support the `Generator` API
+                gen = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
                 generator.append(gen.manual_seed(random.randrange(0, np.iinfo(np.uint32).max) if seed is None else seed))
             if batch_size == 1:
                 # Some schedulers don't handle a list of generators: https://github.com/huggingface/diffusers/issues/1909
@@ -516,7 +571,7 @@ def prompt_to_image(
             _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if device != 'mps' else nullcontext()), \
+            with (torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext()), \
                 (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     yield from pipe(
                         prompt=prompt,
@@ -577,8 +632,22 @@ def _conv_forward_asymmetric(self, input, weight, bias):
     """
     Patch for Conv2d._conv_forward that supports asymmetric padding
     """
-    working = nn.functional.pad(input, self.asymmetric_padding[0], mode=self.asymmetric_padding_mode[0])
-    working = nn.functional.pad(working, self.asymmetric_padding[1], mode=self.asymmetric_padding_mode[1])
+    if input.device.type == "privateuseone":
+        # DML pad() will wrongly fill the tensor in constant mode with the supplied value
+        # (default 0) when padding on both ends of a dimension, can't split to two calls.
+        working = nn.functional.pad(input, self._reversed_padding_repeated_twice, mode='circular')
+        pad_w0, pad_w1, pad_h0, pad_h1 = self._reversed_padding_repeated_twice
+        if self.asymmetric_padding_mode[0] == 'constant':
+            working[:, :, :, :pad_w0] = 0
+            if pad_w1 > 0:
+                working[:, :, :, -pad_w1:] = 0
+        if self.asymmetric_padding_mode[1] == 'constant':
+            working[:, :, :pad_h0] = 0
+            if pad_h1 > 0:
+                working[:, :, -pad_h1:] = 0
+    else:
+        working = nn.functional.pad(input, self.asymmetric_padding[0], mode=self.asymmetric_padding_mode[0])
+        working = nn.functional.pad(working, self.asymmetric_padding[1], mode=self.asymmetric_padding_mode[1])
     return nn.functional.conv2d(working, weight, bias, self.stride, nn.modules.utils._pair(0), self.dilation, self.groups)
 
 def _configure_model_padding(model, seamless_axes):

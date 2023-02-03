@@ -136,6 +136,7 @@ class InstallModel(bpy.types.Operator):
                 set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
             def on_exception(_, exception):
                 self.report({"ERROR"}, str(exception))
+                raise exception
             f.add_response_callback(on_progress)
             f.add_done_callback(on_done)
             f.add_exception_callback(on_exception)

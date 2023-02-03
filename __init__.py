@@ -52,6 +52,7 @@ if current_process().name != "__actor__":
         ('requirements/win-linux-cuda.txt', 'Linux/Windows (CUDA)', 'Linux or Windows with NVIDIA GPU'),
         ('requirements/mac-mps-cpu.txt', 'Apple Silicon', 'Apple M1/M2'),
         ('requirements/linux-rocm.txt', 'Linux (AMD)', 'Linux with AMD GPU'),
+        ('requirements/win-dml.txt', 'Windows (DirectML)', 'Windows with DirectX 12 GPU'),
         ('requirements/dreamstudio.txt', 'DreamStudio', 'Cloud Compute Service')
     )
 

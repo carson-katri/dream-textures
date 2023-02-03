@@ -9,6 +9,7 @@ import tarfile
 from enum import IntEnum
 
 from ..absolute_path import absolute_path
+from ..generator_process import Generator
 
 class PipInstall(IntEnum):
     DEPENDENCIES = 1
@@ -143,6 +144,7 @@ class InstallDependencies(bpy.types.Operator):
         if sys.platform == 'win32':
             bpy.ops.wm.console_toggle()
 
+        Generator.shared_close()
         try:
             pip_install = get_pip_install()
             if pip_install is None:

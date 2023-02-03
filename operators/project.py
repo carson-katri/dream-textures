@@ -13,10 +13,11 @@ from .open_latest_version import OpenLatestVersion, is_force_show_download, new_
 
 from ..ui.panels.dream_texture import advanced_panel, create_panel, prompt_panel, size_panel
 from .dream_texture import CancelGenerator, ReleaseGenerator
+from .notify_result import NotifyResult
 from ..preferences import StableDiffusionPreferences
 
 from ..generator_process import Generator
-from ..generator_process.actions.prompt_to_image import Pipeline
+from ..generator_process.models import Pipeline, FixItError
 from ..generator_process.actions.huggingface_hub import ModelType
 import tempfile
 
@@ -51,24 +52,9 @@ def dream_texture_projection_panels():
             layout.use_property_split = True
             layout.use_property_decorate = False
 
-            if len(pipeline_options(self, context)) > 1:
-                layout.prop(context.scene.dream_textures_project_prompt, "pipeline")
+            layout.prop(context.scene.dream_textures_project_prompt, "pipeline")
             if Pipeline[context.scene.dream_textures_project_prompt.pipeline].model():
                 layout.prop(context.scene.dream_textures_project_prompt, 'model')
-            
-            if not Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth():
-                box = layout.box()
-                box.label(text="Unsupported pipeline", icon="ERROR")
-                box.label(text="The selected pipeline does not support depth to image.")
-            
-            models = list(filter(
-                lambda m: m.model == context.scene.dream_textures_project_prompt.model,
-                context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
-            ))
-            if len(models) > 0 and ModelType[models[0].model_type] != ModelType.DEPTH:
-                box = layout.box()
-                box.label(text="Unsupported model", icon="ERROR")
-                box.label(text="Select a depth model, such as 'stabilityai/stable-diffusion-2-depth'")
 
             if is_force_show_download():
                 layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
@@ -94,9 +80,11 @@ def dream_texture_projection_panels():
                 layout = self.layout
                 layout.use_property_split = True
 
+                prompt = get_prompt(context)
+
                 layout.prop(context.scene, "dream_textures_project_framebuffer_arguments")
                 if context.scene.dream_textures_project_framebuffer_arguments == 'color':
-                    layout.prop(get_prompt(context), "strength")
+                    layout.prop(prompt, "strength")
                 
                 col = layout.column()
                 col.prop(context.scene, "dream_textures_project_bake")
@@ -125,6 +113,18 @@ def dream_texture_projection_panels():
                 if CancelGenerator.poll(context):
                     row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
                 row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
+                
+                # Validation
+                try:
+                    prompt.validate(context, task=ModelType.DEPTH)
+                except FixItError as e:
+                    error_box = layout.box()
+                    error_box.use_property_split = False
+                    for i, line in enumerate(e.args[0].split('\n')):
+                        error_box.label(text=line, icon="ERROR" if i == 0 else "NONE")
+                    e.draw(context, error_box)
+                except Exception as e:
+                    print(e)
         return ActionsPanel
     yield create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, actions_panel, get_prompt)
 
@@ -222,6 +222,10 @@ class ProjectDreamTexture(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
+        try:
+            context.scene.dream_textures_project_prompt.validate(context, task=ModelType.DEPTH)
+        except:
+            return False
         return Generator.shared().can_use()
 
     @classmethod
@@ -388,6 +392,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             context.scene.dream_textures_progress = 0
             if hasattr(gen, '_active_generation_future'):
                 del gen._active_generation_future
+            eval('bpy.ops.' + NotifyResult.bl_idname)('INVOKE_DEFAULT', exception=repr(exception))
             raise exception
         
         context.scene.dream_textures_info = "Starting..."

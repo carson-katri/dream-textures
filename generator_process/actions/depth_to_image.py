@@ -5,7 +5,8 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder
+from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder, load_pipe
+from ..models import Pipeline
 from .detect_seamless import SeamlessAxes
 
 
@@ -26,8 +27,8 @@ def depth_to_image(
     steps: int,
     seed: int,
 
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
 
     cfg_scale: float,
     use_negative_prompt: bool,
@@ -320,29 +321,8 @@ def depth_to_image(
             else:
                 device = self.choose_device()
 
-            use_cpu_offload = optimizations.can_use("sequential_cpu_offload", device)
-
             # StableDiffusionPipeline w/ caching
-            if hasattr(self, "_cached_depth2img_pipe") and self._cached_depth2img_pipe[1] == model and use_cpu_offload == self._cached_depth2img_pipe[2]:
-                pipe = self._cached_depth2img_pipe[0]
-            else:
-                revision = "fp16" if optimizations.can_use_half(device) else None
-                snapshot_folder = model_snapshot_folder(model, revision)
-                pipe = GeneratorPipeline.from_pretrained(
-                    snapshot_folder,
-                    revision=revision,
-                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
-                )
-                if not use_cpu_offload:
-                    pipe = pipe.to(device)
-                setattr(self, "_cached_depth2img_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
-
-            # Scheduler
-            is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in model
-            pipe.scheduler = scheduler.create(pipe, {
-                'model_path': self._cached_depth2img_pipe[3],
-                'subfolder': 'scheduler',
-            } if is_stable_diffusion_2 else None)
+            pipe = load_pipe(self, "depth", GeneratorPipeline, model, optimizations, scheduler, device)
 
             # Optimizations
             pipe = optimizations.apply(pipe, device)
@@ -358,6 +338,9 @@ def depth_to_image(
                 generator = generator[0]
 
             # Init Image
+            # FIXME: The `unet.config.sample_size` of the depth model is `32`, not `64`. For now, this will be hardcoded to `512`.
+            height = height or 512
+            width = width or 512
             rounded_size = (
                 int(8 * (width // 8)),
                 int(8 * (height // 8)),

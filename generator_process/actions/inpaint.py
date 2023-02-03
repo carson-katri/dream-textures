@@ -4,7 +4,7 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder
+from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder, load_pipe
 from .detect_seamless import SeamlessAxes
 
 def inpaint(
@@ -22,8 +22,8 @@ def inpaint(
     strength: float,
     prompt: str | list[str],
     steps: int,
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
     seed: int,
 
     cfg_scale: float,
@@ -35,6 +35,10 @@ def inpaint(
     iterations: int,
 
     step_preview_mode: StepPreviewMode,
+
+    inpaint_mask_src: str,
+    text_mask: str,
+    text_mask_confidence: float,
 
     # Stability SDK
     key: str | None = None,
@@ -183,29 +187,8 @@ def inpaint(
             else:
                 device = self.choose_device()
 
-            use_cpu_offload = optimizations.can_use("sequential_cpu_offload", device)
-
             # StableDiffusionPipeline w/ caching
-            if hasattr(self, "_cached_img2img_pipe") and self._cached_img2img_pipe[1] == model and use_cpu_offload == self._cached_img2img_pipe[2]:
-                pipe = self._cached_img2img_pipe[0]
-            else:
-                revision = "fp16" if optimizations.can_use_half(device) else None
-                snapshot_folder = model_snapshot_folder(model, revision)
-                pipe = GeneratorPipeline.from_pretrained(
-                    snapshot_folder,
-                    revision=revision,
-                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
-                )
-                if not use_cpu_offload:
-                    pipe = pipe.to(device)
-                setattr(self, "_cached_img2img_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
-
-            # Scheduler
-            is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in model
-            pipe.scheduler = scheduler.create(pipe, {
-                'model_path': self._cached_img2img_pipe[3],
-                'subfolder': 'scheduler',
-            } if is_stable_diffusion_2 else None)
+            pipe = load_pipe(self, "inpaint", GeneratorPipeline, model, optimizations, scheduler, device)
 
             # Optimizations
             pipe = optimizations.apply(pipe, device)
@@ -232,10 +215,22 @@ def inpaint(
             # Inference
             with (torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext()), \
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
+                    match inpaint_mask_src:
+                        case 'alpha':
+                            mask_image = ImageOps.invert(init_image.getchannel('A'))
+                        case 'prompt':
+                            from transformers import AutoProcessor, CLIPSegForImageSegmentation
+
+                            processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+                            clipseg = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
+                            inputs = processor(text=[text_mask], images=[init_image.convert('RGB')], return_tensors="pt", padding=True)
+                            outputs = clipseg(**inputs)
+                            mask_image = Image.fromarray(np.uint8((1 - torch.sigmoid(outputs.logits).lt(text_mask_confidence).int().detach().numpy()) * 255), 'L').resize(init_image.size)
+
                     yield from pipe(
                         prompt=prompt,
                         image=[init_image.convert('RGB')] * batch_size,
-                        mask_image=[ImageOps.invert(init_image.getchannel('A'))] * batch_size,
+                        mask_image=[mask_image] * batch_size,
                         strength=strength,
                         height=init_image.size[1] if fit else height,
                         width=init_image.size[0] if fit else width,
@@ -269,8 +264,8 @@ def inpaint(
 
             answers = client.generate(
                 prompt=prompt,
-                width=width,
-                height=height,
+                width=width or 512,
+                height=height or 512,
                 cfg_scale=cfg_scale,
                 sampler=scheduler.stability_sdk(),
                 steps=steps,

@@ -136,6 +136,9 @@ class InstallDependencies(bpy.types.Operator):
     bl_description = ("Downloads and installs the required python packages into the '.python_dependencies' directory of the addon.")
     bl_options = {"REGISTER", "INTERNAL"}
 
+    def invoke(self, context, event):
+        return context.window_manager.invoke_confirm(self, event)
+
     def execute(self, context):
         # Open the console so we can watch the progress.
         if sys.platform == 'win32':
@@ -153,5 +156,24 @@ class InstallDependencies(bpy.types.Operator):
         except (subprocess.CalledProcessError, ImportError) as err:
             self.report({"ERROR"}, str(err))
             return {"CANCELLED"}
+
+        return {"FINISHED"}
+
+class UninstallDependencies(bpy.types.Operator):
+    bl_idname = "stable_diffusion.uninstall_dependencies"
+    bl_label = "Uninstall Dependencies"
+    bl_description = ("Uninstalls specific dependencies from Blender's site-packages")
+    bl_options = {"REGISTER", "INTERNAL"}
+
+    conflicts: bpy.props.StringProperty(name="Conflicts")
+
+    def execute(self, context):
+        # Open the console so we can watch the progress.
+        if sys.platform == 'win32':
+            bpy.ops.wm.console_toggle()
+
+        environ_copy = dict(os.environ)
+        environ_copy["PYTHONNOUSERSITE"] = "1"
+        subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", *self.conflicts.split(' ')], check=True, env=environ_copy, cwd=absolute_path(""))
 
         return {"FINISHED"}

@@ -1,5 +1,4 @@
-import functools
-from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional
+from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional, Any
 import enum
 import math
 import os
@@ -12,102 +11,113 @@ import random
 from .detect_seamless import SeamlessAxes
 from ...absolute_path import absolute_path
 
+from ..models import Pipeline
 
-class Pipeline(enum.IntEnum):
-    STABLE_DIFFUSION = 0
+class CachedPipeline:
+    """A pipeline that has been cached for subsequent runs."""
 
-    STABILITY_SDK = 1
+    pipeline: Any
+    """The diffusers pipeline to re-use"""
 
-    @staticmethod
-    def local_available():
-        return os.path.exists(absolute_path(".python_dependencies/diffusers"))
+    invalidation_properties: tuple
+    """Values that, when changed, will invalid this cached pipeline"""
 
-    @staticmethod
-    def directml_available():
-        return os.path.exists(absolute_path(".python_dependencies/torch_directml"))
+    snapshot_folder: str
+    """The snapshot folder containing the model"""
 
-    def __str__(self):
-        return self.name
-    
-    def model(self):
-        return True
+    def __init__(self, pipeline: Any, invalidation_properties: tuple, snapshot_folder: str):
+        self.pipeline = pipeline
+        self.invalidation_properties = invalidation_properties
+        self.snapshot_folder = snapshot_folder
 
-    def init_img_actions(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return ['modify', 'inpaint', 'outpaint']
-            case Pipeline.STABILITY_SDK:
-                return ['modify', 'inpaint']
+    def is_valid(self, properties: tuple):
+        return properties == self.invalidation_properties
+
+def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler, device):
+    """
+    Use a cached pipeline, or create the pipeline class and cache it.
     
-    def inpaint_mask_sources(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return ['alpha', 'prompt']
-            case Pipeline.STABILITY_SDK:
-                return ['alpha']
-    
-    def color_correction(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return True
-            case Pipeline.STABILITY_SDK:
-                return False
-    
-    def negative_prompts(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return True
-            case Pipeline.STABILITY_SDK:
-                return False
-    
-    def seamless(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return True
-            case Pipeline.STABILITY_SDK:
-                return False
-    
-    def upscaling(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return True
-            case Pipeline.STABILITY_SDK:
-                return False
-    
-    def depth(self):
-        match self:
-            case Pipeline.STABLE_DIFFUSION:
-                return True
-            case Pipeline.STABILITY_SDK:
-                return False
+    The cached pipeline will be invalidated if the model or use_cpu_offload options change.
+    """
+    import torch
+    import gc
+
+    invalidation_properties = (
+        action, model, device,
+        optimizations.can_use("sequential_cpu_offload", device),
+        optimizations.can_use("half_precision", device),
+    )
+    cached_pipe: CachedPipeline = self._cached_pipe if hasattr(self, "_cached_pipe") else None
+    if cached_pipe is not None and cached_pipe.is_valid(invalidation_properties):
+        pipe = cached_pipe.pipeline
+    else:
+        # Release the cached pipe before loading the new one.
+        if cached_pipe is not None:
+            del self._cached_pipe
+            del cached_pipe
+            gc.collect()
+
+        revision = "fp16" if optimizations.can_use_half(device) else None
+        snapshot_folder = model_snapshot_folder(model, revision)
+        pipe = generator_pipeline.from_pretrained(
+            snapshot_folder,
+            revision=revision,
+            torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
+        )
+        pipe = pipe.to(device)
+        setattr(self, "_cached_pipe", CachedPipeline(pipe, invalidation_properties, snapshot_folder))
+        cached_pipe = self._cached_pipe
+    if 'scheduler' in os.listdir(cached_pipe.snapshot_folder):
+        pipe.scheduler = scheduler.create(pipe, {
+            'model_path': cached_pipe.snapshot_folder,
+            'subfolder': 'scheduler',
+        })
+    else:
+        pipe.scheduler = scheduler.create(pipe, None)
+    return pipe
 
 class Scheduler(enum.Enum):
-    LMS_DISCRETE = "LMS Discrete"
     DDIM = "DDIM"
-    PNDM = "PNDM"
     DDPM = "DDPM"
+    DEIS_MULTISTEP = "DEIS Multistep"
     DPM_SOLVER_MULTISTEP = "DPM Solver Multistep"
+    DPM_SOLVER_SINGLESTEP = "DPM Solver Singlestep"
     EULER_DISCRETE = "Euler Discrete"
     EULER_ANCESTRAL_DISCRETE = "Euler Ancestral Discrete"
+    HEUN_DISCRETE = "Heun Discrete"
+    KDPM2_DISCRETE = "KDPM2 Discrete" # Non-functional on mps
+    KDPM2_ANCESTRAL_DISCRETE = "KDPM2 Ancestral Discrete"
+    LMS_DISCRETE = "LMS Discrete"
+    PNDM = "PNDM"
 
     def create(self, pipeline, pretrained):
         import diffusers
         def scheduler_class():
             match self:
-                case Scheduler.LMS_DISCRETE:
-                    return diffusers.LMSDiscreteScheduler
                 case Scheduler.DDIM:
-                    return diffusers.DDIMScheduler
-                case Scheduler.PNDM:
-                    return diffusers.PNDMScheduler
+                    return diffusers.schedulers.DDIMScheduler
                 case Scheduler.DDPM:
-                    return diffusers.DDPMScheduler
+                    return diffusers.schedulers.DDPMScheduler
+                case Scheduler.DEIS_MULTISTEP:
+                    return diffusers.schedulers.DEISMultistepScheduler
                 case Scheduler.DPM_SOLVER_MULTISTEP:
-                    return diffusers.DPMSolverMultistepScheduler
+                    return diffusers.schedulers.DPMSolverMultistepScheduler
+                case Scheduler.DPM_SOLVER_SINGLESTEP:
+                    return diffusers.schedulers.DPMSolverSinglestepScheduler
                 case Scheduler.EULER_DISCRETE:
-                    return diffusers.EulerDiscreteScheduler
+                    return diffusers.schedulers.EulerDiscreteScheduler
                 case Scheduler.EULER_ANCESTRAL_DISCRETE:
-                    return diffusers.EulerAncestralDiscreteScheduler
+                    return diffusers.schedulers.EulerAncestralDiscreteScheduler
+                case Scheduler.HEUN_DISCRETE:
+                    return diffusers.schedulers.HeunDiscreteScheduler
+                case Scheduler.KDPM2_DISCRETE:
+                    return diffusers.schedulers.KDPM2DiscreteScheduler
+                case Scheduler.KDPM2_ANCESTRAL_DISCRETE:
+                    return diffusers.schedulers.KDPM2AncestralDiscreteScheduler
+                case Scheduler.LMS_DISCRETE:
+                    return diffusers.schedulers.LMSDiscreteScheduler
+                case Scheduler.PNDM:
+                    return diffusers.schedulers.PNDMScheduler
         if pretrained is not None:
             return scheduler_class().from_pretrained(pretrained['model_path'], subfolder=pretrained['subfolder'])
         else:
@@ -233,8 +243,8 @@ class StepPreviewMode(enum.Enum):
 
 @dataclass
 class ImageGenerationResult:
-    images: [NDArray]
-    seeds: [int]
+    images: List[NDArray]
+    seeds: List[int]
     step: int
     final: bool
 
@@ -392,8 +402,8 @@ def prompt_to_image(
 
     prompt: str | list[str],
     steps: int,
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
     seed: int,
 
     cfg_scale: float,
@@ -519,29 +529,8 @@ def prompt_to_image(
             else:
                 device = self.choose_device()
 
-            use_cpu_offload = optimizations.can_use("sequential_cpu_offload", device)
-
             # StableDiffusionPipeline w/ caching
-            if hasattr(self, "_cached_pipe") and self._cached_pipe[1] == model and use_cpu_offload == self._cached_pipe[2]:
-                pipe = self._cached_pipe[0]
-            else:
-                revision = "fp16" if optimizations.can_use_half(device) else None
-                snapshot_folder = model_snapshot_folder(model, revision)
-                pipe = GeneratorPipeline.from_pretrained(
-                    snapshot_folder,
-                    revision=revision,
-                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
-                )
-                if not use_cpu_offload:
-                    pipe = pipe.to(device)
-                setattr(self, "_cached_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
-
-            # Scheduler
-            is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in model
-            pipe.scheduler = scheduler.create(pipe, {
-                'model_path': self._cached_pipe[3],
-                'subfolder': 'scheduler',
-            } if is_stable_diffusion_2 else None)
+            pipe = load_pipe(self, "prompt", GeneratorPipeline, model, optimizations, scheduler, device)
 
             # Optimizations
             pipe = optimizations.apply(pipe, device)
@@ -595,8 +584,8 @@ def prompt_to_image(
 
             answers = client.generate(
                 prompt=prompt,
-                width=width,
-                height=height,
+                width=width or 512,
+                height=height or 512,
                 cfg_scale=cfg_scale,
                 sampler=scheduler.stability_sdk(),
                 steps=steps,

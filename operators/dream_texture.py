@@ -3,6 +3,7 @@ import hashlib
 import numpy as np
 import math
 
+from .notify_result import NotifyResult
 from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
@@ -32,6 +33,10 @@ class DreamTexture(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
+        try:
+            context.scene.dream_textures_prompt.validate(context)
+        except:
+            return False
         return Generator.shared().can_use()
 
     def execute(self, context):
@@ -40,9 +45,11 @@ class DreamTexture(bpy.types.Operator):
         history_template["random_seed"] = False
         is_file_batch = context.scene.dream_textures_prompt.prompt_structure == file_batch_structure.id
         file_batch_lines = []
+        file_batch_lines_negative = []
         if is_file_batch:
             context.scene.dream_textures_prompt.iterations = 1
             file_batch_lines = [line.body for line in context.scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
+            file_batch_lines_negative = [""] * len(file_batch_lines)
             history_template["prompt_structure"] = custom_structure.id
 
         node_tree = context.material.node_tree if hasattr(context, 'material') and hasattr(context.material, 'node_tree') else None
@@ -145,10 +152,11 @@ class DreamTexture(bpy.types.Operator):
             scene.dream_textures_progress = 0
             if hasattr(gen, '_active_generation_future'):
                 del gen._active_generation_future
-            self.report({'ERROR'}, str(exception))
+            eval('bpy.ops.' + NotifyResult.bl_idname)('INVOKE_DEFAULT', exception=repr(exception))
             raise exception
 
         original_prompt = generated_args["prompt"]
+        original_negative_prompt = generated_args["negative_prompt"]
         gen = Generator.shared()
         def generate_next():
             batch_size = min(generated_args["optimizations"].batch_size, iteration_limit-iteration)
@@ -158,8 +166,10 @@ class DreamTexture(bpy.types.Operator):
                 batch_size = 1
             if is_file_batch:
                 generated_args["prompt"] = file_batch_lines[iteration: iteration+batch_size]
+                generated_args["negative_prompt"] = file_batch_lines_negative[iteration: iteration+batch_size]
             else:
                 generated_args["prompt"] = [original_prompt] * batch_size
+                generated_args["negative_prompt"] = [original_negative_prompt] * batch_size
             if init_image is not None:
                 match generated_args['init_img_action']:
                     case 'modify':

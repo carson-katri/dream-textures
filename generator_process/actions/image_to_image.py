@@ -5,7 +5,8 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Pipeline, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder
+from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder, load_pipe
+from ..models import Pipeline
 from .detect_seamless import SeamlessAxes
 
 
@@ -24,8 +25,8 @@ def image_to_image(
     strength: float,
     prompt: str | list[str],
     steps: int,
-    width: int,
-    height: int,
+    width: int | None,
+    height: int | None,
     seed: int,
 
     cfg_scale: float,
@@ -33,8 +34,6 @@ def image_to_image(
     negative_prompt: str,
     
     seamless_axes: SeamlessAxes | str | bool | tuple[bool, bool] | None,
-
-    iterations: int,
 
     step_preview_mode: StepPreviewMode,
 
@@ -147,29 +146,8 @@ def image_to_image(
             else:
                 device = self.choose_device()
 
-            use_cpu_offload = optimizations.can_use("sequential_cpu_offload", device)
-
             # StableDiffusionPipeline w/ caching
-            if hasattr(self, "_cached_img2img_pipe") and self._cached_img2img_pipe[1] == model and use_cpu_offload == self._cached_img2img_pipe[2]:
-                pipe = self._cached_img2img_pipe[0]
-            else:
-                revision = "fp16" if optimizations.can_use_half(device) else None
-                snapshot_folder = model_snapshot_folder(model, revision)
-                pipe = GeneratorPipeline.from_pretrained(
-                    snapshot_folder,
-                    revision=revision,
-                    torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
-                )
-                if not use_cpu_offload:
-                    pipe = pipe.to(device)
-                setattr(self, "_cached_img2img_pipe", (pipe, model, use_cpu_offload, snapshot_folder))
-
-            # Scheduler
-            is_stable_diffusion_2 = 'stabilityai--stable-diffusion-2' in model
-            pipe.scheduler = scheduler.create(pipe, {
-                'model_path': self._cached_img2img_pipe[3],
-                'subfolder': 'scheduler',
-            } if is_stable_diffusion_2 else None)
+            pipe = load_pipe(self, "modify", GeneratorPipeline, model, optimizations, scheduler, device)
 
             # Optimizations
             pipe = optimizations.apply(pipe, device)
@@ -186,6 +164,14 @@ def image_to_image(
 
             # Init Image
             init_image = Image.fromarray(image).convert('RGB')
+
+            if fit:
+                height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
+                width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
+                init_image = init_image.resize((width, height))
+            else:
+                width = init_image.width
+                height = init_image.height
             
             # Seamless
             if seamless_axes == SeamlessAxes.AUTO:
@@ -198,7 +184,7 @@ def image_to_image(
                     (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
                     yield from pipe(
                         prompt=prompt,
-                        image=[init_image if fit else init_image.resize((width, height))] * batch_size,
+                        image=[init_image] * batch_size,
                         strength=strength,
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,

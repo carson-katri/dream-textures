@@ -11,6 +11,11 @@ class Pipeline(enum.IntEnum):
         from ...absolute_path import absolute_path
         return os.path.exists(absolute_path(".python_dependencies/diffusers"))
 
+    @staticmethod
+    def directml_available():
+        from ...absolute_path import absolute_path
+        return os.path.exists(absolute_path(".python_dependencies/torch_directml"))
+
     def __str__(self):
         return self.name
     

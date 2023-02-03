@@ -1,9 +1,4 @@
-<<<<<<< HEAD
 from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional, Any
-=======
-import functools
-from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional
->>>>>>> 76a363ba3ad9998c277bee1d680d133732623abe
 import enum
 import math
 import os
@@ -24,27 +19,11 @@ class CachedPipeline:
     pipeline: Any
     """The diffusers pipeline to re-use"""
 
-<<<<<<< HEAD
     invalidation_properties: tuple
     """Values that, when changed, will invalid this cached pipeline"""
 
     snapshot_folder: str
     """The snapshot folder containing the model"""
-=======
-    @staticmethod
-    def local_available():
-        return os.path.exists(absolute_path(".python_dependencies/diffusers"))
-
-    @staticmethod
-    def directml_available():
-        return os.path.exists(absolute_path(".python_dependencies/torch_directml"))
-
-    def __str__(self):
-        return self.name
-    
-    def model(self):
-        return True
->>>>>>> 76a363ba3ad9998c277bee1d680d133732623abe
 
     def __init__(self, pipeline: Any, invalidation_properties: tuple, snapshot_folder: str):
         self.pipeline = pipeline

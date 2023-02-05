@@ -313,6 +313,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             uv_layer, uv_layer_index = ProjectDreamTexture.get_uv_layer(mesh)
 
             bm = mesh.copy()
+            bm.select_mode = {'FACE'}
             bmesh.ops.split_edges(bm, edges=bm.edges)
             bmesh.ops.delete(bm, geom=[f for f in bm.faces if not f.select], context='FACES')
             target_objects.append((bm, bm.loops.layers.uv[uv_layer_index]))

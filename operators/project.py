@@ -26,6 +26,43 @@ framebuffer_arguments = [
     ('color', 'Depth and Color', 'Provide the scene depth and color as input'),
 ]
 
+def _validate_projection(context):
+    if len(context.selected_objects) == 0:
+        def fix_selection(context, layout):
+            if context.object.mode != 'OBJECT':
+                layout.operator("object.mode_set", text="Switch to Object Mode", icon="OBJECT_DATAMODE").mode = 'OBJECT'
+            layout.operator("object.select_by_type", text="Select All Meshes", icon="RESTRICT_SELECT_OFF").type = 'MESH'
+        raise FixItError(
+            """No objects selected
+Select at least one object to project onto.""",
+            fix_selection
+        )
+    if context.object is not None and context.object.mode != 'EDIT':
+        def fix_mode(_, layout):
+            layout.operator("object.mode_set", text="Switch to Edit Mode", icon="EDITMODE_HLT").mode = 'EDIT'
+        raise FixItError(
+            """Enter edit mode
+In edit mode, select the faces to project onto.""",
+            fix_mode
+        )
+    has_selection = False
+    for obj in context.selected_objects:
+        if not hasattr(obj, "data"):
+            continue
+        mesh = bmesh.from_edit_mesh(obj.data)
+        bm = mesh.copy()
+        bm.select_mode = {'FACE'}
+        for f in bm.faces:
+            if f.select:
+                has_selection = True
+                break
+    if not has_selection:
+        raise FixItError(
+            """No faces selected.
+Select at least one face to project onto.""",
+            lambda ctx, layout: None
+        )
+
 def dream_texture_projection_panels():
     class DREAM_PT_dream_panel_projection(bpy.types.Panel):
         """Creates a Dream Textures panel for projection"""
@@ -101,10 +138,6 @@ def dream_texture_projection_panels():
                         r = row.row()
                         r.operator(ProjectDreamTexture.bl_idname, icon="MOD_UVPROJECT")
                         r.enabled = Pipeline[context.scene.dream_textures_project_prompt.pipeline].depth() and context.object is not None and context.object.mode == 'EDIT'
-                        if context.object is not None and context.object.mode != 'EDIT':
-                            box = layout.box()
-                            box.label(text="Enter Edit Mode", icon="ERROR")
-                            box.label(text="In edit mode, select the faces to project onto.")
                 else:
                     disabled_row = row.row()
                     disabled_row.use_property_split = True
@@ -117,6 +150,7 @@ def dream_texture_projection_panels():
                 # Validation
                 try:
                     prompt.validate(context, task=ModelType.DEPTH)
+                    _validate_projection(context)
                 except FixItError as e:
                     error_box = layout.box()
                     error_box.use_property_split = False
@@ -224,6 +258,7 @@ class ProjectDreamTexture(bpy.types.Operator):
     def poll(cls, context):
         try:
             context.scene.dream_textures_project_prompt.validate(context, task=ModelType.DEPTH)
+            _validate_projection(context)
         except:
             return False
         return Generator.shared().can_use()
@@ -313,6 +348,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             uv_layer, uv_layer_index = ProjectDreamTexture.get_uv_layer(mesh)
 
             bm = mesh.copy()
+            bm.select_mode = {'FACE'}
             bmesh.ops.split_edges(bm, edges=bm.edges)
             bmesh.ops.delete(bm, geom=[f for f in bm.faces if not f.select], context='FACES')
             target_objects.append((bm, bm.loops.layers.uv[uv_layer_index]))

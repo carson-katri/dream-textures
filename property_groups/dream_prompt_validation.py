@@ -39,7 +39,7 @@ Select a different pipeline below.""",
                 )
 
             installed_models = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
-            model = next((m for m in installed_models if m.model == self.model), None)
+            model = next((m for m in installed_models if m.model_base == self.model), None)
             if model is None:
                 raise FixItError("No model selected.", lambda _, layout: layout.prop(self, "model"))
             else:

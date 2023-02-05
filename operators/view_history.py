@@ -2,7 +2,7 @@ import bpy
 from bpy_extras.io_utils import ImportHelper, ExportHelper
 import json
 import os
-from ..property_groups.dream_prompt import scheduler_options
+from ..property_groups.dream_prompt import DreamPrompt, scheduler_options
 from ..preferences import StableDiffusionPreferences
     
 class SCENE_UL_HistoryList(bpy.types.UIList):
@@ -112,8 +112,8 @@ class ExportHistorySelection(bpy.types.Operator, ExportHelper):
             self.report({"ERROR"}, "No valid selection to export.")
             return {"FINISHED"}
         with open(self.filepath, 'w', encoding='utf-8') as target:
-            args = selection.generate_args()
-            args['seed'] = selection.seed
+            args = {key: getattr(selection, key) for key in DreamPrompt.__annotations__}
+            args["outpaint_origin"] = list(args["outpaint_origin"])
             json.dump(args, target, indent=4)
 
         return {"FINISHED"}

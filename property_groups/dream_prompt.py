@@ -69,8 +69,8 @@ def model_options(self, context):
         case Pipeline.STABLE_DIFFUSION:
             def model_case(model, i):
                 return (
-                    model.model,
-                    os.path.basename(model.model).replace('models--', '').replace('--', '/'),
+                    model.model_base,
+                    model.model_base.replace('models--', '').replace('--', '/'),
                     ModelType[model.model_type].name,
                     i
                 )

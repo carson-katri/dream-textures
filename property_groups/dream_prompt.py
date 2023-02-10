@@ -166,12 +166,8 @@ attributes = {
 }
 
 default_optimizations = Optimizations()
-if sys.platform == "darwin":
-    inferred_device = "mps"
-elif Pipeline.directml_available():
-    inferred_device = "privateuseone"
-else:
-    inferred_device = "cuda"
+inferred_device = Optimizations.infer_device()
+    
 for optim in dir(Optimizations):
     if optim.startswith('_'):
         continue
@@ -183,8 +179,7 @@ for optim in dir(Optimizations):
     if default is not None and not isinstance(getattr(default_optimizations, optim), bool):
         continue
     setattr(default_optimizations, optim, True)
-    if default_optimizations.can_use(optim, inferred_device):
-        attributes[f"optimizations_{optim}"] = BoolProperty(name=optim.replace('_', ' ').title(), default=default)
+    attributes[f"optimizations_{optim}"] = BoolProperty(name=optim.replace('_', ' ').title(), default=default)
 attributes["optimizations_attention_slice_size_src"] = EnumProperty(name="Attention Slice Size", items=(
     ("auto", "Automatic", "", 1),
     ("manual", "Manual", "", 2),

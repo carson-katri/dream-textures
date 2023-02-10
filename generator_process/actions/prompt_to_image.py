@@ -2,6 +2,7 @@ from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List,
 import enum
 import math
 import os
+import sys
 from dataclasses import dataclass
 from contextlib import nullcontext
 
@@ -154,6 +155,15 @@ class Optimizations:
     vae_slicing: bool = True
 
     cpu_only: bool = False
+
+    @staticmethod
+    def infer_device() -> str:
+        if sys.platform == "darwin":
+            return "mps"
+        elif Pipeline.directml_available():
+            return "privateuseone"
+        else:
+            return "cuda"
 
     def can_use(self, property, device) -> bool:
         if not getattr(self, property):

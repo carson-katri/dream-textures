@@ -2,19 +2,14 @@ import bpy
 from bpy.types import Panel, Operator, Menu
 from bl_operators.presets import AddPresetBase
 from bl_ui.utils import PresetPanel
+from typing import _AnnotatedAlias
 import os
 import shutil
 from ..absolute_path import absolute_path
+from ..generator_process.actions.prompt_to_image import Optimizations
 
 class DreamTexturesPresetPanel(PresetPanel, Panel):
     preset_operator = "script.execute_preset"
-
-    # @staticmethod
-    # def post_cb(context):
-    #     # Modify an arbitrary built-in scene property to force a depsgraph
-    #     # update, because add-on properties don't. (see T62325)
-    #     render = context.scene.render
-    #     render.filter_size = render.filter_size
 
 class DREAM_PT_AdvancedPresets(DreamTexturesPresetPanel):
     bl_label = "Advanced Presets"
@@ -36,13 +31,23 @@ class AddAdvancedPreset(AddPresetBase, Operator):
     
     preset_defines = ['prompt = bpy.context.scene.dream_textures_prompt']
     preset_values = [
-        "prompt.precision",
-        "prompt.random_seed",
-        "prompt.seed",
         "prompt.steps",
         "prompt.cfg_scale",
         "prompt.scheduler",
-        "prompt.show_steps",
+        "prompt.step_preview_mode",
+
+        "prompt.optimizations_attention_slicing",
+        "prompt.optimizations_attention_slice_size_src",
+        "prompt.optimizations_attention_slice_size",
+        "prompt.optimizations_cudnn_benchmark",
+        "prompt.optimizations_tf32",
+        "prompt.optimizations_amp",
+        "prompt.optimizations_half_precision",
+        "prompt.optimizations_sequential_cpu_offload",
+        "prompt.optimizations_channels_last_memory_format",
+        "prompt.optimizations_batch_size",
+        "prompt.optimizations_vae_slicing",
+        "prompt.optimizations_cpu_only",
     ]
 
 class RestoreDefaultPresets(Operator):

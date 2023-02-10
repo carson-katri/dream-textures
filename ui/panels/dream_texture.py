@@ -44,14 +44,14 @@ def dream_texture_panels():
                 layout.use_property_split = True
                 layout.use_property_decorate = False
 
-                layout.prop(context.scene.dream_textures_prompt, "pipeline")
-                if Pipeline[context.scene.dream_textures_prompt.pipeline].model():
-                    layout.prop(context.scene.dream_textures_prompt, 'model')
-
                 if is_force_show_download():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
                 elif new_version_available():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
+
+                layout.prop(context.scene.dream_textures_prompt, "pipeline")
+                if Pipeline[context.scene.dream_textures_prompt.pipeline].model():
+                    layout.prop(context.scene.dream_textures_prompt, 'model')
 
         DreamTexturePanel.__name__ = f"DREAM_PT_dream_panel_{space_type}"
         yield DreamTexturePanel

@@ -88,15 +88,16 @@ def dream_texture_projection_panels():
             layout = self.layout
             layout.use_property_split = True
             layout.use_property_decorate = False
+            
+            if is_force_show_download():
+                layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
+            elif new_version_available():
+                layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
 
             layout.prop(context.scene.dream_textures_project_prompt, "pipeline")
             if Pipeline[context.scene.dream_textures_project_prompt.pipeline].model():
                 layout.prop(context.scene.dream_textures_project_prompt, 'model')
 
-            if is_force_show_download():
-                layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
-            elif new_version_available():
-                layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
 
     yield DREAM_PT_dream_panel_projection
 

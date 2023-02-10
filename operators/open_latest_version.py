@@ -1,5 +1,4 @@
 import requests
-import json
 import bpy
 import webbrowser
 from ..version import VERSION, version_tag, version_tuple
@@ -34,7 +33,7 @@ class OpenLatestVersion(bpy.types.Operator):
     bl_options = {"REGISTER", "INTERNAL"}
 
     @classmethod
-    def poll(self, context):
+    def poll(cls, context):
         return True
 
     def execute(self, context):

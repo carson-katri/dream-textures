@@ -19,20 +19,14 @@ def history_panels():
             bl_region_type = 'UI'
 
             @classmethod
-            def poll(self, context):
-                if self.bl_space_type == 'NODE_EDITOR':
+            def poll(cls, context):
+                if cls.bl_space_type == 'NODE_EDITOR':
                     return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
                 else:
                     return True
 
             def draw(self, context):
-                history = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
-                if len(history) < 1:
-                    header = history.add()
-                else:
-                    header = history[0]
-                header.prompt_structure_token_subject = "SCENE_UL_HistoryList_header"
-                self.layout.template_list("SCENE_UL_HistoryList", "", context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences, "history", context.scene, "dream_textures_history_selection")
+                self.layout.template_list("SCENE_UL_HistoryList", "", context.scene, "dream_textures_history", context.scene, "dream_textures_history_selection")
                 
                 row = self.layout.row()
                 row.prop(context.scene, "dream_textures_history_selection_preview")

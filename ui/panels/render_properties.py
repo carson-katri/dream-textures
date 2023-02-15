@@ -47,7 +47,7 @@ class RenderPropertiesPanel(bpy.types.Panel):
                 box.label(text="The selected pipeline does not support depth to image.")
             
             models = list(filter(
-                lambda m: m.model == context.scene.dream_textures_render_properties_prompt.model,
+                lambda m: m.model_base == context.scene.dream_textures_render_properties_prompt.model,
                 context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
             ))
             if len(models) > 0 and ModelType[models[0].model_type] != ModelType.DEPTH:

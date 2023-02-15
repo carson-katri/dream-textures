@@ -65,6 +65,7 @@ class Model(bpy.types.PropertyGroup):
     bl_idname = "dream_textures.Model"
 
     model: bpy.props.StringProperty(name="Model")
+    model_base: bpy.props.StringProperty()
     downloads: bpy.props.IntProperty(name="Downloads")
     likes: bpy.props.IntProperty(name="Likes")
     model_type: bpy.props.EnumProperty(name="Model Type", items=[(t.name, t.name, '') for t in ModelType])
@@ -94,6 +95,7 @@ def set_model_list(model_list: str, models: list):
     for model in models:
         m = getattr(bpy.context.preferences.addons[__package__].preferences, model_list).add()
         m.model = model.id
+        m.model_base = os.path.basename(model.id)
         m.downloads = model.downloads
         m.likes = model.likes
         try:

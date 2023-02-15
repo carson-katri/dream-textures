@@ -16,7 +16,7 @@ bl_info = {
     "author": "Dream Textures contributors",
     "description": "Use Stable Diffusion to generate unique textures straight from the shader editor.",
     "blender": (3, 1, 0),
-    "version": (0, 0, 9),
+    "version": (0, 1, 0),
     "location": "Image Editor -> Sidebar -> Dream",
     "category": "Paint"
 }
@@ -65,10 +65,10 @@ if current_process().name != "__actor__":
 
         bpy.types.Scene.dream_textures_requirements_path = EnumProperty(name="Platform", items=requirements_path_items, description="Specifies which set of dependencies to install", default='requirements/mac-mps-cpu.txt' if sys.platform == 'darwin' else 'requirements/win-linux-cuda.txt')
 
-        StableDiffusionPreferences.__annotations__['history'] = CollectionProperty(type=DreamPrompt)
-
         for cls in PREFERENCE_CLASSES:
             bpy.utils.register_class(cls)
+        
+        bpy.types.Scene.dream_textures_history = CollectionProperty(type=DreamPrompt)
 
         check_for_updates()
 
@@ -79,7 +79,7 @@ if current_process().name != "__actor__":
         bpy.types.Scene.init_depth = PointerProperty(name="Init Depth", type=bpy.types.Image, description="Use an existing depth map. Leave blank to generate one from the init image")
         bpy.types.Scene.seamless_result = PointerProperty(type=SeamlessResult)
         def get_selection_preview(self):
-            history = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history
+            history = bpy.context.scene.dream_textures_history
             if self.dream_textures_history_selection > 0 and self.dream_textures_history_selection < len(history):
                 return history[self.dream_textures_history_selection].generate_prompt()
             return ""

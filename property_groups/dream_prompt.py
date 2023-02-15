@@ -69,8 +69,8 @@ def model_options(self, context):
         case Pipeline.STABLE_DIFFUSION:
             def model_case(model, i):
                 return (
-                    model.model,
-                    os.path.basename(model.model).replace('models--', '').replace('--', '/'),
+                    model.model_base,
+                    model.model_base.replace('models--', '').replace('--', '/'),
                     ModelType[model.model_type].name,
                     i
                 )
@@ -140,7 +140,7 @@ attributes = {
     "iterations": IntProperty(name="Iterations", default=1, min=1, description="How many images to generate"),
     "steps": IntProperty(name="Steps", default=25, min=1),
     "cfg_scale": FloatProperty(name="CFG Scale", default=7.5, min=1, soft_min=1.01, description="How strongly the prompt influences the image"),
-    "scheduler": EnumProperty(name="Scheduler", items=scheduler_options, default=0),
+    "scheduler": EnumProperty(name="Scheduler", items=scheduler_options, default=3), # defaults to "DPM Solver Multistep"
     "step_preview_mode": EnumProperty(name="Step Preview", description="Displays intermediate steps in the Image Viewer. Disabling can speed up generation", items=step_preview_mode_options, default=1),
 
     # Init Image
@@ -166,12 +166,7 @@ attributes = {
 }
 
 default_optimizations = Optimizations()
-if sys.platform == "darwin":
-    inferred_device = "mps"
-elif Pipeline.directml_available():
-    inferred_device = "privateuseone"
-else:
-    inferred_device = "cuda"
+    
 for optim in dir(Optimizations):
     if optim.startswith('_'):
         continue
@@ -183,8 +178,7 @@ for optim in dir(Optimizations):
     if default is not None and not isinstance(getattr(default_optimizations, optim), bool):
         continue
     setattr(default_optimizations, optim, True)
-    if default_optimizations.can_use(optim, inferred_device):
-        attributes[f"optimizations_{optim}"] = BoolProperty(name=optim.replace('_', ' ').title(), default=default)
+    attributes[f"optimizations_{optim}"] = BoolProperty(name=optim.replace('_', ' ').title(), default=default)
 attributes["optimizations_attention_slice_size_src"] = EnumProperty(name="Attention Slice Size", items=(
     ("auto", "Automatic", "", 1),
     ("manual", "Manual", "", 2),

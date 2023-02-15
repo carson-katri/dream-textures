@@ -133,7 +133,7 @@ class DreamTexture(bpy.types.Operator):
                 image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
                 image['dream_textures_hash'] = image_hash
                 scene.dream_textures_prompt.hash = image_hash
-                history_entry = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history.add()
+                history_entry = context.scene.dream_textures_history.add()
                 for key, value in history_template.items():
                     setattr(history_entry, key, value)
                 history_entry.seed = str(seed)
@@ -174,7 +174,7 @@ class DreamTexture(bpy.types.Operator):
                 match generated_args['init_img_action']:
                     case 'modify':
                         models = list(filter(
-                            lambda m: m.model == generated_args['model'],
+                            lambda m: m.model_base == generated_args['model'],
                             context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
                         ))
                         supports_depth = generated_args['pipeline'].depth() and len(models) > 0 and ModelType[models[0].model_type] == ModelType.DEPTH

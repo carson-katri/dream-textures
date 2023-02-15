@@ -29,7 +29,7 @@ class SeamlessResult(bpy.types.PropertyGroup):
             def hash_init():
                 self.image = image
                 self.result = res
-            for args in bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.history:
+            for args in bpy.context.scene.dream_textures_history:
                 if args.get('hash', None) == hash_string and args.seamless_axes != SeamlessAxes.AUTO:
                     res = SeamlessAxes(args.seamless_axes).text
                     bpy.app.timers.register(hash_init)

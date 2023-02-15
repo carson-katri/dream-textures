@@ -14,6 +14,7 @@ from ...operators.open_latest_version import OpenLatestVersion, is_force_show_do
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
 from ...property_groups.dream_prompt import DreamPrompt, pipeline_options
+from ...generator_process.actions.prompt_to_image import Optimizations
 from ...generator_process.actions.detect_seamless import SeamlessAxes
 from ...generator_process.models import Pipeline, FixItError
 
@@ -44,14 +45,14 @@ def dream_texture_panels():
                 layout.use_property_split = True
                 layout.use_property_decorate = False
 
-                layout.prop(context.scene.dream_textures_prompt, "pipeline")
-                if Pipeline[context.scene.dream_textures_prompt.pipeline].model():
-                    layout.prop(context.scene.dream_textures_prompt, 'model')
-
                 if is_force_show_download():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT", text="Download Latest Release")
                 elif new_version_available():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
+
+                layout.prop(context.scene.dream_textures_prompt, "pipeline")
+                if Pipeline[context.scene.dream_textures_prompt.pipeline].model():
+                    layout.prop(context.scene.dream_textures_prompt, 'model')
 
         DreamTexturePanel.__name__ = f"DREAM_PT_dream_panel_{space_type}"
         yield DreamTexturePanel
@@ -273,9 +274,11 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             layout.use_property_split = True
             prompt = get_prompt(context)
 
+            inferred_device = Optimizations.infer_device()
             def optimization(prop):
                 if hasattr(prompt, f"optimizations_{prop}"):
-                    layout.prop(prompt, f"optimizations_{prop}")
+                    if Optimizations().can_use(prop, inferred_device):
+                        layout.prop(prompt, f"optimizations_{prop}")
 
             optimization("cudnn_benchmark")
             optimization("tf32")

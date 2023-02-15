@@ -174,7 +174,7 @@ class DreamTexture(bpy.types.Operator):
                 match generated_args['init_img_action']:
                     case 'modify':
                         models = list(filter(
-                            lambda m: m.model == generated_args['model'],
+                            lambda m: m.model_base == generated_args['model'],
                             context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
                         ))
                         supports_depth = generated_args['pipeline'].depth() and len(models) > 0 and ModelType[models[0].model_type] == ModelType.DEPTH

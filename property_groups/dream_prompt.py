@@ -175,9 +175,8 @@ for optim in dir(Optimizations):
         if annotation != bool or (annotation is _AnnotatedAlias and annotation.__origin__ != bool):
             continue
     default = getattr(default_optimizations, optim, None)
-    if default is not None and not isinstance(getattr(default_optimizations, optim), bool):
+    if default is not None and not isinstance(default, bool):
         continue
-    setattr(default_optimizations, optim, True)
     attributes[f"optimizations_{optim}"] = BoolProperty(name=optim.replace('_', ' ').title(), default=default)
 attributes["optimizations_attention_slice_size_src"] = EnumProperty(name="Attention Slice Size", items=(
     ("auto", "Automatic", "", 1),

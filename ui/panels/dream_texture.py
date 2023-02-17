@@ -277,7 +277,7 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             inferred_device = Optimizations.infer_device()
             def optimization(prop):
                 if hasattr(prompt, f"optimizations_{prop}"):
-                    if Optimizations().can_use(prop, inferred_device):
+                    if Optimizations.device_supports(prop, inferred_device):
                         layout.prop(prompt, f"optimizations_{prop}")
 
             optimization("cudnn_benchmark")
@@ -300,9 +300,11 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             layout.use_property_split = True
             prompt = get_prompt(context)
 
+            inferred_device = Optimizations.infer_device()
             def optimization(prop):
                 if hasattr(prompt, f"optimizations_{prop}"):
-                    layout.prop(prompt, f"optimizations_{prop}")
+                    if Optimizations.device_supports(prop, inferred_device):
+                        layout.prop(prompt, f"optimizations_{prop}")
 
             optimization("attention_slicing")
             slice_size_row = layout.row()

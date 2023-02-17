@@ -165,16 +165,18 @@ class Optimizations:
         else:
             return "cuda"
 
-    def can_use(self, property, device) -> bool:
-        if not getattr(self, property):
-            return False
-        if isinstance(self.__annotations__.get(property, None), _AnnotatedAlias):
-            annotation: _AnnotatedAlias = self.__annotations__[property]
+    @classmethod
+    def device_supports(cls, property, device) -> bool:
+        annotation = cls.__annotations__.get(property, None)
+        if isinstance(annotation, _AnnotatedAlias):
             opt_dev = annotation.__metadata__[0]
             if isinstance(opt_dev, str):
                 return opt_dev == device
             return device in opt_dev
-        return True
+        return annotation is not None
+
+    def can_use(self, property, device) -> bool:
+        return self.device_supports(property, device) and getattr(self, property)
 
     def can_use_half(self, device):
         if self.half_precision and device == "cuda":

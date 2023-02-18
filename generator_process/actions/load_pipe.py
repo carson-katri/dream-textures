@@ -119,3 +119,26 @@ def configure_model_padding(model, seamless_axes):
                     del m.asymmetric_padding_mode
                 if hasattr(m, 'asymmetric_padding'):
                     del m.asymmetric_padding
+
+def _conv_forward_asymmetric(self, input, weight, bias):
+    import torch.nn as nn
+    """
+    Patch for Conv2d._conv_forward that supports asymmetric padding
+    """
+    if input.device.type == "privateuseone":
+        # DML pad() will wrongly fill the tensor in constant mode with the supplied value
+        # (default 0) when padding on both ends of a dimension, can't split to two calls.
+        working = nn.functional.pad(input, self._reversed_padding_repeated_twice, mode='circular')
+        pad_w0, pad_w1, pad_h0, pad_h1 = self._reversed_padding_repeated_twice
+        if self.asymmetric_padding_mode[0] == 'constant':
+            working[:, :, :, :pad_w0] = 0
+            if pad_w1 > 0:
+                working[:, :, :, -pad_w1:] = 0
+        if self.asymmetric_padding_mode[1] == 'constant':
+            working[:, :, :pad_h0] = 0
+            if pad_h1 > 0:
+                working[:, :, -pad_h1:] = 0
+    else:
+        working = nn.functional.pad(input, self.asymmetric_padding[0], mode=self.asymmetric_padding_mode[0])
+        working = nn.functional.pad(working, self.asymmetric_padding[1], mode=self.asymmetric_padding_mode[1])
+    return nn.functional.conv2d(working, weight, bias, self.stride, nn.modules.utils._pair(0), self.dilation, self.groups)

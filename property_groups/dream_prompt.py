@@ -166,24 +166,39 @@ attributes = {
 }
 
 default_optimizations = Optimizations()
-    
-for optim in dir(Optimizations):
-    if optim.startswith('_'):
-        continue
-    if hasattr(Optimizations.__annotations__, optim):
-        annotation = Optimizations.__annotations__[optim]
-        if annotation != bool or (annotation is _AnnotatedAlias and annotation.__origin__ != bool):
-            continue
-    default = getattr(default_optimizations, optim, None)
-    if default is not None and not isinstance(default, bool):
-        continue
-    attributes[f"optimizations_{optim}"] = BoolProperty(name=optim.replace('_', ' ').title(), default=default)
-attributes["optimizations_attention_slice_size_src"] = EnumProperty(name="Attention Slice Size", items=(
-    ("auto", "Automatic", "", 1),
-    ("manual", "Manual", "", 2),
-), default=1)
-attributes["optimizations_attention_slice_size"] = IntProperty(name="Attention Slice Size", default=1, min=1)
-attributes["optimizations_batch_size"] = IntProperty(name="Batch Size", default=1, min=1)
+def optimization(optim, property=None, **kwargs):
+    if "name" not in kwargs:
+        kwargs["name"] = optim.replace('_', ' ').title()
+    if "default" not in kwargs:
+        kwargs["default"] = getattr(default_optimizations, optim)
+    if property is None:
+        match kwargs["default"]:
+            case bool():
+                property = BoolProperty
+            case int():
+                property = IntProperty
+            case _:
+                raise TypeError(f"{optim} cannot infer optimization property from {type(kwargs['default'])}")
+    attributes[f"optimizations_{optim}"] = property(**kwargs)
+
+optimization("attention_slicing", description="Computes attention in several steps. Saves some memory in exchange for a small speed decrease")
+optimization("attention_slice_size_src", property=EnumProperty, items=(
+    ("auto", "Automatic", "Computes attention in two steps", 1),
+    ("manual", "Manual", "Computes attention in `attention_head_dim // size` steps. A smaller `size` saves more memory.\n"
+                         "`attention_head_dim` must be a multiple of `size`, otherwise the image won't generate properly.\n"
+                         "`attention_head_dim` can be found within the model snapshot's unet/config.json file", 2),
+), default=1, name="Attention Slice Size")
+optimization("attention_slice_size", default=1, min=1)
+optimization("cudnn_benchmark", name="cuDNN Benchmark", description="Allows cuDNN to benchmark multiple convolution algorithms and select the fastest")
+optimization("tf32", name="TF32", description="Utilizes tensor cores on Ampere (RTX 30xx) or newer GPUs for matrix multiplications.\nHas no effect if half precision is enabled")
+optimization("amp")
+optimization("half_precision", description="Reduces memory usage and increases speed in exchange for a slight loss in image quality.\nHas no effect if CPU only is enabled or using a GTX 16xx GPU")
+optimization("sequential_cpu_offload", name="Sequential CPU Offload", description="Dynamically moves individual model weights in and out of device memory for reduced memory usage and a large speed penalty")
+optimization("channels_last_memory_format", description="An alternative way of ordering NCHW tensors that may be faster or slower depending on the device")
+# optimization("xformers_attention") # FIXME: xFormers is not yet available.
+optimization("batch_size", default=1, min=1, description="Improves speed when using iterations or upscaling in exchange for higher memory usage.\nHighly recommended to use with VAE slicing enabled")
+optimization("vae_slicing", name="VAE Slicing", description="Reduces memory usage of batched VAE decoding. Has no affect if batch size is 1.\nMay have a small performance improvement with large batches")
+optimization("cpu_only", name="CPU Only", description="Disables GPU acceleration and is extremely slow")
 
 def map_structure_token_items(value):
     return (value[0], value[1], '')

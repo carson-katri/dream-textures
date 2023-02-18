@@ -1,7 +1,7 @@
 from typing import Tuple, Generator
 from numpy.typing import NDArray
 import numpy as np
-from .prompt_to_image import ImageGenerationResult, StepPreviewMode
+from ..models import *
 
 def outpaint(
     self,

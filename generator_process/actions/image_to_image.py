@@ -5,8 +5,8 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder, load_pipe
-from ..models import Pipeline
+from .load_pipe import load_pipe, configure_model_padding
+from ..models import *
 from .detect_seamless import SeamlessAxes
 
 
@@ -176,8 +176,8 @@ def image_to_image(
             # Seamless
             if seamless_axes == SeamlessAxes.AUTO:
                 seamless_axes = self.detect_seamless(np.array(init_image) / 255)
-            _configure_model_padding(pipe.unet, seamless_axes)
-            _configure_model_padding(pipe.vae, seamless_axes)
+            configure_model_padding(pipe.unet, seamless_axes)
+            configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
             with (torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext()), \

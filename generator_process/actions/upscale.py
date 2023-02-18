@@ -1,6 +1,6 @@
 import math
 import numpy as np
-from .prompt_to_image import Optimizations, Scheduler, StepPreviewMode
+from ..models import *
 from .detect_seamless import SeamlessAxes
 import random
 from dataclasses import dataclass

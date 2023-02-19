@@ -362,8 +362,7 @@ def depth_to_image(
             _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext()), \
-                (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
+            with torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext():
                 yield from pipe(
                     prompt=prompt,
                     depth_image=depth_image,

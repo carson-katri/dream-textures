@@ -562,25 +562,24 @@ def prompt_to_image(
             _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext()), \
-                (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                    yield from pipe(
-                        prompt=prompt,
-                        height=height,
-                        width=width,
-                        num_inference_steps=steps,
-                        guidance_scale=cfg_scale,
-                        negative_prompt=negative_prompt if use_negative_prompt else None,
-                        num_images_per_prompt=1,
-                        eta=0.0,
-                        generator=generator,
-                        latents=None,
-                        output_type="pil",
-                        return_dict=True,
-                        callback=None,
-                        callback_steps=1,
-                        step_preview_mode=step_preview_mode
-                    )
+            with torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext():
+                yield from pipe(
+                    prompt=prompt,
+                    height=height,
+                    width=width,
+                    num_inference_steps=steps,
+                    guidance_scale=cfg_scale,
+                    negative_prompt=negative_prompt if use_negative_prompt else None,
+                    num_images_per_prompt=1,
+                    eta=0.0,
+                    generator=generator,
+                    latents=None,
+                    output_type="pil",
+                    return_dict=True,
+                    callback=None,
+                    callback_steps=1,
+                    step_preview_mode=step_preview_mode
+                )
         case Pipeline.STABILITY_SDK:
             import stability_sdk.client
             import stability_sdk.interfaces.gooseai.generation.generation_pb2

@@ -282,7 +282,6 @@ def advanced_panel(sub_panel, space_type, get_prompt):
 
             optimization("cudnn_benchmark")
             optimization("tf32")
-            optimization("amp")
             optimization("half_precision")
             optimization("channels_last_memory_format")
             optimization("batch_size")

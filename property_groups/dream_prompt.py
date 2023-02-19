@@ -191,7 +191,6 @@ optimization("attention_slice_size_src", property=EnumProperty, items=(
 optimization("attention_slice_size", default=1, min=1)
 optimization("cudnn_benchmark", name="cuDNN Benchmark", description="Allows cuDNN to benchmark multiple convolution algorithms and select the fastest")
 optimization("tf32", name="TF32", description="Utilizes tensor cores on Ampere (RTX 30xx) or newer GPUs for matrix multiplications.\nHas no effect if half precision is enabled")
-optimization("amp")
 optimization("half_precision", description="Reduces memory usage and increases speed in exchange for a slight loss in image quality.\nHas no effect if CPU only is enabled or using a GTX 16xx GPU")
 optimization("sequential_cpu_offload", name="Sequential CPU Offload", description="Dynamically moves individual model weights in and out of device memory for reduced memory usage and a large speed penalty")
 optimization("channels_last_memory_format", description="An alternative way of ordering NCHW tensors that may be faster or slower depending on the device")

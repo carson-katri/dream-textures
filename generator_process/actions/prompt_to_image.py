@@ -65,7 +65,8 @@ def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler,
             revision=revision,
             torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
         )
-        pipe = pipe.to(device)
+        if not optimizations.can_use("sequential_cpu_offload", device):
+            pipe = pipe.to(device)
         setattr(self, "_cached_pipe", CachedPipeline(pipe, invalidation_properties, snapshot_folder))
         cached_pipe = self._cached_pipe
     if 'scheduler' in os.listdir(cached_pipe.snapshot_folder):

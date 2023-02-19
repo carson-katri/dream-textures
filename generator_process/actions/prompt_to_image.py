@@ -151,7 +151,7 @@ class Optimizations:
     half_precision: Annotated[bool, {"cuda", "privateuseone"}] = True
     sequential_cpu_offload: Annotated[bool, {"cuda", "privateuseone"}] = False
     channels_last_memory_format: bool = False
-    # xformers_attention: bool = False # FIXME: xFormers is not yet available.
+    xformers_attention: Annotated[bool, "cuda"] = False
     batch_size: int = 1
     vae_slicing: bool = True
 
@@ -226,9 +226,8 @@ class Optimizations:
                 pipeline.unet.to(memory_format=torch.contiguous_format)
         except: pass
 
-        # FIXME: xFormers wheels are not yet available (https://github.com/facebookresearch/xformers/issues/533)
-        # if self.can_use("xformers_attention", device):
-        #     pipeline.enable_xformers_memory_efficient_attention()
+        if self.can_use("xformers_attention", device):
+            pipeline.enable_xformers_memory_efficient_attention()
 
         try:
             if self.can_use("vae_slicing", device):

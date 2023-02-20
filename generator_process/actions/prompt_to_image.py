@@ -45,7 +45,7 @@ def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler,
 
     invalidation_properties = (
         action, model, device,
-        optimizations.can_use("sequential_cpu_offload", device),
+        optimizations.can_use_cpu_offload(device),
         optimizations.can_use("half_precision", device),
     )
     cached_pipe: CachedPipeline = self._cached_pipe if hasattr(self, "_cached_pipe") else None
@@ -65,7 +65,7 @@ def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler,
             revision=revision,
             torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
         )
-        if not optimizations.can_use("sequential_cpu_offload", device):
+        if optimizations.can_use_cpu_offload(device) == "off":
             pipe = pipe.to(device)
         setattr(self, "_cached_pipe", CachedPipeline(pipe, invalidation_properties, snapshot_folder))
         cached_pipe = self._cached_pipe
@@ -149,7 +149,7 @@ class Optimizations:
     tf32: Annotated[bool, "cuda"] = False
     amp: Annotated[bool, "cuda"] = False
     half_precision: Annotated[bool, {"cuda", "privateuseone"}] = True
-    sequential_cpu_offload: Annotated[bool, {"cuda", "privateuseone"}] = False
+    cpu_offload: Annotated[str, {"cuda", "privateuseone"}] = "off"
     channels_last_memory_format: bool = False
     xformers_attention: Annotated[bool, "cuda"] = False
     batch_size: int = 1
@@ -185,6 +185,9 @@ class Optimizations:
             name = torch.cuda.get_device_name()
             return not ("GTX 1650" in name or "GTX 1660" in name)
         return self.can_use("half_precision", device)
+
+    def can_use_cpu_offload(self, device):
+        return self.cpu_offload if self.device_supports("cpu_offload", device) else "off"
     
     def apply(self, pipeline, device):
         """
@@ -205,10 +208,24 @@ class Optimizations:
         except: pass
         
         try:
-            if self.can_use("sequential_cpu_offload", device) and device in ["cuda", "privateuseone"]:
-                # Doesn't allow for selecting execution device
-                # pipeline.enable_sequential_cpu_offload()
+            if pipeline.device != pipeline._execution_device:
+                pass # pipeline is already offloaded, offloading again can cause `pipeline._execution_device` to be incorrect
+            elif self.can_use_cpu_offload(device) == "model":
+                # adapted from diffusers.StableDiffusionPipeline.enable_model_cpu_offload() to allow DirectML device and unimplemented pipelines
+                from accelerate import cpu_offload_with_hook
 
+                hook = None
+                for cpu_offloaded_model in [pipeline.text_encoder, pipeline.unet, pipeline.vae]:
+                    _, hook = cpu_offload_with_hook(cpu_offloaded_model, device, prev_module_hook=hook)
+
+                # FIXME: due to the safety checker not running it prevents the VAE from being offloaded, uncomment when safety checker is enabled
+                # if pipeline.safety_checker is not None:
+                #     _, hook = cpu_offload_with_hook(pipeline.safety_checker, device, prev_module_hook=hook)
+
+                # We'll offload the last model manually.
+                pipeline.final_offload_hook = hook
+            elif self.can_use_cpu_offload(device) == "submodule":
+                # adapted from diffusers.StableDiffusionPipeline.enable_sequential_cpu_offload() to allow DirectML device and unimplemented pipelines
                 from accelerate import cpu_offload
 
                 for cpu_offloaded_model in [pipeline.unet, pipeline.text_encoder, pipeline.vae]:
@@ -216,7 +233,7 @@ class Optimizations:
                         cpu_offload(cpu_offloaded_model, device)
 
                 if pipeline.safety_checker is not None:
-                    cpu_offload(pipeline.safety_checker.vision_model, device)
+                    cpu_offload(pipeline.safety_checker.vision_model, device, offload_buffers=True)
         except: pass
         
         try:
@@ -526,6 +543,10 @@ def prompt_to_image(
                     # TODO: Add UI to enable this.
                     # 9. Run safety checker
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
+
+                    # Offload last model to CPU
+                    if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
+                        self.final_offload_hook.offload()
 
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield ImageGenerationResult(

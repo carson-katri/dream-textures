@@ -132,6 +132,10 @@ def image_to_image(
                     # 10. Run safety checker
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
 
+                    # Offload last model to CPU
+                    if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
+                        self.final_offload_hook.offload()
+
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield ImageGenerationResult(
                         [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.

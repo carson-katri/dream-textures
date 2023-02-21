@@ -6,6 +6,7 @@ import threading
 from typing import Type, TypeVar, Callable, Any, MutableSet, Generator
 import site
 import sys
+import os
 from ..absolute_path import absolute_path
 
 def _load_dependencies():
@@ -228,6 +229,7 @@ class Actor:
                 self.process = get_context('spawn').Process(target=_start_backend, args=(self.__class__, self._message_queue, self._response_queue), name="__actor__", daemon=True)
                 self.process.start()
             case ActorContext.BACKEND:
+                os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
                 self._backend_loop()
         return self
     

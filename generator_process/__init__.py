@@ -14,6 +14,7 @@ class Generator(Actor):
     from .actions.outpaint import outpaint
     from .actions.upscale import upscale
     from .actions.depth_to_image import depth_to_image
+    from .actions.mesh_to_image import mesh_to_image
     
     from .actions.huggingface_hub import hf_snapshot_download, hf_list_models, hf_list_installed_models
     

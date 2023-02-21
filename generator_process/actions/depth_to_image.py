@@ -1,5 +1,4 @@
 from typing import Union, Generator, Callable, List, Optional
-import os
 from contextlib import nullcontext
 
 from numpy.typing import NDArray
@@ -38,8 +37,13 @@ def depth_to_image(
 
     step_preview_mode: StepPreviewMode,
 
+    # an image in latent space as a torch.Tensor that replaces the values of the latents using the `fixed_latents_mask`.
+    fixed_latents: Any | None = None,
+    # a mask that indicates which areas of the latent space should be fixed to the values in `fixed_latents`.
+    fixed_latents_mask: Any | None = None,
+
     **kwargs
-) -> Generator[NDArray, None, None]:
+) -> Generator[ImageGenerationResult, None, None]:
     match pipeline:
         case Pipeline.STABLE_DIFFUSION:
             import diffusers
@@ -382,7 +386,10 @@ def depth_to_image(
                     return_dict=True,
                     callback=None,
                     callback_steps=1,
-                    step_preview_mode=step_preview_mode
+                    step_preview_mode=step_preview_mode,
+                    
+                    fixed_latents=fixed_latents,
+                    fixed_latents_mask=fixed_latents_mask
                 )
         case Pipeline.STABILITY_SDK:
             import stability_sdk

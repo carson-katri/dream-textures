@@ -243,8 +243,13 @@ class Optimizations:
                 pipeline.unet.to(memory_format=torch.contiguous_format)
         except: pass
 
-        if self.can_use("xformers_attention", device):
-            pipeline.enable_xformers_memory_efficient_attention()
+        try:
+            if self.can_use("xformers_attention", device):
+                pipeline.enable_xformers_memory_efficient_attention()
+            elif not self.can_use("attention_slicing", device):
+                # disabling xformers will also disable attention slicing
+                pipeline.disable_xformers_memory_efficient_attention()
+        except: pass
 
         try:
             if self.can_use("vae_slicing", device):
@@ -320,7 +325,7 @@ class ImageGenerationResult:
                 )
         return ImageGenerationResult(
             [],
-            [seeds],
+            seeds,
             iteration,
             False
         )

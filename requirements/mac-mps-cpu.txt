@@ -1,5 +1,5 @@
 git+https://github.com/huggingface/diffusers@main#egg=diffusers
-transformers
+transformers>=4.26.0
 accelerate==0.14.0
 huggingface_hub
 
@@ -14,3 +14,5 @@ scipy # LMSDiscreteScheduler
 stability-sdk # DreamStudio
 
 opencolorio==2.1.2 # color management
+
+git+https://github.com/facebookresearch/pytorch3d.git@stable # mesh_to_image

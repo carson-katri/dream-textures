@@ -433,9 +433,43 @@ class ProjectDreamTexture(bpy.types.Operator):
             raise exception
         
         context.scene.dream_textures_info = "Starting..."
-        future = gen.depth_to_image(
-            depth=depth,
-            image=init_img_path,
+        # future = gen.depth_to_image(
+        #     depth=depth,
+        #     image=init_img_path,
+        #     **context.scene.dream_textures_project_prompt.generate_args()
+        # )
+        mesh = bmesh.from_edit_mesh(bpy.context.active_object.data)
+        # Project from UVs view and update material index
+        mesh.verts.ensure_lookup_table()
+        mesh.verts.index_update()
+        def vert_to_uv(v):
+            screen_space = view3d_utils.location_3d_to_region_2d(context.region, context.space_data.region_3d, obj.matrix_world @ v.co)
+            if screen_space is None:
+                return None
+            return (screen_space[0] / context.region.width, screen_space[1] / context.region.height)
+        uv_layer, uv_layer_index = ProjectDreamTexture.get_uv_layer(mesh)
+
+        bm = mesh.copy()
+        bm.select_mode = {'FACE'}
+        bmesh.ops.split_edges(bm, edges=bm.edges)
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if not f.select], context='FACES')
+        
+        uv_layer = bm.loops.layers.uv.verify()
+        verts = np.array([v.co for v in bm.verts])
+        loop_triangles = bm.calc_loop_triangles()
+        faces = np.array([[loop.vert.index for loop in loops] for loops in loop_triangles])
+        verts_normals = np.array([v.normal for v in bm.verts])
+        uv_mapping = { loop.vert.index: loop[uv_layer].uv for loop in np.array(loop_triangles).reshape(len(loop_triangles) * 3) }
+        verts_uvs = np.array([uv_mapping[v.index] for v in bm.verts])
+        
+        future = gen.mesh_to_image(
+            verts=verts,
+            faces=faces,
+            verts_normals=verts_normals,
+            faces_uvs=faces,
+            verts_uvs=verts_uvs,
+            inpaint_model="models--stabilityai--stable-diffusion-2-inpainting",
+            inpaint_steps=range(10, 20),
             **context.scene.dream_textures_project_prompt.generate_args()
         )
         gen._active_generation_future = future

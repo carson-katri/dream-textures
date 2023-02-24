@@ -68,6 +68,8 @@ def mesh_to_image(
             from pytorch3d.renderer import MeshRenderer, MeshRasterizer, RasterizationSettings, TexturesUV, FoVPerspectiveCameras, HardFlatShader, DirectionalLights, look_at_view_transform, FoVOrthographicCameras, hard_rgb_blend
             from pytorch3d.renderer.mesh.rasterizer import Fragments
 
+            from torchvision.transforms.functional import gaussian_blur
+
             class FixedInterleavedDepth2ImagePipeline(diffusers.StableDiffusionDepth2ImgPipeline):
                 # copied from diffusers.StableDiffusionPipeline
                 def prepare_latents(self, batch_size, num_channels_latents, height, width, dtype, device, generator, latents=None):
@@ -250,6 +252,9 @@ def mesh_to_image(
             rasterizer = MeshRasterizer(cameras, raster_settings=raster_settings)
 
             # 1b. Load Stable Diffusion pipelines.
+            generator = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
+            generator.manual_seed(random.randrange(0, np.iinfo(np.uint32).max) if seed is None else seed)
+
             depth_pipe = load_pipe(self, "fixed_interleaved_depth", FixedInterleavedDepth2ImagePipeline, model, optimizations, scheduler, device)
             # inpaint_pipe = load_pipe(self, "inpaint", diffusers.StableDiffusionInpaintPipeline, inpaint_model, optimizations, scheduler, device)
             depth_init_image = PIL.Image.new('RGB', size) # The `image` argument is required by the default pipeline for some reason?
@@ -258,17 +263,17 @@ def mesh_to_image(
             fragments = rasterizer(meshes)
             depth = render_depth(fragments)
 
-            # initial_image = torch.from_numpy(np.array(PIL.Image.open('initial_image.png').convert('RGB')))
-            # initial_image = torch.tensor(depth_pipe(
-            #     prompt=prompt,
-            #     image=depth_init_image,
-            #     depth_map=depth,
-            #     strength=1.0,
-            #     num_inference_steps=steps,
-            #     guidance_scale=cfg_scale,
-            #     negative_prompt=negative_prompt
-            # )[0]).to(dtype=dtype)
-            initial_image = torch.from_numpy(np.array(PIL.Image.open('initial_image.png'))).to(dtype=dtype) / 255
+            initial_image = torch.tensor(depth_pipe(
+                prompt=prompt,
+                image=depth_init_image,
+                depth_map=depth,
+                strength=1.0,
+                num_inference_steps=steps,
+                guidance_scale=cfg_scale,
+                negative_prompt=negative_prompt,
+                generator=generator
+            )[0]).to(dtype=dtype)
+            # initial_image = torch.from_numpy(np.array(PIL.Image.open('initial_image.png'))).to(dtype=dtype) / 255
 
             if initial_image is None:
                 raise ValueError("Failed to generate the initial view with depth to image.")
@@ -355,14 +360,17 @@ def mesh_to_image(
                     num_inference_steps=steps,
                     guidance_scale=cfg_scale,
                     negative_prompt=negative_prompt,
+                    generator=generator,
                     output_type=None,
                     fixed_latents=depth_pipe.vae.config.scaling_factor * depth_pipe.vae.encode((2 * rendered_output[:, :, :, :3].to(device).permute(0, 3, 1, 2) - 1)).latent_dist.sample(),
                     fixed_latents_mask=torch.nn.functional.interpolate(rendered_generate[None, 0, :, :, 0, None].permute(0, 3, 1, 2).to(device=device), (64, 64), mode='nearest'),
                     return_latents=False
                 )
+                image = (torch.from_numpy(np.array(PIL.Image.open('rendered_output.png'))).to(dtype=dtype) / 255).unsqueeze(0)
                 cache = update_cache(cache, perspective)
                 new_output = bake(torch.tensor(image[0]).to(dtype=dtype))
-                generate_region = regions[None, :, :, 0, None].to(dtype=dtype)
+                generate_region = regions[:, :, 0, None].to(dtype=dtype)
+                generate_region = gaussian_blur(generate_region.permute(2, 0, 1), 21, 16).permute(1, 2, 0).unsqueeze(0)
                 output = (new_output * generate_region) + (output * (1 - generate_region))
                 yield ImageGenerationResult(
                     images=[output[0].detach().numpy()],

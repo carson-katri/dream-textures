@@ -210,6 +210,12 @@ class DreamTexture(bpy.types.Operator):
                                     depth=np.flipud(init_image.astype(np.float32) / 255.),
                                     **generated_args,
                                 )
+                            case 'control_net':
+                                f = gen.control_net(
+                                    image=None,
+                                    control=init_image,
+                                    **generated_args
+                                )
                     case 'inpaint':
                         f = gen.inpaint(
                             image=init_image,

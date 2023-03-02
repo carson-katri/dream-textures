@@ -62,6 +62,8 @@ def modify_action_source_type(self, context):
         ('depth_generated', 'Color and Generated Depth', 'Use MiDaS to infer the depth of the initial image and include it in the conditioning. Can give results that more closely match the composition of the source image', 2),
         ('depth_map', 'Color and Depth Map', 'Specify a secondary image to use as the depth map. Can give results that closely match the composition of the depth map', 3),
         ('depth', 'Depth', 'Treat the initial image as a depth map, and ignore any color. Matches the composition of the source image without any color influence', 4),
+        ('control_net', 'Control Net', 'Treat the initial image as the input to a ControlNet model', 5),
+        ('control_net_color', 'Color and Control Net', 'Specify a secondary image to use with a ControlNet model', 6),
     ]
 
 def model_options(self, context):
@@ -76,6 +78,8 @@ def model_options(self, context):
                 )
             models = {}
             for i, model in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models):
+                if model.model_type in {ModelType.CONTROL_NET.name, ModelType.UNKNOWN.name}:
+                    continue
                 if model.model_type not in models:
                     models[model.model_type] = [model_case(model, i)]
                 else:
@@ -104,7 +108,13 @@ def model_options(self, context):
 def pipeline_options(self, context):
     return [
         (Pipeline.STABLE_DIFFUSION.name, 'Stable Diffusion', 'Stable Diffusion on your own hardware', 1),
-        (Pipeline.STABILITY_SDK.name, 'DreamStudio', 'Cloud compute via DreamStudio', 2)
+        (Pipeline.STABILITY_SDK.name, 'DreamStudio', 'Cloud compute via DreamStudio', 2),
+    ]
+
+def control_net_options(self, context):
+    return [
+        (model.model_base, model.model_base.replace('models--', '').replace('--', '/'), '') for model in context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
+        if model.model_type == ModelType.CONTROL_NET.name
     ]
 
 def seed_clamp(self, ctx):
@@ -119,6 +129,9 @@ def seed_clamp(self, ctx):
 attributes = {
     "pipeline": EnumProperty(name="Pipeline", items=pipeline_options, default=1 if Pipeline.local_available() else 2, description="Specify which model and target should be used."),
     "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference"),
+    
+    "control_net": EnumProperty(name="Control Net", items=control_net_options, description="Specify which ControlNet to use"),
+    "controlnet_conditioning_scale": FloatProperty(name="ControlNet Conditioning Scale", default=1.0, description="Increases the strength of the ControlNet's effect"),
 
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),

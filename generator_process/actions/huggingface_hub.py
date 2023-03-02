@@ -25,6 +25,8 @@ class ModelType(enum.IntEnum):
     UPSCALING = 7
     INPAINTING = 9
 
+    CONTROL_NET = -1
+
     @classmethod
     def _missing_(cls, _):
         return cls.UNKNOWN
@@ -68,7 +70,7 @@ def hf_list_models(
         api = HfApi()
         setattr(self, "huggingface_hub_api", api)
     
-    filter = ModelFilter(tags="diffusers", task="text-to-image")
+    filter = ModelFilter(tags="diffusers")
     models = api.list_models(
         filter=filter,
         search=query,
@@ -87,9 +89,17 @@ def hf_list_installed_models(self) -> list[Model]:
 
     def detect_model_type(snapshot_folder):
         unet_config = os.path.join(snapshot_folder, 'unet', 'config.json')
+        config = os.path.join(snapshot_folder, 'config.json')
         if os.path.exists(unet_config):
             with open(unet_config, 'r') as f:
                 return ModelType(json.load(f)['in_channels'])
+        elif os.path.exists(config):
+            with open(config, 'r') as f:
+                config_dict = json.load(f)
+                if '_class_name' in config_dict and config_dict['_class_name'] == 'ControlNetModel':
+                    return ModelType.CONTROL_NET
+                else:
+                    return ModelType.UNKNOWN
         else:
             return ModelType.UNKNOWN
 
@@ -101,7 +111,10 @@ def hf_list_installed_models(self) -> list[Model]:
             snapshot_folder = storage_folder
             model_type = detect_model_type(snapshot_folder)
         else:
-            for revision in os.listdir(os.path.join(storage_folder, "refs")):
+            refs_folder = os.path.join(storage_folder, "refs")
+            if not os.path.exists(refs_folder):
+                return None
+            for revision in os.listdir(refs_folder):
                 ref_path = os.path.join(storage_folder, "refs", revision)
                 with open(ref_path) as f:
                     commit_hash = f.read()
@@ -152,24 +165,30 @@ def hf_snapshot_download(
     from diffusers.utils import DIFFUSERS_CACHE, WEIGHTS_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME
     from diffusers.schedulers.scheduling_utils import SCHEDULER_CONFIG_NAME
     from diffusers.utils.hub_utils import http_user_agent
-    config_dict = StableDiffusionPipeline.load_config(
-        model,
-        cache_dir=DIFFUSERS_CACHE,
-        resume_download=True,
-        force_download=False,
-        use_auth_token=token
-    )
-    # make sure we only download sub-folders and `diffusers` filenames
-    folder_names = [k for k in config_dict.keys() if not k.startswith("_")]
-    allow_patterns = [os.path.join(k, "*") for k in folder_names]
-    allow_patterns += [WEIGHTS_NAME, SCHEDULER_CONFIG_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME, StableDiffusionPipeline.config_name]
 
-    # make sure we don't download flax, safetensors, or ckpt weights.
-    ignore_patterns = ["*.msgpack", "*.safetensors", "*.ckpt"]
+    try:
+        config_dict = StableDiffusionPipeline.load_config(
+            model,
+            cache_dir=DIFFUSERS_CACHE,
+            resume_download=True,
+            force_download=False,
+            use_auth_token=token
+        )
+        # make sure we only download sub-folders and `diffusers` filenames
+        folder_names = [k for k in config_dict.keys() if not k.startswith("_")]
+        allow_patterns = [os.path.join(k, "*") for k in folder_names]
+        allow_patterns += [WEIGHTS_NAME, SCHEDULER_CONFIG_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME, StableDiffusionPipeline.config_name]
 
-    requested_pipeline_class = config_dict.get("_class_name", StableDiffusionPipeline.__name__)
-    user_agent = {"pipeline_class": requested_pipeline_class}
-    user_agent = http_user_agent(user_agent)
+        # make sure we don't download flax, safetensors, or ckpt weights.
+        ignore_patterns = ["*.msgpack", "*.safetensors", "*.ckpt"]
+
+        requested_pipeline_class = config_dict.get("_class_name", StableDiffusionPipeline.__name__)
+        user_agent = {"pipeline_class": requested_pipeline_class}
+        user_agent = http_user_agent(user_agent)
+    except:
+        allow_patterns = None
+        ignore_patterns = None
+        user_agent = None
 
     # download all allow_patterns
 

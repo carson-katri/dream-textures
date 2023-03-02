@@ -232,7 +232,10 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                 layout.prop(prompt, "use_init_img_color")
             if prompt.init_img_action == 'modify':
                 layout.prop(prompt, "modify_action_source_type")
-                if prompt.modify_action_source_type == 'depth_map':
+                if prompt.modify_action_source_type in {'control_net', 'control_net_color'}:
+                    layout.prop(context.scene.dream_textures_prompt, 'control_net')
+                    layout.prop(context.scene.dream_textures_prompt, 'controlnet_conditioning_scale')
+                if prompt.modify_action_source_type == 'depth_map' or prompt.modify_action_source_type == 'control_net_color':
                     layout.template_ID(context.scene, "init_depth", open="image.open")
     yield InitImagePanel
 

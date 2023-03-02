@@ -34,7 +34,7 @@ class CachedPipeline:
     def is_valid(self, properties: tuple):
         return properties == self.invalidation_properties
 
-def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler, device):
+def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler, device, **kwargs):
     """
     Use a cached pipeline, or create the pipeline class and cache it.
     
@@ -64,17 +64,19 @@ def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler,
             snapshot_folder,
             revision=revision,
             torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
+            **kwargs
         )
         pipe = pipe.to(device)
         setattr(self, "_cached_pipe", CachedPipeline(pipe, invalidation_properties, snapshot_folder))
         cached_pipe = self._cached_pipe
-    if 'scheduler' in os.listdir(cached_pipe.snapshot_folder):
-        pipe.scheduler = scheduler.create(pipe, {
-            'model_path': cached_pipe.snapshot_folder,
-            'subfolder': 'scheduler',
-        })
-    else:
-        pipe.scheduler = scheduler.create(pipe, None)
+    if scheduler is not None:
+        if 'scheduler' in os.listdir(cached_pipe.snapshot_folder):
+            pipe.scheduler = scheduler.create(pipe, {
+                'model_path': cached_pipe.snapshot_folder,
+                'subfolder': 'scheduler',
+            })
+        else:
+            pipe.scheduler = scheduler.create(pipe, None)
     return pipe
 
 class Scheduler(enum.Enum):

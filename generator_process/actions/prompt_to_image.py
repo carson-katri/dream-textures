@@ -1,5 +1,6 @@
 from typing import Annotated, Union, _AnnotatedAlias, Generator, Callable, List, Optional, Any
 import enum
+import functools
 import math
 import os
 import sys
@@ -10,7 +11,7 @@ from numpy.typing import NDArray
 import numpy as np
 import random
 from .detect_seamless import SeamlessAxes
-from ...absolute_path import absolute_path
+from ..models.upscale_tiler import tiled_decode_latents
 
 from ..models import Pipeline
 
@@ -154,6 +155,9 @@ class Optimizations:
     xformers_attention: Annotated[bool, "cuda"] = False
     batch_size: int = 1
     vae_slicing: bool = True
+    vae_tiling: str = "off"
+    vae_tile_size: int = 512
+    vae_tile_blend: int = 64
 
     cpu_only: bool = False
 
@@ -258,6 +262,15 @@ class Optimizations:
                 pipeline.vae.enable_slicing()
             else:
                 pipeline.vae.disable_slicing()
+        except: pass
+
+        try:
+            if self.vae_tiling != "off":
+                if not isinstance(pipeline.decode_latents, functools.partial):
+                    pipeline.decode_latents = functools.partial(tiled_decode_latents.__get__(pipeline), pre_patch=pipeline.decode_latents)
+                pipeline.decode_latents.keywords['optimizations'] = self
+            elif self.vae_tiling == "off" and isinstance(pipeline.decode_latents, functools.partial):
+                pipeline.decode_latents = pipeline.decode_latents.keywords["pre_patch"]
         except: pass
         
         from .. import directml_patches
@@ -672,6 +685,11 @@ def _configure_model_padding(model, seamless_axes):
     Modifies the 2D convolution layers to use a circular padding mode based on the `seamless` and `seamless_axes` options.
     """
     seamless_axes = SeamlessAxes(seamless_axes)
+    if seamless_axes == SeamlessAxes.AUTO:
+        seamless_axes = seamless_axes.OFF
+    if getattr(model, "seamless_axes", SeamlessAxes.OFF) == seamless_axes:
+        return
+    model.seamless_axes = seamless_axes
     for m in model.modules():
         if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
             if seamless_axes.x or seamless_axes.y:

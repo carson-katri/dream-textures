@@ -276,9 +276,8 @@ def advanced_panel(sub_panel, space_type, get_prompt):
 
             inferred_device = Optimizations.infer_device()
             def optimization(prop):
-                if hasattr(prompt, f"optimizations_{prop}"):
-                    if Optimizations.device_supports(prop, inferred_device):
-                        layout.prop(prompt, f"optimizations_{prop}")
+                if Optimizations.device_supports(prop, inferred_device):
+                    layout.prop(prompt, f"optimizations_{prop}")
 
             optimization("cudnn_benchmark")
             optimization("tf32")
@@ -301,9 +300,8 @@ def advanced_panel(sub_panel, space_type, get_prompt):
 
             inferred_device = Optimizations.infer_device()
             def optimization(prop):
-                if hasattr(prompt, f"optimizations_{prop}"):
-                    if Optimizations.device_supports(prop, inferred_device):
-                        layout.prop(prompt, f"optimizations_{prop}")
+                if Optimizations.device_supports(prop, inferred_device):
+                    layout.prop(prompt, f"optimizations_{prop}")
 
             optimization("attention_slicing")
             slice_size_row = layout.row()
@@ -314,6 +312,10 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             optimization("cpu_offload")
             optimization("cpu_only")
             optimization("vae_slicing")
+            optimization("vae_tiling")
+            if prompt.optimizations_vae_tiling == "manual":
+                optimization("vae_tile_size")
+                optimization("vae_tile_blend")
     yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):

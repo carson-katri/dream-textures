@@ -204,6 +204,14 @@ optimization("xformers_attention", name="xFormers Attention",
                          "Prompt recall may not produce the same image")
 optimization("batch_size", default=1, min=1, description="Improves speed when using iterations or upscaling in exchange for higher memory usage.\nHighly recommended to use with VAE slicing enabled")
 optimization("vae_slicing", name="VAE Slicing", description="Reduces memory usage of batched VAE decoding. Has no effect if batch size is 1.\nMay have a small performance improvement with large batches")
+optimization("vae_tiling", property=EnumProperty, items=(
+    ("off", "Off", "", 0),
+    ("half", "Half", "Uses tiles of half the selected model's default size. Likely to cause noticeably inaccurate colors", 1),
+    ("full", "Full", "Uses tiles of the selected model's default size, intended for use where image size is manually set higher. May cause slightly inaccurate colors", 2),
+    ("manual", "Manual", "", 3)
+), default=0, name="VAE Tiling", description="Decodes generated images in tiled regions to reduce memory usage in exchange for longer decode time and less accurate colors.\nCan allow for generating larger images that would otherwise run out of memory on the final step")
+optimization("vae_tile_size", min=1, name="VAE Tile Size", description="Width and height measurement of tiles. Smaller sizes are more likely to cause inaccurate colors and other undesired artifacts")
+optimization("vae_tile_blend", min=0, name="VAE Tile Blend", description="Minimum amount of how much each edge of a tile will intersect its adjacent tile")
 optimization("cpu_only", name="CPU Only", description="Disables GPU acceleration and is extremely slow")
 
 def map_structure_token_items(value):

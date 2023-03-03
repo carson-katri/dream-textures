@@ -275,6 +275,8 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             prompt = get_prompt(context)
 
             inferred_device = Optimizations.infer_device()
+            if prompt.optimizations_cpu_only:
+                inferred_device = "cpu"
             def optimization(prop):
                 if Optimizations.device_supports(prop, inferred_device):
                     layout.prop(prompt, f"optimizations_{prop}")
@@ -299,6 +301,8 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             prompt = get_prompt(context)
 
             inferred_device = Optimizations.infer_device()
+            if prompt.optimizations_cpu_only:
+                inferred_device = "cpu"
             def optimization(prop):
                 if Optimizations.device_supports(prop, inferred_device):
                     layout.prop(prompt, f"optimizations_{prop}")

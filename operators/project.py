@@ -98,7 +98,6 @@ def dream_texture_projection_panels():
             if Pipeline[context.scene.dream_textures_project_prompt.pipeline].model():
                 layout.prop(context.scene.dream_textures_project_prompt, 'model')
 
-
     yield DREAM_PT_dream_panel_projection
 
     def get_prompt(context):
@@ -125,6 +124,12 @@ def dream_texture_projection_panels():
                     layout.prop(prompt, "strength")
                 
                 col = layout.column()
+                
+                col.prop(context.scene, "dream_textures_project_use_control_net")
+                if context.scene.dream_textures_project_use_control_net:
+                    col.prop(prompt, "control_net", text="Depth ControlNet")
+                    col.prop(prompt, "controlnet_conditioning_scale")
+
                 col.prop(context.scene, "dream_textures_project_bake")
                 if context.scene.dream_textures_project_bake:
                     for obj in context.selected_objects:
@@ -150,7 +155,7 @@ def dream_texture_projection_panels():
                 
                 # Validation
                 try:
-                    prompt.validate(context, task=ModelType.DEPTH)
+                    prompt.validate(context, task=None if context.scene.dream_textures_project_use_control_net else ModelType.DEPTH)
                     _validate_projection(context)
                 except FixItError as e:
                     error_box = layout.box()
@@ -258,7 +263,7 @@ class ProjectDreamTexture(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         try:
-            context.scene.dream_textures_project_prompt.validate(context, task=ModelType.DEPTH)
+            context.scene.dream_textures_project_prompt.validate(context, task=None if context.scene.dream_textures_project_use_control_net else ModelType.DEPTH)
             _validate_projection(context)
         except:
             return False
@@ -433,11 +438,18 @@ class ProjectDreamTexture(bpy.types.Operator):
             raise exception
         
         context.scene.dream_textures_info = "Starting..."
-        future = gen.depth_to_image(
-            depth=depth,
-            image=init_img_path,
-            **context.scene.dream_textures_project_prompt.generate_args()
-        )
+        if context.scene.dream_textures_project_use_control_net:
+            future = gen.control_net(
+                control=np.flipud(depth), # the depth control needs to be flipped.
+                image=init_img_path,
+                **context.scene.dream_textures_project_prompt.generate_args()
+            )
+        else:
+            future = gen.depth_to_image(
+                depth=depth,
+                image=init_img_path,
+                **context.scene.dream_textures_project_prompt.generate_args()
+            )
         gen._active_generation_future = future
         future.call_done_on_exception = False
         future.add_response_callback(on_response)

@@ -13,6 +13,8 @@ from .preferences import OpenURL, StableDiffusionPreferences, ImportWeights, Mod
 
 from .ui.presets import DREAM_PT_AdvancedPresets, DREAM_MT_AdvancedPresets, AddAdvancedPreset, RestoreDefaultPresets
 
+from . import engine
+
 CLASSES = (
     *render_properties.render_properties_panels(),
     
@@ -35,6 +37,9 @@ CLASSES = (
     AddAdvancedPreset,
 
     NotifyResult,
+
+    engine.DreamTexturesRenderEngine,
+    *engine.engine_panels(),
     
     # The order these are registered in matters
     *dream_texture.dream_texture_panels(),
@@ -44,15 +49,17 @@ CLASSES = (
 )
 
 PREFERENCE_CLASSES = (
-                      PREFERENCES_UL_ModelList,
-                      ModelSearch,
-                      InstallModel,
-                      Model,
-                      DreamPrompt,
-                      SeamlessResult,
-                      UninstallDependencies,
-                      InstallDependencies,
-                      OpenURL,
-                      ImportWeights,
-                      RestoreDefaultPresets,
-                      StableDiffusionPreferences)
+    PREFERENCES_UL_ModelList,
+    ModelSearch,
+    InstallModel,
+    Model,
+    DreamPrompt,
+    SeamlessResult,
+    UninstallDependencies,
+    InstallDependencies,
+    OpenURL,
+    ImportWeights,
+    RestoreDefaultPresets,
+    StableDiffusionPreferences,
+    engine.DreamTexturesRenderEngineProperties,
+)

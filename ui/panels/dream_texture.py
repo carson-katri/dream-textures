@@ -95,8 +95,8 @@ def create_panel(space_type, region_type, parent_id, ctor, get_prompt, use_prope
 
         def draw(self, context):
             self.layout.use_property_decorate = use_property_decorate
-    
-    return ctor(SubPanel, space_type, get_prompt, **kwargs)
+
+    return ctor(kwargs.pop('base_panel', SubPanel), space_type, get_prompt, **kwargs)
 
 def prompt_panel(sub_panel, space_type, get_prompt, get_seamless_result=None):
     class PromptPanel(sub_panel):

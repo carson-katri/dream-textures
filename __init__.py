@@ -105,18 +105,18 @@ if current_process().name != "__actor__":
         bpy.types.Scene.dream_textures_project_framebuffer_arguments = EnumProperty(name="Inputs", items=framebuffer_arguments)
         bpy.types.Scene.dream_textures_project_bake = BoolProperty(name="Bake", default=False, description="Re-maps the generated texture onto the specified UV map")
         bpy.types.Scene.dream_textures_project_use_control_net = BoolProperty(name="Use ControlNet", default=False, description="Use a depth ControlNet instead of a depth model")
-        
-        bpy.types.Scene.dream_textures_render_engine = PointerProperty(type=engine.DreamTexturesRenderEngineProperties)
 
-        bpy.types.RENDER_PT_context.append(engine.draw_device)
+        engine.register()
 
         for cls in CLASSES:
             bpy.utils.register_class(cls)
 
         for tool in TOOLS:
             bpy.utils.register_tool(tool)
-        
-        engine.register()
+
+        bpy.types.Scene.dream_textures_render_engine = PointerProperty(type=engine.DreamTexturesRenderEngineProperties)
+
+        bpy.types.RENDER_PT_context.append(engine.draw_device)
 
         # Monkey patch cycles render passes
         register_render_pass()

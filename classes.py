@@ -38,6 +38,7 @@ CLASSES = (
 
     NotifyResult,
 
+    engine.DreamTexturesRenderEngineProperties,
     engine.DreamTexturesRenderEngine,
     *engine.engine_panels(),
     
@@ -61,5 +62,4 @@ PREFERENCE_CLASSES = (
     ImportWeights,
     RestoreDefaultPresets,
     StableDiffusionPreferences,
-    engine.DreamTexturesRenderEngineProperties,
 )

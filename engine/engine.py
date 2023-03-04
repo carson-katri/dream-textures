@@ -4,6 +4,7 @@ from bl_ui.properties_render import RenderButtonsPanel
 from bl_ui.properties_output import RenderOutputButtonsPanel
 from ..ui.panels.dream_texture import create_panel, prompt_panel, advanced_panel, size_panel
 from ..property_groups.dream_prompt import control_net_options
+from .node_tree import DreamTexturesNodeTree
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -104,24 +105,12 @@ def draw_device(self, context):
     layout.use_property_decorate = False
 
     if context.engine == DreamTexturesRenderEngine.bl_idname:
-        layout.prop(scene.dream_textures_prompt, "pipeline")
-        layout.prop(scene.dream_textures_prompt, "model")
+        layout.template_ID(scene.dream_textures_render_engine, "node_tree", text="Node Tree")
 
+def _poll_node_tree(self, value):
+    return value.bl_idname == "dream_textures.node_tree"
 class DreamTexturesRenderEngineProperties(bpy.types.PropertyGroup):
-    depth_controlnet: bpy.props.EnumProperty(name="Depth ControlNet", items=control_net_options, description="Select a depth map ControlNet")
-    armature_controlnet: bpy.props.EnumProperty(name="Armature ControlNet", items=control_net_options, description="Select an OpenPose ControlNet")
-    normals_controlnet: bpy.props.EnumProperty(name="Normals ControlNet", items=control_net_options, description="Select a normal map ControlNet")
-
-class ControlsPanel(bpy.types.Panel, RenderButtonsPanel):
-    COMPAT_ENGINES = {DreamTexturesRenderEngine.bl_idname}
-    bl_label = "Controls"
-    bl_idname = f"DREAM_PT_render_engine_controls"
-
-    def draw(self, context):
-        self.layout.use_property_split = True
-        self.layout.prop(context.scene.dream_textures_render_engine, "depth_controlnet", icon="OBJECT_DATA")
-        self.layout.prop(context.scene.dream_textures_render_engine, "armature_controlnet", icon="ARMATURE_DATA")
-        self.layout.prop(context.scene.dream_textures_render_engine, "normals_controlnet", icon="NORMALS_FACE")
+    node_tree: bpy.props.PointerProperty(type=DreamTexturesNodeTree, name="Node Tree", poll=_poll_node_tree)
 
 def engine_panels():
     bpy.types.RENDER_PT_output.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
@@ -138,8 +127,6 @@ def engine_panels():
             self.layout.use_property_decorate = True
 
     # Render Properties
-    yield from prompt_panel(RenderPanel, 'engine', get_prompt)
-    yield ControlsPanel
     yield from advanced_panel(RenderPanel, 'engine', get_prompt)
 
     # Output Properties

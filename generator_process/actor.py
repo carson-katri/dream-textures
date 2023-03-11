@@ -12,6 +12,12 @@ def _load_dependencies():
     site.addsitedir(absolute_path(".python_dependencies"))
     deps = sys.path.pop(-1)
     sys.path.insert(0, deps)
+
+    if sys.platform == "win32":
+        import logging
+        logging.getLogger("xformers").addFilter(
+            lambda record: not record.msg.startswith("A matching Triton is not available"))
+
 if current_process().name == "__actor__":
     _load_dependencies()
 

@@ -4,6 +4,7 @@ from .node_executor import *
 from .node import *
 from .nodes.input_nodes import *
 from .nodes.pipeline_nodes import *
+from .nodes.utility_nodes import *
 
 import bpy
 import nodeitems_utils
@@ -20,7 +21,12 @@ categories = [
   DreamTexturesNodeCategory("DREAM_TEXTURES_INPUT", "Input", items = [
     nodeitems_utils.NodeItem(NodeInteger.bl_idname),
     nodeitems_utils.NodeItem(NodeString.bl_idname),
+    nodeitems_utils.NodeItem(NodeImage.bl_idname),
     nodeitems_utils.NodeItem(NodeCollection.bl_idname),
+    nodeitems_utils.NodeItem(NodeSceneInfo.bl_idname),
+  ]),
+  DreamTexturesNodeCategory("DREAM_TEXTURES_UTILITY", "Utilities", items = [
+    nodeitems_utils.NodeItem(NodeMath.bl_idname),
     nodeitems_utils.NodeItem(NodeRandomValue.bl_idname),
   ]),
   DreamTexturesNodeCategory("DREAM_TEXTURES_GROUP", "Group", items = [
@@ -29,6 +35,8 @@ categories = [
 ]
 
 def register():
+    bpy.types.Scene.dream_textures_engine_prompt = bpy.props.PointerProperty(type=DreamPrompt)
+
     bpy.utils.register_class(DreamTexturesNodeTree)
     
     # Nodes
@@ -39,6 +47,10 @@ def register():
     bpy.utils.register_class(NodeInteger)
     bpy.utils.register_class(NodeString)
     bpy.utils.register_class(NodeCollection)
+    bpy.utils.register_class(NodeSceneInfo)
+    bpy.utils.register_class(NodeImage)
+
+    bpy.utils.register_class(NodeMath)
     bpy.utils.register_class(NodeRandomValue)
 
     nodeitems_utils.register_node_categories("DREAM_TEXTURES_CATEGORIES", categories)
@@ -54,6 +66,11 @@ def unregister():
     bpy.utils.unregister_class(NodeInteger)
     bpy.utils.unregister_class(NodeString)
     bpy.utils.unregister_class(NodeCollection)
+    bpy.utils.unregister_class(NodeSceneInfo)
+    bpy.utils.unregister_class(NodeImage)
+    
+    bpy.utils.unregister_class(NodeMath)
     bpy.utils.unregister_class(NodeRandomValue)
+    
 
     nodeitems_utils.unregister_node_categories("DREAM_TEXTURES_CATEGORIES")

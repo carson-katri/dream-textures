@@ -1,7 +1,7 @@
 import bpy
 
 class DreamTexturesNodeTree(bpy.types.NodeTree):
-    bl_idname = "dream_textures.node_tree"
+    bl_idname = "DreamTexturesNodeTree"
     bl_label = "Dream Textures Node Editor"
     bl_icon = 'NODETREE'
 

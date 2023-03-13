@@ -265,11 +265,14 @@ def advanced_panel(sub_panel, space_type, get_prompt):
 
     yield AdvancedPanel
 
+    yield from optimization_panels(sub_panel, space_type, get_prompt, AdvancedPanel.bl_idname)
+
+def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
     class SpeedOptimizationPanel(sub_panel):
         """Create a subpanel for speed optimizations"""
         bl_idname = f"DREAM_PT_dream_panel_speed_optimizations_{space_type}"
         bl_label = "Speed Optimizations"
-        bl_parent_id = AdvancedPanel.bl_idname
+        bl_parent_id = parent_id
 
         def draw(self, context):
             super().draw(context)
@@ -295,7 +298,7 @@ def advanced_panel(sub_panel, space_type, get_prompt):
         """Create a subpanel for memory optimizations"""
         bl_idname = f"DREAM_PT_dream_panel_memory_optimizations_{space_type}"
         bl_label = "Memory Optimizations"
-        bl_parent_id = AdvancedPanel.bl_idname
+        bl_parent_id = parent_id
 
         def draw(self, context):
             super().draw(context)

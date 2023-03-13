@@ -40,6 +40,7 @@ CLASSES = (
 
     engine.DreamTexturesRenderEngineProperties,
     engine.DreamTexturesRenderEngine,
+    engine.NewEngineNodeTree,
     *engine.engine_panels(),
     
     # The order these are registered in matters

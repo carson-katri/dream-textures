@@ -3,7 +3,7 @@ import numpy as np
 # from dream_textures.engine import node_executor
 # node_executor.execute(bpy.data.node_groups["NodeTree"], bpy.context)
 
-def execute_node(node, context, cache):
+def execute_node(node, context, cache, on_execute=lambda _, __: None):
     if node in cache:
         return cache[node]
     kwargs = {
@@ -17,15 +17,12 @@ def execute_node(node, context, cache):
     if node.type == 'GROUP_OUTPUT':
         return list(kwargs.values())[0]
     result = node.execute(context, **kwargs)
-    print(node.name, result)
+    on_execute(node, result)
     cache[node] = result
     return result
 
-def execute(node_tree, context):
+def execute(node_tree, context, on_execute=lambda _, __: None):
     output = next(n for n in node_tree.nodes if n.type == 'GROUP_OUTPUT')
     cache = {}
-    result = execute_node(output, context, cache)
-    print(result)
-    image = bpy.data.images.new("test", width=result.shape[0], height=result.shape[1])
-    image.pixels.foreach_set(result.ravel())
-    return image
+    result = execute_node(output, context, cache, on_execute)
+    return result

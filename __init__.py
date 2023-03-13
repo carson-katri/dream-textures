@@ -25,8 +25,7 @@ from multiprocessing import current_process
 
 if current_process().name != "__actor__":
     import bpy
-    from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty, CollectionProperty, FloatProperty
-    import nodeitems_utils
+    from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty, CollectionProperty
     import sys
     import os
 
@@ -46,7 +45,6 @@ if current_process().name != "__actor__":
     from .operators.dream_texture import DreamTexture, kill_generator
     from .property_groups.dream_prompt import DreamPrompt
     from .property_groups.seamless_result import SeamlessResult
-    from .preferences import StableDiffusionPreferences
     from .ui.presets import register_default_presets
     
     from . import engine

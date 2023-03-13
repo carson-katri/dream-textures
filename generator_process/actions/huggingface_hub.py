@@ -84,59 +84,68 @@ def hf_list_models(
 
 def hf_list_installed_models(self) -> list[Model]:
     from diffusers.utils import DIFFUSERS_CACHE
-    if not os.path.exists(DIFFUSERS_CACHE):
-        return []
+    from diffusers.utils.hub_utils import old_diffusers_cache
 
-    def detect_model_type(snapshot_folder):
-        unet_config = os.path.join(snapshot_folder, 'unet', 'config.json')
-        config = os.path.join(snapshot_folder, 'config.json')
-        if os.path.exists(unet_config):
-            with open(unet_config, 'r') as f:
-                return ModelType(json.load(f)['in_channels'])
-        elif os.path.exists(config):
-            with open(config, 'r') as f:
-                config_dict = json.load(f)
-                if '_class_name' in config_dict and config_dict['_class_name'] == 'ControlNetModel':
-                    return ModelType.CONTROL_NET
-                else:
-                    return ModelType.UNKNOWN
-        else:
-            return ModelType.UNKNOWN
+    def list_dir(cache_dir):
+        if not os.path.exists(cache_dir):
+            return []
 
-    def _map_model(file):
-        storage_folder = os.path.join(DIFFUSERS_CACHE, file)
-        model_type = ModelType.UNKNOWN
+        def detect_model_type(snapshot_folder):
+            unet_config = os.path.join(snapshot_folder, 'unet', 'config.json')
+            config = os.path.join(snapshot_folder, 'config.json')
+            if os.path.exists(unet_config):
+                with open(unet_config, 'r') as f:
+                    return ModelType(json.load(f)['in_channels'])
+            elif os.path.exists(config):
+                with open(config, 'r') as f:
+                    config_dict = json.load(f)
+                    if '_class_name' in config_dict and config_dict['_class_name'] == 'ControlNetModel':
+                        return ModelType.CONTROL_NET
+                    else:
+                        return ModelType.UNKNOWN
+            else:
+                return ModelType.UNKNOWN
 
-        if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
-            snapshot_folder = storage_folder
-            model_type = detect_model_type(snapshot_folder)
-        else:
-            refs_folder = os.path.join(storage_folder, "refs")
-            if not os.path.exists(refs_folder):
-                return None
-            for revision in os.listdir(refs_folder):
-                ref_path = os.path.join(storage_folder, "refs", revision)
-                with open(ref_path) as f:
-                    commit_hash = f.read()
-                snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
-                if (detected_type := detect_model_type(snapshot_folder)) != ModelType.UNKNOWN:
-                    model_type = detected_type
-                    break
+        def _map_model(file):
+            storage_folder = os.path.join(cache_dir, file)
+            model_type = ModelType.UNKNOWN
 
-        return Model(
-            storage_folder,
-            "",
-            [],
-            -1,
-            -1,
-            model_type
-        )
-    return [
-        model for model in (
-            _map_model(file) for file in os.listdir(DIFFUSERS_CACHE) if os.path.isdir(os.path.join(DIFFUSERS_CACHE, file))
-        )
-        if model is not None
-    ]
+            if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
+                snapshot_folder = storage_folder
+                model_type = detect_model_type(snapshot_folder)
+            else:
+                refs_folder = os.path.join(storage_folder, "refs")
+                if not os.path.exists(refs_folder):
+                    return None
+                for revision in os.listdir(refs_folder):
+                    ref_path = os.path.join(storage_folder, "refs", revision)
+                    with open(ref_path) as f:
+                        commit_hash = f.read()
+                    snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
+                    if (detected_type := detect_model_type(snapshot_folder)) != ModelType.UNKNOWN:
+                        model_type = detected_type
+                        break
+
+            return Model(
+                storage_folder,
+                "",
+                [],
+                -1,
+                -1,
+                model_type
+            )
+        return [
+            model for model in (
+                _map_model(file) for file in os.listdir(cache_dir) if os.path.isdir(os.path.join(cache_dir, file))
+            )
+            if model is not None
+        ]
+    new_cache_list = list_dir(DIFFUSERS_CACHE)
+    model_ids = [os.path.basename(m.id) for m in new_cache_list]
+    for model in list_dir(old_diffusers_cache):
+        if os.path.basename(model.id) not in model_ids:
+            new_cache_list.append(model)
+    return new_cache_list
 
 @dataclass
 class DownloadStatus:

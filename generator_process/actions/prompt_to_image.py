@@ -375,6 +375,8 @@ def model_snapshot_folder(model, preferred_revision: str | None = None):
     """ Try to find the preferred revision, but fallback to another revision if necessary. """
     import diffusers
     storage_folder = os.path.join(diffusers.utils.DIFFUSERS_CACHE, model)
+    if not os.path.exists(os.path.join(storage_folder, "refs")):
+        storage_folder = os.path.join(diffusers.utils.hub_utils.old_diffusers_cache, model)
     if os.path.exists(os.path.join(storage_folder, 'model_index.json')): # converted model
         snapshot_folder = storage_folder
     else: # hub model

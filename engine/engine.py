@@ -2,9 +2,10 @@ import bpy
 import gpu
 from bl_ui.properties_render import RenderButtonsPanel
 from bl_ui.properties_output import RenderOutputButtonsPanel
-from ..ui.panels.dream_texture import create_panel, prompt_panel, advanced_panel, size_panel
-from ..property_groups.dream_prompt import control_net_options
+import numpy as np
+from ..ui.panels.dream_texture import optimization_panels
 from .node_tree import DreamTexturesNodeTree
+from ..engine import node_executor
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -12,6 +13,7 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     bl_idname = "DREAM_TEXTURES"
     bl_label = "Dream Textures"
     bl_use_preview = False
+    bl_use_gpu_context = True
 
     def __init__(self):
         pass
@@ -21,25 +23,40 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
 
     def render(self, depsgraph):
         scene = depsgraph.scene
-        scale = scene.render.resolution_percentage / 100.0
-        self.size_x = int(scene.render.resolution_x * scale)
-        self.size_y = int(scene.render.resolution_y * scale)
 
-        # Fill the render result with a flat color. The framebuffer is
-        # defined as a list of pixels, each pixel itself being a list of
-        # R,G,B,A values.
-        if self.is_preview:
-            color = [0.1, 0.2, 0.1, 1.0]
-        else:
-            color = [0.2, 0.1, 0.1, 1.0]
-
-        pixel_count = self.size_x * self.size_y
-        rect = [color] * pixel_count
-
-        # Here we write the pixel values to the RenderResult
-        result = self.begin_result(0, 0, self.size_x, self.size_y)
+        def prepare_result(result):
+            if len(result.shape) == 2:
+                return np.concatenate(
+                    (
+                        np.stack((result,)*3, axis=-1),
+                        np.ones((*result.shape, 1))
+                    ),
+                    axis=-1
+                )
+            else:
+                return result
+        
+        result = self.begin_result(0, 0, scene.render.resolution_x, scene.render.resolution_y)
         layer = result.layers[0].passes["Combined"]
-        layer.rect = rect
+
+        try:
+            progress = 0
+            def update_result(node, result):
+                nonlocal progress
+                progress += 1
+                if isinstance(result, np.ndarray):
+                    node_result = prepare_result(result)
+                    layer.rect = node_result.reshape(-1, node_result.shape[-1])
+                    self.update_result(result)
+                self.update_stats("Node", node.name)
+                self.update_progress(progress / len(scene.dream_textures_render_engine.node_tree.nodes))
+            node_result = node_executor.execute(scene.dream_textures_render_engine.node_tree, depsgraph, on_execute=update_result)
+            node_result = prepare_result(node_result)
+        except Exception as error:
+            self.report({'ERROR'}, str(error))
+            raise error
+
+        layer.rect = node_result.reshape(-1, node_result.shape[-1])
         self.end_result(result)
     
     def view_update(self, context, depsgraph):
@@ -98,6 +115,14 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
         self.unbind_display_space_shader()
         gpu.state.blend_set('NONE')
 
+class NewEngineNodeTree(bpy.types.Operator):
+    bl_idname = "dream_textures.new_engine_node_tree"
+    bl_label = "New Node Tree"
+
+    def execute(self, context):
+        bpy.ops.node.new_node_tree(type="DreamTexturesNodeTree")
+        return {'FINISHED'}
+
 def draw_device(self, context):
     scene = context.scene
     layout = self.layout
@@ -105,17 +130,17 @@ def draw_device(self, context):
     layout.use_property_decorate = False
 
     if context.engine == DreamTexturesRenderEngine.bl_idname:
-        layout.template_ID(scene.dream_textures_render_engine, "node_tree", text="Node Tree")
+        layout.template_ID(scene.dream_textures_render_engine, "node_tree", text="Node Tree", new=NewEngineNodeTree.bl_idname)
 
 def _poll_node_tree(self, value):
-    return value.bl_idname == "dream_textures.node_tree"
+    return value.bl_idname == "DreamTexturesNodeTree"
 class DreamTexturesRenderEngineProperties(bpy.types.PropertyGroup):
     node_tree: bpy.props.PointerProperty(type=DreamTexturesNodeTree, name="Node Tree", poll=_poll_node_tree)
 
 def engine_panels():
     bpy.types.RENDER_PT_output.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     def get_prompt(context):
-        return context.scene.dream_textures_prompt
+        return context.scene.dream_textures_engine_prompt
     class RenderPanel(bpy.types.Panel, RenderButtonsPanel):
         COMPAT_ENGINES = {DreamTexturesRenderEngine.bl_idname}
         def draw(self, context):
@@ -127,7 +152,20 @@ def engine_panels():
             self.layout.use_property_decorate = True
 
     # Render Properties
-    yield from advanced_panel(RenderPanel, 'engine', get_prompt)
+    yield from optimization_panels(RenderPanel, 'engine', get_prompt, "")
 
     # Output Properties
-    yield size_panel(OutputPanel, 'engine', get_prompt)
+    class FormatPanel(OutputPanel):
+        """Create a subpanel for format options"""
+        bl_idname = f"DREAM_PT_dream_panel_format_engine"
+        bl_label = "Format"
+
+        def draw(self, context):
+            super().draw(context)
+            layout = self.layout
+            layout.use_property_split = True
+
+            col = layout.column(align=True)
+            col.prop(context.scene.render, "resolution_x")
+            col.prop(context.scene.render, "resolution_y", text="Y")
+    yield FormatPanel

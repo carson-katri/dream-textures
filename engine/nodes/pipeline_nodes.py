@@ -3,6 +3,7 @@ from ..node import DreamTexturesNode
 from ...generator_process import Generator
 from ...generator_process.actions.prompt_to_image import StepPreviewMode
 from ...property_groups.dream_prompt import DreamPrompt, control_net_options
+from .input_nodes import NodeSceneInfo
 import numpy as np
 from dataclasses import dataclass
 from typing import Any
@@ -34,9 +35,23 @@ class ControlNet:
     control_type: ControlType
     conditioning_scale: float
 
+    def control(self, context):
+        if self.image is not None:
+            return np.flipud(self.image)
+        else:
+            match self.control_type:
+                case ControlType.DEPTH:
+                    return np.flipud(NodeSceneInfo.render_depth_map(context, collection=self.collection))
+                case ControlType.OPENPOSE:
+                    pass
+                case ControlType.NORMAL:
+                    pass
+
 def _update_stable_diffusion_sockets(self, context):
     self.inputs['Source Image'].enabled = self.task in {'image_to_image', 'depth_to_image'}
     self.inputs['Noise Strength'].enabled = self.task in {'image_to_image', 'depth_to_image'}
+    if self.task == 'depth_to_image':
+        self.inputs['Noise Strength'].default_value = 1.0
     self.inputs['Depth Map'].enabled = self.task == 'depth_to_image'
     self.inputs['ControlNets'].enabled = self.task != 'depth_to_image'
 class NodeStableDiffusion(DreamTexturesNode):
@@ -51,8 +66,8 @@ class NodeStableDiffusion(DreamTexturesNode):
     ), update=_update_stable_diffusion_sockets)
 
     def init(self, context):
-        self.inputs.new("NodeSocketColor", "Depth Map")
-        self.inputs.new("NodeSocketColor", "Source Image")
+        self.inputs.new("NodeSocketImage", "Depth Map")
+        self.inputs.new("NodeSocketImage", "Source Image")
         self.inputs.new("NodeSocketFloat", "Noise Strength").default_value = 0.75
 
         self.inputs.new("NodeSocketString", "Prompt")
@@ -68,7 +83,6 @@ class NodeStableDiffusion(DreamTexturesNode):
         self.inputs.new("NodeSocketControlNet", "ControlNets")
 
         self.outputs.new("NodeSocketColor", "Image")
-        self.outputs.new("NodeSocketInt", "Seed")
 
         _update_stable_diffusion_sockets(self, context)
 
@@ -87,51 +101,104 @@ class NodeStableDiffusion(DreamTexturesNode):
         self.prompt.cfg_scale = cfg_scale
         args = self.prompt.generate_args()
 
-        match self.task:
-            case 'prompt_to_image':
-                result = Generator.shared().prompt_to_image(
-                    pipeline=args['pipeline'],
-                    model=args['model'],
-                    scheduler=args['scheduler'],
-                    optimizations=args['optimizations'],
-                    seamless_axes=args['seamless_axes'],
-                    iterations=args['iterations'],
-                    prompt=prompt,
-                    steps=steps,
-                    seed=seed,
-                    width=width,
-                    height=height,
-                    cfg_scale=cfg_scale,
-                    use_negative_prompt=True,
-                    negative_prompt=negative_prompt,
-                    step_preview_mode=StepPreviewMode.NONE
-                ).result()
-            case 'image_to_image':
-                result = Generator.shared().image_to_image(
-                    pipeline=args['pipeline'],
-                    model=args['model'],
-                    scheduler=args['scheduler'],
-                    optimizations=args['optimizations'],
-                    seamless_axes=args['seamless_axes'],
-                    iterations=args['iterations'],
-                    
-                    image=np.uint8(source_image * 255),
-                    strength=noise_strength,
-                    fit=True,
+        shared_args = context.scene.dream_textures_engine_prompt.generate_args()
+        
+        if controlnets is not None:
+            if not isinstance(controlnets, ControlNet):
+                controlnets = controlnets[0]
+            result = Generator.shared().control_net(
+                pipeline=args['pipeline'],
+                model=args['model'],
+                scheduler=args['scheduler'],
+                optimizations=shared_args['optimizations'],
+                seamless_axes=args['seamless_axes'],
+                iterations=args['iterations'],
 
-                    prompt=prompt,
-                    steps=steps,
-                    seed=seed,
-                    width=width,
-                    height=height,
-                    cfg_scale=cfg_scale,
-                    use_negative_prompt=True,
-                    negative_prompt=negative_prompt,
-                    step_preview_mode=StepPreviewMode.NONE
-                ).result()
+                control_net=controlnets.model,
+                control=controlnets.control(context),
+                controlnet_conditioning_scale=controlnets.conditioning_scale,
+
+                image=np.uint8(source_image * 255) if self.task == 'image_to_image' else None,
+                strength=noise_strength,
+
+                prompt=prompt,
+                steps=steps,
+                seed=seed,
+                width=width,
+                height=height,
+                cfg_scale=cfg_scale,
+                use_negative_prompt=True,
+                negative_prompt=negative_prompt,
+                step_preview_mode=StepPreviewMode.NONE
+            ).result()
+        else:
+            match self.task:
+                case 'prompt_to_image':
+                    result = Generator.shared().prompt_to_image(
+                        pipeline=args['pipeline'],
+                        model=args['model'],
+                        scheduler=args['scheduler'],
+                        optimizations=shared_args['optimizations'],
+                        seamless_axes=args['seamless_axes'],
+                        iterations=args['iterations'],
+                        prompt=prompt,
+                        steps=steps,
+                        seed=seed,
+                        width=width,
+                        height=height,
+                        cfg_scale=cfg_scale,
+                        use_negative_prompt=True,
+                        negative_prompt=negative_prompt,
+                        step_preview_mode=StepPreviewMode.NONE
+                    ).result()
+                case 'image_to_image':
+                    result = Generator.shared().image_to_image(
+                        pipeline=args['pipeline'],
+                        model=args['model'],
+                        scheduler=args['scheduler'],
+                        optimizations=shared_args['optimizations'],
+                        seamless_axes=args['seamless_axes'],
+                        iterations=args['iterations'],
+                        
+                        image=np.uint8(source_image * 255),
+                        strength=noise_strength,
+                        fit=True,
+
+                        prompt=prompt,
+                        steps=steps,
+                        seed=seed,
+                        width=width,
+                        height=height,
+                        cfg_scale=cfg_scale,
+                        use_negative_prompt=True,
+                        negative_prompt=negative_prompt,
+                        step_preview_mode=StepPreviewMode.NONE
+                    ).result()
+                case 'depth_to_image':
+                    result = Generator.shared().depth_to_image(
+                        pipeline=args['pipeline'],
+                        model=args['model'],
+                        scheduler=args['scheduler'],
+                        optimizations=shared_args['optimizations'],
+                        seamless_axes=args['seamless_axes'],
+                        iterations=args['iterations'],
+                        
+                        depth=depth_map,
+                        image=np.uint8(source_image * 255) if source_image is not None else None,
+                        strength=noise_strength,
+
+                        prompt=prompt,
+                        steps=steps,
+                        seed=seed,
+                        width=width,
+                        height=height,
+                        cfg_scale=cfg_scale,
+                        use_negative_prompt=True,
+                        negative_prompt=negative_prompt,
+                        step_preview_mode=StepPreviewMode.NONE
+                    ).result()
         return {
-            'Image': result[-1].images[-1],
-            'Seed': result[-1].seeds[-1]
+            'Image': result[-1].images[-1]
         }
 
 def _update_control_net_sockets(self, context):

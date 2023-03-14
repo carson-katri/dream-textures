@@ -1,7 +1,7 @@
 import bpy
 import numpy as np
 # from dream_textures.engine import node_executor
-# node_executor.execute(bpy.data.node_groups["NodeTree"], bpy.context)
+# node_executor.execute(bpy.data.node_groups["NodeTree"], bpy.context.evaluated_depsgraph_get())
 
 def execute_node(node, context, cache, on_execute=lambda _, __: None):
     if node in cache:

@@ -8,6 +8,8 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Any
 import enum
+import gpu
+from gpu_extras.batch import batch_for_shader
 
 class NodeSocketControlNet(bpy.types.NodeSocket):
     bl_idname = "NodeSocketControlNet"
@@ -43,7 +45,7 @@ class ControlNet:
                 case ControlType.DEPTH:
                     return np.flipud(NodeSceneInfo.render_depth_map(context, collection=self.collection))
                 case ControlType.OPENPOSE:
-                    pass
+                    return np.flipud(NodeSceneInfo.render_openpose_map(context, collection=self.collection))
                 case ControlType.NORMAL:
                     pass
 

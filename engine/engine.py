@@ -140,6 +140,7 @@ class DreamTexturesRenderEngineProperties(bpy.types.PropertyGroup):
 def engine_panels():
     bpy.types.RENDER_PT_output.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     bpy.types.RENDER_PT_color_management.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
+    bpy.types.DATA_PT_lens.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     def get_prompt(context):
         return context.scene.dream_textures_engine_prompt
     class RenderPanel(bpy.types.Panel, RenderButtonsPanel):

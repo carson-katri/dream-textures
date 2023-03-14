@@ -222,7 +222,7 @@ class NodeSceneInfo(DreamTexturesNode):
                 def name_detection_options(self):
                     match self:
                         case Bone.NOSE:
-                            return [('nose_ik.001', Side.TAIL), ('nose.001', Side.TAIL)]
+                            return [('nose_master', Side.TAIL), ('nose.001', Side.TAIL)]
                         case Bone.CHEST:
                             return [('spine_fk.003', Side.TAIL), ('spine.003', Side.TAIL)]
                         case Bone.SHOULDER_L:

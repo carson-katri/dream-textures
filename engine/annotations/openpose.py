@@ -159,12 +159,25 @@ def render_openpose_map(context, collection=None):
         }
                             
         with gpu.matrix.push_pop():
+            ratio = width / height
+            projection_matrix = mathutils.Matrix((
+                (1 / ratio, 0, 0, 0),
+                (0, 1, 0, 0),
+                (0, 0, -1, 0),
+                (0, 0, 0, 1)
+            ))
             gpu.matrix.load_matrix(mathutils.Matrix.Identity(4))
-            gpu.matrix.load_projection_matrix(mathutils.Matrix.Identity(4))
+            gpu.matrix.load_projection_matrix(projection_matrix)
             gpu.state.blend_set('ALPHA')
 
+            def transform(x, y):
+                return (
+                    (x - 0.5) * 2 * ratio,
+                    (y - 0.5) * 2
+                )
+
             shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
-            batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": [(-1, -1, 0), (-1, 1, 0), (1, -1, 0), (1, 1, 0)]})
+            batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": [(-ratio, -1, 0), (-ratio, 1, 0), (ratio, -1, 0), (ratio, 1, 0)]})
             shader.uniform_float("color", (0, 0, 0, 1))
             batch.draw(shader)
 
@@ -180,13 +193,13 @@ def render_openpose_map(context, collection=None):
                         continue
                     a = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (a.tail if a_side == Side.TAIL else a.head))
                     b = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (b.tail if b_side == Side.TAIL else b.head))
-                    draw_ellipse_2d(((a[0] - 0.5) * 2, (a[1] - 0.5) * 2), ((b[0] - 0.5) * 2, (b[1] - 0.5) * 2), .015, 32, (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0, 0.5))
+                    draw_ellipse_2d(transform(a[0], a[1]), transform(b[0], b[1]), .015, 32, (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0, 0.5))
                 for b in Bone:
                     bone, side = b.identify(object.data, object.pose)
                     color = b.color()
                     if bone is None: continue
                     tail = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (bone.tail if side == Side.TAIL else bone.head))
-                    draw_circle_2d(((tail[0] - 0.5) * 2, (tail[1] - 0.5) * 2), .015, 16, (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0, 0.5))
+                    draw_circle_2d(transform(tail[0], tail[1]), .015, 16, (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0, 0.5))
 
         depth = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
     offscreen.free()

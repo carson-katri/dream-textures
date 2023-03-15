@@ -235,10 +235,10 @@ def engine_panels():
 
         @classmethod
         def poll(cls, context):
-            return (context.bone or context.edit_bone) and context.scene.render.engine == 'DREAM_TEXTURES'
+            return context.bone and context.scene.render.engine == 'DREAM_TEXTURES'
         
         def draw_header(self, context):
-            bone = context.bone or context.edit_bone
+            bone = context.bone
             if bone:
                 self.layout.prop(bone.dream_textures_openpose, "enabled", text="")
 
@@ -246,7 +246,7 @@ def engine_panels():
             layout = self.layout
             layout.use_property_split = True
 
-            bone = context.bone or context.edit_bone
+            bone = context.bone
 
             layout.enabled = bone.dream_textures_openpose.enabled
             layout.prop(bone.dream_textures_openpose, "bone")

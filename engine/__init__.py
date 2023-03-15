@@ -5,6 +5,7 @@ from .node import *
 from .nodes.input_nodes import *
 from .nodes.pipeline_nodes import *
 from .nodes.utility_nodes import *
+from .annotations import openpose
 
 import bpy
 import nodeitems_utils
@@ -15,27 +16,42 @@ class DreamTexturesNodeCategory(nodeitems_utils.NodeCategory):
         return context.space_data.tree_type == DreamTexturesNodeTree.__name__
 
 categories = [
-  DreamTexturesNodeCategory("DREAM_TEXTURES_PIPELINE", "Pipeline", items = [
-    nodeitems_utils.NodeItem(NodeStableDiffusion.bl_idname),
-  ]),
-  DreamTexturesNodeCategory("DREAM_TEXTURES_INPUT", "Input", items = [
-    nodeitems_utils.NodeItem(NodeInteger.bl_idname),
-    nodeitems_utils.NodeItem(NodeString.bl_idname),
-    nodeitems_utils.NodeItem(NodeImage.bl_idname),
-    nodeitems_utils.NodeItem(NodeCollection.bl_idname),
-    nodeitems_utils.NodeItem(NodeSceneInfo.bl_idname),
-  ]),
-  DreamTexturesNodeCategory("DREAM_TEXTURES_UTILITY", "Utilities", items = [
-    nodeitems_utils.NodeItem(NodeMath.bl_idname),
-    nodeitems_utils.NodeItem(NodeRandomValue.bl_idname),
-  ]),
-  DreamTexturesNodeCategory("DREAM_TEXTURES_GROUP", "Group", items = [
-    nodeitems_utils.NodeItem(bpy.types.NodeGroupOutput.__name__),
-  ]),
+    DreamTexturesNodeCategory("DREAM_TEXTURES_PIPELINE", "Pipeline", items = [
+        nodeitems_utils.NodeItem(NodeStableDiffusion.bl_idname),
+    ]),
+    DreamTexturesNodeCategory("DREAM_TEXTURES_INPUT", "Input", items = [
+        nodeitems_utils.NodeItem(NodeInteger.bl_idname),
+        nodeitems_utils.NodeItem(NodeString.bl_idname),
+        nodeitems_utils.NodeItem(NodeImage.bl_idname),
+        nodeitems_utils.NodeItem(NodeCollection.bl_idname),
+        nodeitems_utils.NodeItem(NodeSceneInfo.bl_idname),
+    ]),
+    DreamTexturesNodeCategory("DREAM_TEXTURES_UTILITY", "Utilities", items = [
+        nodeitems_utils.NodeItem(NodeMath.bl_idname),
+        nodeitems_utils.NodeItem(NodeRandomValue.bl_idname),
+    ]),
+    DreamTexturesNodeCategory("DREAM_TEXTURES_GROUP", "Group", items = [
+        nodeitems_utils.NodeItem(bpy.types.NodeGroupOutput.__name__),
+    ]),
 ]
 
 def register():
+    # Prompt
     bpy.types.Scene.dream_textures_engine_prompt = bpy.props.PointerProperty(type=DreamPrompt)
+    
+    # Bone
+    bpy.types.Bone.dream_textures_openpose = bpy.props.BoolProperty(
+        name="Use OpenPose",
+        default=False
+    )
+    bpy.types.Bone.dream_textures_openpose_bone = bpy.props.EnumProperty(
+        name="OpenPose Bone",
+        items=((str(b.value), b.name.title(), '') for b in openpose.Bone)
+    )
+    bpy.types.Bone.dream_textures_openpose_bone_side = bpy.props.EnumProperty(
+        name="Endpoint Side",
+        items=((str(s.value), s.name.title(), '') for s in openpose.Side)
+    )
 
     bpy.utils.register_class(DreamTexturesNodeTree)
     

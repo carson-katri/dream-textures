@@ -1,15 +1,14 @@
 import bpy
+import numpy as np
+from dataclasses import dataclass
+from typing import Any
+import enum
 from ..node import DreamTexturesNode
 from ...generator_process import Generator
 from ...generator_process.actions.prompt_to_image import StepPreviewMode
 from ...property_groups.dream_prompt import DreamPrompt, control_net_options
 from .input_nodes import NodeSceneInfo
-import numpy as np
-from dataclasses import dataclass
-from typing import Any
-import enum
-import gpu
-from gpu_extras.batch import batch_for_shader
+from ..annotations import openpose
 
 class NodeSocketControlNet(bpy.types.NodeSocket):
     bl_idname = "NodeSocketControlNet"
@@ -45,7 +44,7 @@ class ControlNet:
                 case ControlType.DEPTH:
                     return np.flipud(NodeSceneInfo.render_depth_map(context, collection=self.collection))
                 case ControlType.OPENPOSE:
-                    return np.flipud(NodeSceneInfo.render_openpose_map(context, collection=self.collection))
+                    return np.flipud(openpose.render_openpose_map(context, collection=self.collection))
                 case ControlType.NORMAL:
                     pass
 

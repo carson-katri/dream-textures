@@ -171,3 +171,33 @@ def engine_panels():
             col.prop(context.scene.render, "resolution_x")
             col.prop(context.scene.render, "resolution_y", text="Y")
     yield FormatPanel
+
+    # Bone properties
+    class OpenPoseBonePanel(bpy.types.Panel):
+        bl_idname = "DREAM_PT_dream_textures_engine_bone_properties"
+        bl_label = "OpenPose"
+        bl_space_type = 'PROPERTIES'
+        bl_region_type = 'WINDOW'
+        bl_context = "bone"
+
+        @classmethod
+        def poll(cls, context):
+            return (context.bone or context.edit_bone) and context.scene.render.engine == 'DREAM_TEXTURES'
+        
+        def draw_header(self, context):
+            bone = context.bone or context.edit_bone
+            if bone:
+                self.layout.prop(bone, "dream_textures_openpose", text="")
+
+        def draw(self, context):
+            layout = self.layout
+            layout.use_property_split = True
+
+            bone = context.bone or context.edit_bone
+
+            if bone:
+                layout.enabled = bone.dream_textures_openpose
+                layout.prop(bone, "dream_textures_openpose_bone")
+                layout.prop(bone, "dream_textures_openpose_bone_side")
+
+    yield OpenPoseBonePanel

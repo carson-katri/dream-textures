@@ -6,6 +6,7 @@ import numpy as np
 from ..ui.panels.dream_texture import optimization_panels
 from .node_tree import DreamTexturesNodeTree
 from ..engine import node_executor
+from .annotations import openpose
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -173,8 +174,60 @@ def engine_panels():
     yield FormatPanel
 
     # Bone properties
+    class OpenPoseArmaturePanel(bpy.types.Panel):
+        bl_idname = "DREAM_PT_dream_textures_armature_openpose"
+        bl_label = "OpenPose"
+        bl_space_type = 'PROPERTIES'
+        bl_region_type = 'WINDOW'
+        bl_context = "data"
+
+        @classmethod
+        def poll(cls, context):
+            return context.armature
+        
+        def draw_header(self, context):
+            bone = context.bone or context.edit_bone
+            if bone:
+                self.layout.prop(bone.dream_textures_openpose, "enabled", text="")
+
+        def draw(self, context):
+            layout = self.layout
+
+            armature = context.armature
+
+            p = armature.dream_textures_openpose
+
+            row = layout.row()
+            row.prop(p, "EAR_L", toggle=True)
+            row.prop(p, "EYE_L", toggle=True)
+            row.prop(p, "EYE_R", toggle=True)
+            row.prop(p, "EAR_R", toggle=True)
+            layout.prop(p, "NOSE", toggle=True)
+            row = layout.row()
+            row.prop(p, "SHOULDER_L", toggle=True)
+            row.prop(p, "CHEST", toggle=True)
+            row.prop(p, "SHOULDER_R", toggle=True)
+            row = layout.row()
+            row.prop(p, "ELBOW_L", toggle=True)
+            row.separator()
+            row.prop(p, "HIP_L", toggle=True)
+            row.prop(p, "HIP_R", toggle=True)
+            row.separator()
+            row.prop(p, "ELBOW_R", toggle=True)
+            row = layout.row()
+            row.prop(p, "HAND_L", toggle=True)
+            row.separator()
+            row.prop(p, "KNEE_L", toggle=True)
+            row.prop(p, "KNEE_R", toggle=True)
+            row.separator()
+            row.prop(p, "HAND_R", toggle=True)
+            row = layout.row()
+            row.prop(p, "FOOT_L", toggle=True)
+            row.prop(p, "FOOT_R", toggle=True)
+
+    yield OpenPoseArmaturePanel
     class OpenPoseBonePanel(bpy.types.Panel):
-        bl_idname = "DREAM_PT_dream_textures_engine_bone_properties"
+        bl_idname = "DREAM_PT_dream_textures_bone_openpose"
         bl_label = "OpenPose"
         bl_space_type = 'PROPERTIES'
         bl_region_type = 'WINDOW'
@@ -187,7 +240,7 @@ def engine_panels():
         def draw_header(self, context):
             bone = context.bone or context.edit_bone
             if bone:
-                self.layout.prop(bone, "dream_textures_openpose", text="")
+                self.layout.prop(bone.dream_textures_openpose, "enabled", text="")
 
         def draw(self, context):
             layout = self.layout
@@ -195,9 +248,8 @@ def engine_panels():
 
             bone = context.bone or context.edit_bone
 
-            if bone:
-                layout.enabled = bone.dream_textures_openpose
-                layout.prop(bone, "dream_textures_openpose_bone")
-                layout.prop(bone, "dream_textures_openpose_bone_side")
+            layout.enabled = bone.dream_textures_openpose.enabled
+            layout.prop(bone.dream_textures_openpose, "bone")
+            layout.prop(bone.dream_textures_openpose, "side")
 
     yield OpenPoseBonePanel

@@ -1,7 +1,7 @@
+import bpy
 import bpy_extras
 import gpu
 from gpu_extras.batch import batch_for_shader
-from gpu_extras.presets import draw_circle_2d
 import mathutils
 import numpy as np
 import enum
@@ -35,11 +35,13 @@ class Bone(enum.IntEnum):
     EAR_L = 16
     EAR_R = 17
 
-    def identify(self, pose):
+    def identify(self, armature, pose):
+        if not getattr(armature.dream_textures_openpose, self.name):
+            return None, None
         for bone in pose.bones:
-            if bone.bone.dream_textures_openpose:
-                if bone.bone.dream_textures_openpose_bone == str(self.value):
-                    return bone, Side(int(bone.bone.dream_textures_openpose_bone_side))
+            if bone.bone.dream_textures_openpose.enabled:
+                if bone.bone.dream_textures_openpose.bone == str(self.value):
+                    return bone, Side(int(bone.bone.dream_textures_openpose.side))
         options = self.name_detection_options()
         for option in options:
             if (result := pose.bones.get(option[0], None)) is not None:
@@ -106,6 +108,26 @@ class Bone(enum.IntEnum):
             case Bone.EAR_L: return (255, 0, 85)
             case Bone.EAR_R: return (255, 0, 170)
 
+class BoneOpenPoseData(bpy.types.PropertyGroup):
+    bl_label = "OpenPose"
+    bl_idname = "dream_textures.BoneOpenPoseData"
+
+    enabled: bpy.props.BoolProperty(name="Enabled", default=False)
+    bone: bpy.props.EnumProperty(
+        name="OpenPose Bone",
+        items=((str(b.value), b.name.title(), '') for b in Bone)
+    )
+    side: bpy.props.EnumProperty(
+        name="Bone Side",
+        items=((str(s.value), s.name.title(), '') for s in Side)
+    )
+
+ArmatureOpenPoseData = type('ArmatureOpenPoseData', (bpy.types.PropertyGroup,), {
+    "bl_label": "OpenPose",
+    "bl_idname": "dream_textures.ArmatureOpenPoseData",
+    "__annotations__": { b.name: bpy.props.BoolProperty(name=b.name.title(), default=True) for b in Bone },
+})
+
 def render_openpose_map(context, collection=None):
     width, height = context.scene.render.resolution_x, context.scene.render.resolution_y
     offscreen = gpu.types.GPUOffScreen(width, height)
@@ -152,15 +174,15 @@ def render_openpose_map(context, collection=None):
                 if object.pose is None:
                     continue
                 for connection, color in lines.items():
-                    a, a_side = connection[0].identify(object.pose)
-                    b, b_side = connection[1].identify(object.pose)
+                    a, a_side = connection[0].identify(object.data, object.pose)
+                    b, b_side = connection[1].identify(object.data, object.pose)
                     if a is None or b is None:
                         continue
                     a = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (a.tail if a_side == Side.TAIL else a.head))
                     b = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (b.tail if b_side == Side.TAIL else b.head))
                     draw_ellipse_2d(((a[0] - 0.5) * 2, (a[1] - 0.5) * 2), ((b[0] - 0.5) * 2, (b[1] - 0.5) * 2), .015, 32, (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0, 0.5))
                 for b in Bone:
-                    bone, side = b.identify(object.pose)
+                    bone, side = b.identify(object.data, object.pose)
                     color = b.color()
                     if bone is None: continue
                     tail = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (bone.tail if side == Side.TAIL else bone.head))

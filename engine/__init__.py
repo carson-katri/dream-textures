@@ -39,18 +39,14 @@ def register():
     # Prompt
     bpy.types.Scene.dream_textures_engine_prompt = bpy.props.PointerProperty(type=DreamPrompt)
     
-    # Bone
-    bpy.types.Bone.dream_textures_openpose = bpy.props.BoolProperty(
-        name="Use OpenPose",
-        default=False
+    # OpenPose
+    bpy.utils.register_class(openpose.ArmatureOpenPoseData)
+    bpy.types.Armature.dream_textures_openpose = bpy.props.PointerProperty(
+        type=openpose.ArmatureOpenPoseData
     )
-    bpy.types.Bone.dream_textures_openpose_bone = bpy.props.EnumProperty(
-        name="OpenPose Bone",
-        items=((str(b.value), b.name.title(), '') for b in openpose.Bone)
-    )
-    bpy.types.Bone.dream_textures_openpose_bone_side = bpy.props.EnumProperty(
-        name="Endpoint Side",
-        items=((str(s.value), s.name.title(), '') for s in openpose.Side)
+    bpy.utils.register_class(openpose.BoneOpenPoseData)
+    bpy.types.Bone.dream_textures_openpose = bpy.props.PointerProperty(
+        type=openpose.BoneOpenPoseData
     )
 
     bpy.utils.register_class(DreamTexturesNodeTree)
@@ -72,6 +68,12 @@ def register():
     nodeitems_utils.register_node_categories("DREAM_TEXTURES_CATEGORIES", categories)
 
 def unregister():
+    # OpenPose
+    del bpy.types.Armature.dream_textures_openpose
+    bpy.utils.unregister_class(openpose.ArmatureOpenPoseData)
+    del bpy.types.Bone.dream_textures_openpose
+    bpy.utils.unregister_class(openpose.BoneOpenPoseData)
+
     bpy.utils.unregister_class(DreamTexturesNodeTree)
     
     # Nodes

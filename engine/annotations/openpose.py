@@ -182,6 +182,7 @@ def render_openpose_map(context, collection=None):
             batch.draw(shader)
 
             for object in (context.scene.objects if collection is None else collection.objects):
+                object = object.evaluated_get(context)
                 if object.hide_render:
                     continue
                 if object.pose is None:

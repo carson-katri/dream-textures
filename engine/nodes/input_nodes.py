@@ -107,6 +107,7 @@ class NodeSceneInfo(DreamTexturesNode):
                 shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
 
                 for object in (context.scene.objects if collection is None else collection.objects):
+                    object = object.evaluated_get(context)
                     try:
                         mesh = object.to_mesh(depsgraph=context).copy()
                     except:

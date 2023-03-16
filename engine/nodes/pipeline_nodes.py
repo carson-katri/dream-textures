@@ -105,8 +105,8 @@ class NodeStableDiffusion(DreamTexturesNode):
         shared_args = context.scene.dream_textures_engine_prompt.generate_args()
         
         if controlnets is not None:
-            if not isinstance(controlnets, ControlNet):
-                controlnets = controlnets[0]
+            if not isinstance(controlnets, list):
+                controlnets = [controlnets]
             result = Generator.shared().control_net(
                 pipeline=args['pipeline'],
                 model=args['model'],
@@ -115,9 +115,9 @@ class NodeStableDiffusion(DreamTexturesNode):
                 seamless_axes=args['seamless_axes'],
                 iterations=args['iterations'],
 
-                control_net=controlnets.model,
-                control=controlnets.control(context),
-                controlnet_conditioning_scale=controlnets.conditioning_scale,
+                control_net=[c.model for c in controlnets],
+                control=[c.control(context) for c in controlnets],
+                controlnet_conditioning_scale=[c.conditioning_scale for c in controlnets],
 
                 image=np.uint8(source_image * 255) if self.task == 'image_to_image' else None,
                 strength=noise_strength,

@@ -213,7 +213,7 @@ class DreamTexture(bpy.types.Operator):
                             case 'control_net':
                                 f = gen.control_net(
                                     image=None,
-                                    control=init_image,
+                                    control=[init_image],
                                     **generated_args
                                 )
                     case 'inpaint':

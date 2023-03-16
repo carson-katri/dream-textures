@@ -18,9 +18,9 @@ def control_net(
 
     optimizations: Optimizations,
 
-    control_net: str,
-    control: NDArray | None,
-    controlnet_conditioning_scale: float,
+    control_net: list[str],
+    control: list[NDArray] | None,
+    controlnet_conditioning_scale: list[float],
     image: NDArray | str | None,
     strength: float,
     prompt: str | list[str],
@@ -43,6 +43,7 @@ def control_net(
     match pipeline:
         case Pipeline.STABLE_DIFFUSION:
             import diffusers
+            from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_controlnet import MultiControlNetModel, ControlNetModel
             import torch
             import PIL.Image
             import PIL.ImageOps
@@ -69,7 +70,7 @@ def control_net(
                     callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
                     callback_steps: int = 1,
                     cross_attention_kwargs: Optional[Dict[str, Any]] = None,
-                    controlnet_conditioning_scale: float = 1.0,
+                    controlnet_conditioning_scale: Union[float, List[float]] = 1.0,
 
                     **kwargs
                 ):
@@ -78,7 +79,15 @@ def control_net(
 
                     # 1. Check inputs. Raise error if not correct
                     self.check_inputs(
-                        prompt, image, height, width, callback_steps, negative_prompt, prompt_embeds, negative_prompt_embeds
+                        prompt,
+                        image,
+                        height,
+                        width,
+                        callback_steps,
+                        negative_prompt,
+                        prompt_embeds,
+                        negative_prompt_embeds,
+                        controlnet_conditioning_scale
                     )
 
                     # 2. Define call parameters
@@ -95,6 +104,9 @@ def control_net(
                     # corresponds to doing no classifier free guidance.
                     do_classifier_free_guidance = guidance_scale > 1.0
 
+                    if isinstance(self.controlnet, MultiControlNetModel) and isinstance(controlnet_conditioning_scale, float):
+                        controlnet_conditioning_scale = [controlnet_conditioning_scale] * len(self.controlnet.nets)
+
                     # 3. Encode input prompt
                     prompt_embeds = self._encode_prompt(
                         prompt,
@@ -107,18 +119,37 @@ def control_net(
                     )
 
                     # 4. Prepare image
-                    image = self.prepare_image(
-                        image,
-                        width,
-                        height,
-                        batch_size * num_images_per_prompt,
-                        num_images_per_prompt,
-                        device,
-                        self.controlnet.dtype,
-                    )
+                    if isinstance(self.controlnet, ControlNetModel):
+                        image = self.prepare_image(
+                            image=image,
+                            width=width,
+                            height=height,
+                            batch_size=batch_size * num_images_per_prompt,
+                            num_images_per_prompt=num_images_per_prompt,
+                            device=device,
+                            dtype=self.controlnet.dtype,
+                            do_classifier_free_guidance=do_classifier_free_guidance,
+                        )
+                    elif isinstance(self.controlnet, MultiControlNetModel):
+                        images = []
 
-                    if do_classifier_free_guidance:
-                        image = torch.cat([image] * 2)
+                        for image_ in image:
+                            image_ = self.prepare_image(
+                                image=image_,
+                                width=width,
+                                height=height,
+                                batch_size=batch_size * num_images_per_prompt,
+                                num_images_per_prompt=num_images_per_prompt,
+                                device=device,
+                                dtype=self.controlnet.dtype,
+                                do_classifier_free_guidance=do_classifier_free_guidance,
+                            )
+
+                            images.append(image_)
+
+                        image = images
+                    else:
+                        assert False
 
                     # 5. Prepare timesteps
                     self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -148,19 +179,15 @@ def control_net(
                             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                             latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
+                            # controlnet(s) inference
                             down_block_res_samples, mid_block_res_sample = self.controlnet(
                                 latent_model_input,
                                 t,
                                 encoder_hidden_states=prompt_embeds,
                                 controlnet_cond=image,
+                                conditioning_scale=controlnet_conditioning_scale,
                                 return_dict=False,
                             )
-
-                            down_block_res_samples = [
-                                down_block_res_sample * controlnet_conditioning_scale
-                                for down_block_res_sample in down_block_res_samples
-                            ]
-                            mid_block_res_sample *= controlnet_conditioning_scale
 
                             # predict the noise residual
                             noise_pred = self.unet(
@@ -230,7 +257,10 @@ def control_net(
                 device = self.choose_device()
 
             # Load the ControlNet model
-            controlnet = load_pipe(self, "control_net_model", diffusers.ControlNetModel, control_net, optimizations, None, device)
+            controlnet = []
+            for controlnet_name in control_net:
+                controlnet.append(load_pipe(self, f"control_net_model-{controlnet_name}", diffusers.ControlNetModel, controlnet_name, optimizations, None, device))
+            controlnet = MultiControlNetModel(controlnet)
 
             # StableDiffusionPipeline w/ caching
             pipe = load_pipe(self, "control_net", GeneratorPipeline, model, optimizations, scheduler, device, controlnet=controlnet)
@@ -257,13 +287,13 @@ def control_net(
                 int(8 * (height // 8)),
             )
             print(control)
-            control_image = PIL.Image.fromarray(np.uint8(control * 255)).convert('RGB').resize(rounded_size) if control is not None else None
+            control_image = [PIL.Image.fromarray(np.uint8(c * 255)).convert('RGB').resize(rounded_size) for c in control] if control is not None else None
             init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
 
             # Seamless
             if seamless_axes == SeamlessAxes.AUTO:
                 init_sa = None if init_image is None else self.detect_seamless(np.array(init_image) / 255)
-                control_sa = None if control_image is None else self.detect_seamless(np.array(control_image) / 255)
+                control_sa = None if control_image is None else self.detect_seamless(np.array(control_image[0]) / 255)
                 if init_sa is not None and control_sa is not None:
                     seamless_axes = SeamlessAxes((init_sa.x and control_sa.x, init_sa.y and control_sa.y))
                 elif init_sa is not None:

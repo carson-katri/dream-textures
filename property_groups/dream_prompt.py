@@ -278,6 +278,9 @@ def generate_args(self):
     args['seamless_axes'] = SeamlessAxes(args['seamless_axes'])
     args['width'] = args['width'] if args['use_size'] else None
     args['height'] = args['height'] if args['use_size'] else None
+
+    args['control_net'] = [args['control_net']]
+    args['controlnet_conditioning_scale'] = [args['controlnet_conditioning_scale']]
     return args
 
 DreamPrompt.generate_prompt = generate_prompt

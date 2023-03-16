@@ -1,7 +1,6 @@
 import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
-import math
 import numpy as np
 from ..node import DreamTexturesNode
 from ..annotations import openpose
@@ -109,7 +108,7 @@ class NodeSceneInfo(DreamTexturesNode):
 
                 for object in (context.scene.objects if collection is None else collection.objects):
                     try:
-                        mesh = object.to_mesh(depsgraph=context)
+                        mesh = object.to_mesh(depsgraph=context).copy()
                     except:
                         continue
                     if mesh is None:
@@ -117,6 +116,7 @@ class NodeSceneInfo(DreamTexturesNode):
                     vertices = np.empty((len(mesh.vertices), 3), 'f')
                     indices = np.empty((len(mesh.loop_triangles), 3), 'i')
 
+                    mesh.transform(object.matrix_world)
                     mesh.vertices.foreach_get("co", np.reshape(vertices, len(mesh.vertices) * 3))
                     mesh.loop_triangles.foreach_get("vertices", np.reshape(indices, len(mesh.loop_triangles) * 3))
                     

@@ -73,3 +73,20 @@ class NodeImage(DreamTexturesNode):
         return {
             'Image': np.array(self.value.pixels).reshape((*self.value.size, self.value.channels))
         }
+
+class NodeRenderProperties(DreamTexturesNode):
+    bl_idname = "dream_textures.node_render_properties"
+    bl_label = "Render Properties"
+
+    def init(self, context):
+        self.outputs.new("NodeSocketInt", "Resolution X")
+        self.outputs.new("NodeSocketInt", "Resolution Y")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context):
+        return {
+            'Resolution X': context.depsgraph.scene.render.resolution_x,
+            'Resolution Y': context.depsgraph.scene.render.resolution_y,
+        }

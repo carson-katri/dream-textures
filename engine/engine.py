@@ -6,9 +6,6 @@ import numpy as np
 from ..ui.panels.dream_texture import optimization_panels
 from .node_tree import DreamTexturesNodeTree
 from ..engine import node_executor
-from .annotations import openpose
-import time
-from threading import Event
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -56,7 +53,7 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
                 nonlocal progress
                 progress += 1
                 self.update_progress(progress / len(scene.dream_textures_render_engine.node_tree.nodes))
-            node_result = node_executor.execute(scene.dream_textures_render_engine.node_tree, depsgraph, node_begin=node_begin, node_update=node_update, node_end=node_end)
+            node_result = node_executor.execute(scene.dream_textures_render_engine.node_tree, depsgraph, node_begin=node_begin, node_update=node_update, node_end=node_end, test_break=self.test_break)
             node_result = prepare_result(node_result)
         except Exception as error:
             self.report({'ERROR'}, str(error))

@@ -5,7 +5,6 @@ from typing import Any
 import enum
 from ..node import DreamTexturesNode
 from ...generator_process import Generator
-from ...generator_process.actions.prompt_to_image import StepPreviewMode
 from ...property_groups.dream_prompt import DreamPrompt, control_net_options
 from ..annotations import openpose
 from ..annotations import depth
@@ -203,6 +202,11 @@ class NodeStableDiffusion(DreamTexturesNode):
         result = None
         def on_response(_, response):
             context.update(response.images[0])
+            if context.test_break():
+                nonlocal result
+                future.cancel()
+                result = [response]
+                event.set()
 
         def on_done(future):
             nonlocal result

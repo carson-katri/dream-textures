@@ -7,8 +7,8 @@ from ..node import DreamTexturesNode
 from ...generator_process import Generator
 from ...generator_process.actions.prompt_to_image import StepPreviewMode
 from ...property_groups.dream_prompt import DreamPrompt, control_net_options
-from .input_nodes import NodeSceneInfo
 from ..annotations import openpose
+from ..annotations import depth
 
 class NodeSocketControlNet(bpy.types.NodeSocket):
     bl_idname = "NodeSocketControlNet"
@@ -42,7 +42,7 @@ class ControlNet:
         else:
             match self.control_type:
                 case ControlType.DEPTH:
-                    return np.flipud(NodeSceneInfo.render_depth_map(context, collection=self.collection))
+                    return np.flipud(depth.render_depth_map(context, collection=self.collection))
                 case ControlType.OPENPOSE:
                     return np.flipud(openpose.render_openpose_map(context, collection=self.collection))
                 case ControlType.NORMAL:
@@ -67,8 +67,8 @@ class NodeStableDiffusion(DreamTexturesNode):
     ), update=_update_stable_diffusion_sockets)
 
     def init(self, context):
-        self.inputs.new("NodeSocketImage", "Depth Map")
-        self.inputs.new("NodeSocketImage", "Source Image")
+        self.inputs.new("NodeSocketColor", "Depth Map")
+        self.inputs.new("NodeSocketColor", "Source Image")
         self.inputs.new("NodeSocketFloat", "Noise Strength").default_value = 0.75
 
         self.inputs.new("NodeSocketString", "Prompt")

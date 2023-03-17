@@ -63,3 +63,22 @@ class NodeRandomValue(DreamTexturesNode):
         return {
             'Value': random.randrange(min, max)
         }
+
+class NodeClamp(DreamTexturesNode):
+    bl_idname = "dream_textures.node_clamp"
+    bl_label = "Clamp"
+
+    def init(self, context):
+        self.inputs.new("NodeSocketFloat", "Value")
+        self.inputs.new("NodeSocketFloat", "Min")
+        self.inputs.new("NodeSocketFloat", "Max")
+
+        self.outputs.new("NodeSocketFloat", "Result")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context, value, min, max):
+        return {
+            'Result': np.clip(value, min, max)
+        }

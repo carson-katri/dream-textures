@@ -13,6 +13,11 @@ class NodeExecutionContext:
 def execute_node(node, context, cache):
     result = None
     match node.type:
+        case 'GROUP_INPUT':
+            return {
+                input.name: input.default_value
+                for input in context.depsgraph.scene.dream_textures_render_engine.node_tree.inputs
+            }
         case 'GROUP_OUTPUT':
             return cache[node.inputs[0].links[0].from_socket.node]
         case _:

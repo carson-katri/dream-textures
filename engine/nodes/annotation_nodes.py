@@ -17,8 +17,10 @@ class NodeAnnotationDepth(DreamTexturesNode):
         pass
 
     def execute(self, context, collection, invert):
+        depth_map = depth.render_depth_map(context.depsgraph, collection=collection, invert=invert)
+        context.update(depth_map)
         return {
-            'Depth Map': depth.render_depth_map(context, collection=collection, invert=invert),
+            'Depth Map': depth_map,
         }
 
 class NodeAnnotationOpenPose(DreamTexturesNode):
@@ -34,6 +36,8 @@ class NodeAnnotationOpenPose(DreamTexturesNode):
         pass
 
     def execute(self, context, collection):
+        openpose_map = openpose.render_openpose_map(context.depsgraph, collection=collection)
+        context.update(openpose_map)
         return {
-            'OpenPose Map': openpose.render_openpose_map(context, collection=collection)
+            'OpenPose Map': openpose_map
         }

@@ -9,6 +9,7 @@ from ...generator_process.actions.prompt_to_image import StepPreviewMode
 from ...property_groups.dream_prompt import DreamPrompt, control_net_options
 from ..annotations import openpose
 from ..annotations import depth
+import threading
 
 class NodeSocketControlNet(bpy.types.NodeSocket):
     bl_idname = "NodeSocketControlNet"
@@ -102,21 +103,22 @@ class NodeStableDiffusion(DreamTexturesNode):
         self.prompt.cfg_scale = cfg_scale
         args = self.prompt.generate_args()
 
-        shared_args = context.scene.dream_textures_engine_prompt.generate_args()
+        shared_args = context.depsgraph.scene.dream_textures_engine_prompt.generate_args()
         
         if controlnets is not None:
             if not isinstance(controlnets, list):
                 controlnets = [controlnets]
-            result = Generator.shared().control_net(
+            future = Generator.shared().control_net(
                 pipeline=args['pipeline'],
                 model=args['model'],
                 scheduler=args['scheduler'],
                 optimizations=shared_args['optimizations'],
                 seamless_axes=args['seamless_axes'],
                 iterations=args['iterations'],
+                step_preview_mode=args['step_preview_mode'],
 
                 control_net=[c.model for c in controlnets],
-                control=[c.control(context) for c in controlnets],
+                control=[c.control(context.depsgraph) for c in controlnets],
                 controlnet_conditioning_scale=[c.conditioning_scale for c in controlnets],
 
                 image=np.uint8(source_image * 255) if self.task == 'image_to_image' else None,
@@ -129,19 +131,19 @@ class NodeStableDiffusion(DreamTexturesNode):
                 height=height,
                 cfg_scale=cfg_scale,
                 use_negative_prompt=True,
-                negative_prompt=negative_prompt,
-                step_preview_mode=StepPreviewMode.NONE
-            ).result()
+                negative_prompt=negative_prompt
+            )
         else:
             match self.task:
                 case 'prompt_to_image':
-                    result = Generator.shared().prompt_to_image(
+                    future = Generator.shared().prompt_to_image(
                         pipeline=args['pipeline'],
                         model=args['model'],
                         scheduler=args['scheduler'],
                         optimizations=shared_args['optimizations'],
                         seamless_axes=args['seamless_axes'],
                         iterations=args['iterations'],
+                        step_preview_mode=args['step_preview_mode'],
                         prompt=prompt,
                         steps=steps,
                         seed=seed,
@@ -149,17 +151,17 @@ class NodeStableDiffusion(DreamTexturesNode):
                         height=height,
                         cfg_scale=cfg_scale,
                         use_negative_prompt=True,
-                        negative_prompt=negative_prompt,
-                        step_preview_mode=StepPreviewMode.NONE
-                    ).result()
+                        negative_prompt=negative_prompt
+                    )
                 case 'image_to_image':
-                    result = Generator.shared().image_to_image(
+                    future = Generator.shared().image_to_image(
                         pipeline=args['pipeline'],
                         model=args['model'],
                         scheduler=args['scheduler'],
                         optimizations=shared_args['optimizations'],
                         seamless_axes=args['seamless_axes'],
                         iterations=args['iterations'],
+                        step_preview_mode=args['step_preview_mode'],
                         
                         image=np.uint8(source_image * 255),
                         strength=noise_strength,
@@ -172,17 +174,17 @@ class NodeStableDiffusion(DreamTexturesNode):
                         height=height,
                         cfg_scale=cfg_scale,
                         use_negative_prompt=True,
-                        negative_prompt=negative_prompt,
-                        step_preview_mode=StepPreviewMode.NONE
-                    ).result()
+                        negative_prompt=negative_prompt
+                    )
                 case 'depth_to_image':
-                    result = Generator.shared().depth_to_image(
+                    future = Generator.shared().depth_to_image(
                         pipeline=args['pipeline'],
                         model=args['model'],
                         scheduler=args['scheduler'],
                         optimizations=shared_args['optimizations'],
                         seamless_axes=args['seamless_axes'],
                         iterations=args['iterations'],
+                        step_preview_mode=args['step_preview_mode'],
                         
                         depth=depth_map,
                         image=np.uint8(source_image * 255) if source_image is not None else None,
@@ -195,9 +197,21 @@ class NodeStableDiffusion(DreamTexturesNode):
                         height=height,
                         cfg_scale=cfg_scale,
                         use_negative_prompt=True,
-                        negative_prompt=negative_prompt,
-                        step_preview_mode=StepPreviewMode.NONE
-                    ).result()
+                        negative_prompt=negative_prompt
+                    )
+        event = threading.Event()
+        result = None
+        def on_response(_, response):
+            context.update(response.images[0])
+
+        def on_done(future):
+            nonlocal result
+            result = future.result()
+            event.set()
+        
+        future.add_response_callback(on_response)
+        future.add_done_callback(on_done)
+        event.wait()
         return {
             'Image': result[-1].images[-1]
         }

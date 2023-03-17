@@ -6,6 +6,7 @@ import mathutils
 import numpy as np
 import enum
 import math
+import threading
 
 class Side(enum.IntEnum):
     HEAD = 0
@@ -129,82 +130,90 @@ ArmatureOpenPoseData = type('ArmatureOpenPoseData', (bpy.types.PropertyGroup,), 
 })
 
 def render_openpose_map(context, collection=None):
-    width, height = context.scene.render.resolution_x, context.scene.render.resolution_y
-    offscreen = gpu.types.GPUOffScreen(width, height)
+    e = threading.Event()
+    result = None
+    def _execute():
+        nonlocal result
+        width, height = context.scene.render.resolution_x, context.scene.render.resolution_y
+        offscreen = gpu.types.GPUOffScreen(width, height)
 
-    with offscreen.bind():
-        fb = gpu.state.active_framebuffer_get()
-        fb.clear(color=(0.0, 0.0, 0.0, 0.0))
-        gpu.state.depth_test_set('LESS_EQUAL')
-        gpu.state.depth_mask_set(True)
+        with offscreen.bind():
+            fb = gpu.state.active_framebuffer_get()
+            fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+            gpu.state.depth_test_set('LESS_EQUAL')
+            gpu.state.depth_mask_set(True)
 
-        lines = {
-            (Bone.NOSE, Bone.CHEST): (0, 0, 255),
-            (Bone.CHEST, Bone.SHOULDER_L): (255, 85, 0),
-            (Bone.CHEST, Bone.SHOULDER_R): (255, 0, 0),
-            (Bone.SHOULDER_L, Bone.ELBOW_L): (170, 255, 0),
-            (Bone.SHOULDER_R, Bone.ELBOW_R): (255, 170, 0),
-            (Bone.ELBOW_L, Bone.HAND_L): (85, 255, 0),
-            (Bone.ELBOW_R, Bone.HAND_R): (255, 255, 0),
-            (Bone.CHEST, Bone.HIP_L): (0, 255, 255),
-            (Bone.CHEST, Bone.HIP_R): (0, 255, 0),
-            (Bone.HIP_L, Bone.KNEE_L): (0, 170, 255),
-            (Bone.HIP_R, Bone.KNEE_R): (0, 255, 85),
-            (Bone.KNEE_L, Bone.FOOT_L): (0, 85, 255),
-            (Bone.KNEE_R, Bone.FOOT_R): (0, 255, 170),
-            (Bone.NOSE, Bone.EYE_L): (255, 0, 255),
-            (Bone.NOSE, Bone.EYE_R): (85, 0, 255),
-            (Bone.EYE_L, Bone.EAR_L): (255, 0, 170),
-            (Bone.EYE_R, Bone.EAR_R): (170, 0, 255),
-        }
-                            
-        with gpu.matrix.push_pop():
-            ratio = width / height
-            projection_matrix = mathutils.Matrix((
-                (1 / ratio, 0, 0, 0),
-                (0, 1, 0, 0),
-                (0, 0, -1, 0),
-                (0, 0, 0, 1)
-            ))
-            gpu.matrix.load_matrix(mathutils.Matrix.Identity(4))
-            gpu.matrix.load_projection_matrix(projection_matrix)
-            gpu.state.blend_set('ALPHA')
+            lines = {
+                (Bone.NOSE, Bone.CHEST): (0, 0, 255),
+                (Bone.CHEST, Bone.SHOULDER_L): (255, 85, 0),
+                (Bone.CHEST, Bone.SHOULDER_R): (255, 0, 0),
+                (Bone.SHOULDER_L, Bone.ELBOW_L): (170, 255, 0),
+                (Bone.SHOULDER_R, Bone.ELBOW_R): (255, 170, 0),
+                (Bone.ELBOW_L, Bone.HAND_L): (85, 255, 0),
+                (Bone.ELBOW_R, Bone.HAND_R): (255, 255, 0),
+                (Bone.CHEST, Bone.HIP_L): (0, 255, 255),
+                (Bone.CHEST, Bone.HIP_R): (0, 255, 0),
+                (Bone.HIP_L, Bone.KNEE_L): (0, 170, 255),
+                (Bone.HIP_R, Bone.KNEE_R): (0, 255, 85),
+                (Bone.KNEE_L, Bone.FOOT_L): (0, 85, 255),
+                (Bone.KNEE_R, Bone.FOOT_R): (0, 255, 170),
+                (Bone.NOSE, Bone.EYE_L): (255, 0, 255),
+                (Bone.NOSE, Bone.EYE_R): (85, 0, 255),
+                (Bone.EYE_L, Bone.EAR_L): (255, 0, 170),
+                (Bone.EYE_R, Bone.EAR_R): (170, 0, 255),
+            }
+                                
+            with gpu.matrix.push_pop():
+                ratio = width / height
+                projection_matrix = mathutils.Matrix((
+                    (1 / ratio, 0, 0, 0),
+                    (0, 1, 0, 0),
+                    (0, 0, -1, 0),
+                    (0, 0, 0, 1)
+                ))
+                gpu.matrix.load_matrix(mathutils.Matrix.Identity(4))
+                gpu.matrix.load_projection_matrix(projection_matrix)
+                gpu.state.blend_set('ALPHA')
 
-            def transform(x, y):
-                return (
-                    (x - 0.5) * 2 * ratio,
-                    (y - 0.5) * 2
-                )
+                def transform(x, y):
+                    return (
+                        (x - 0.5) * 2 * ratio,
+                        (y - 0.5) * 2
+                    )
 
-            shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
-            batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": [(-ratio, -1, 0), (-ratio, 1, 0), (ratio, -1, 0), (ratio, 1, 0)]})
-            shader.uniform_float("color", (0, 0, 0, 1))
-            batch.draw(shader)
+                shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
+                batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": [(-ratio, -1, 0), (-ratio, 1, 0), (ratio, -1, 0), (ratio, 1, 0)]})
+                shader.uniform_float("color", (0, 0, 0, 1))
+                batch.draw(shader)
 
-            for object in (context.scene.objects if collection is None else collection.objects):
-                object = object.evaluated_get(context)
-                if object.hide_render:
-                    continue
-                if object.pose is None:
-                    continue
-                for connection, color in lines.items():
-                    a, a_side = connection[0].identify(object.data, object.pose)
-                    b, b_side = connection[1].identify(object.data, object.pose)
-                    if a is None or b is None:
+                for object in (context.scene.objects if collection is None else collection.objects):
+                    object = object.evaluated_get(context)
+                    if object.hide_render:
                         continue
-                    a = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (a.tail if a_side == Side.TAIL else a.head))
-                    b = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (b.tail if b_side == Side.TAIL else b.head))
-                    draw_ellipse_2d(transform(a[0], a[1]), transform(b[0], b[1]), .015, 32, (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0, 0.5))
-                for b in Bone:
-                    bone, side = b.identify(object.data, object.pose)
-                    color = b.color()
-                    if bone is None: continue
-                    tail = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (bone.tail if side == Side.TAIL else bone.head))
-                    draw_circle_2d(transform(tail[0], tail[1]), .015, 16, (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0, 0.5))
+                    if object.pose is None:
+                        continue
+                    for connection, color in lines.items():
+                        a, a_side = connection[0].identify(object.data, object.pose)
+                        b, b_side = connection[1].identify(object.data, object.pose)
+                        if a is None or b is None:
+                            continue
+                        a = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (a.tail if a_side == Side.TAIL else a.head))
+                        b = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (b.tail if b_side == Side.TAIL else b.head))
+                        draw_ellipse_2d(transform(a[0], a[1]), transform(b[0], b[1]), .015, 32, (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0, 0.5))
+                    for b in Bone:
+                        bone, side = b.identify(object.data, object.pose)
+                        color = b.color()
+                        if bone is None: continue
+                        tail = bpy_extras.object_utils.world_to_camera_view(context.scene, context.scene.camera, object.matrix_world @ (bone.tail if side == Side.TAIL else bone.head))
+                        draw_circle_2d(transform(tail[0], tail[1]), .015, 16, (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0, 0.5))
 
-        depth = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
-    offscreen.free()
-    return depth
+            depth = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
+        offscreen.free()
+        result = depth
+        e.set()
+    bpy.app.timers.register(_execute, first_interval=0)
+    e.wait()
+    return result
 
 def draw_circle_2d(center, radius, segments, color):
     m = (1.0 / (segments - 1)) * (math.pi * 2)

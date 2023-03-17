@@ -7,6 +7,8 @@ from ..ui.panels.dream_texture import optimization_panels
 from .node_tree import DreamTexturesNodeTree
 from ..engine import node_executor
 from .annotations import openpose
+import time
+from threading import Event
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -14,7 +16,7 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     bl_idname = "DREAM_TEXTURES"
     bl_label = "Dream Textures"
     bl_use_preview = False
-    bl_use_gpu_context = True
+    # bl_use_gpu_context = True
 
     def __init__(self):
         pass
@@ -39,19 +41,22 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
         
         result = self.begin_result(0, 0, scene.render.resolution_x, scene.render.resolution_y)
         layer = result.layers[0].passes["Combined"]
+        self.update_result(result)
 
         try:
             progress = 0
-            def update_result(node, result):
-                nonlocal progress
-                progress += 1
-                if isinstance(result, np.ndarray):
-                    node_result = prepare_result(result)
+            def node_begin(node):
+                self.update_stats("Node", node.name)
+            def node_update(response):
+                if isinstance(response, np.ndarray):
+                    node_result = prepare_result(response)
                     layer.rect = node_result.reshape(-1, node_result.shape[-1])
                     self.update_result(result)
-                self.update_stats("Node", node.name)
+            def node_end(_):
+                nonlocal progress
+                progress += 1
                 self.update_progress(progress / len(scene.dream_textures_render_engine.node_tree.nodes))
-            node_result = node_executor.execute(scene.dream_textures_render_engine.node_tree, depsgraph, on_execute=update_result)
+            node_result = node_executor.execute(scene.dream_textures_render_engine.node_tree, depsgraph, node_begin=node_begin, node_update=node_update, node_end=node_end)
             node_result = prepare_result(node_result)
         except Exception as error:
             self.report({'ERROR'}, str(error))

@@ -286,7 +286,6 @@ def control_net(
                 int(8 * (width // 8)),
                 int(8 * (height // 8)),
             )
-            print(control)
             control_image = [PIL.Image.fromarray(np.uint8(c * 255)).convert('RGB').resize(rounded_size) for c in control] if control is not None else None
             init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
 

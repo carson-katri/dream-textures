@@ -19,6 +19,7 @@ class DreamTexturesNodeCategory(nodeitems_utils.NodeCategory):
 categories = [
     DreamTexturesNodeCategory("DREAM_TEXTURES_PIPELINE", "Pipeline", items = [
         nodeitems_utils.NodeItem(NodeStableDiffusion.bl_idname),
+        nodeitems_utils.NodeItem(NodeControlNet.bl_idname),
     ]),
     DreamTexturesNodeCategory("DREAM_TEXTURES_INPUT", "Input", items = [
         nodeitems_utils.NodeItem(NodeInteger.bl_idname),

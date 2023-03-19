@@ -129,8 +129,9 @@ def engine_panels():
             layout = self.layout
             layout.use_property_split = True
 
-            for input in context.scene.dream_textures_render_engine.node_tree.inputs:
-                layout.prop(input, "default_value", text=input.name)
+            if context.scene.dream_textures_render_engine.node_tree is not None:
+                for input in context.scene.dream_textures_render_engine.node_tree.inputs:
+                    layout.prop(input, "default_value", text=input.name)
     yield NodeTreeInputsPanel
 
     # Bone properties

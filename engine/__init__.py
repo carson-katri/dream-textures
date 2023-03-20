@@ -7,6 +7,7 @@ from .nodes.pipeline_nodes import *
 from .nodes.utility_nodes import *
 from .nodes.annotation_nodes import *
 from .annotations import openpose
+from .annotations import ade20k
 
 import bpy
 import nodeitems_utils
@@ -36,6 +37,7 @@ categories = [
     DreamTexturesNodeCategory("DREAM_TEXTURES_ANNOTATIONS", "Annotations", items = [
         nodeitems_utils.NodeItem(NodeAnnotationDepth.bl_idname),
         nodeitems_utils.NodeItem(NodeAnnotationOpenPose.bl_idname),
+        nodeitems_utils.NodeItem(NodeAnnotationADE20K.bl_idname),
     ]),
     DreamTexturesNodeCategory("DREAM_TEXTURES_GROUP", "Group", items = [
         nodeitems_utils.NodeItem(bpy.types.NodeGroupOutput.__name__),
@@ -56,6 +58,12 @@ def register():
         type=openpose.BoneOpenPoseData
     )
 
+    # ADE20K
+    bpy.utils.register_class(ade20k.ObjectADE20KData)
+    bpy.types.Object.dream_textures_ade20k = bpy.props.PointerProperty(
+        type=ade20k.ObjectADE20KData
+    )
+
     bpy.utils.register_class(DreamTexturesNodeTree)
     
     # Nodes
@@ -71,6 +79,7 @@ def register():
     
     bpy.utils.register_class(NodeAnnotationDepth)
     bpy.utils.register_class(NodeAnnotationOpenPose)
+    bpy.utils.register_class(NodeAnnotationADE20K)
 
     bpy.utils.register_class(NodeMath)
     bpy.utils.register_class(NodeRandomValue)
@@ -84,6 +93,10 @@ def unregister():
     bpy.utils.unregister_class(openpose.ArmatureOpenPoseData)
     del bpy.types.Bone.dream_textures_openpose
     bpy.utils.unregister_class(openpose.BoneOpenPoseData)
+
+    # ADE20K
+    del bpy.types.Object.dream_textures_ade20k
+    bpy.utils.unregister_class(ade20k.ObjectADE20KData)
 
     bpy.utils.unregister_class(DreamTexturesNodeTree)
     
@@ -100,6 +113,7 @@ def unregister():
 
     bpy.utils.unregister_class(NodeAnnotationDepth)
     bpy.utils.unregister_class(NodeAnnotationOpenPose)
+    bpy.utils.unregister_class(NodeAnnotationADE20K)
     
     bpy.utils.unregister_class(NodeMath)
     bpy.utils.unregister_class(NodeRandomValue)

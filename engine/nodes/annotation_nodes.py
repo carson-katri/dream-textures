@@ -2,6 +2,7 @@ import bpy
 from ..node import DreamTexturesNode
 from ..annotations import depth
 from ..annotations import openpose
+from ..annotations import ade20k
 
 annotation_src = (
     ('collection', 'Collection', 'Render the annotation for a specific collection'),
@@ -50,4 +51,23 @@ class NodeAnnotationOpenPose(DreamTexturesNode):
         context.update(openpose_map)
         return {
             'OpenPose Map': openpose_map
+        }
+
+class NodeAnnotationADE20K(DreamTexturesNode):
+    bl_idname = "dream_textures.node_annotation_ade20k"
+    bl_label = "ADE20K Segmentation Map"
+
+    def init(self, context):
+        self.inputs.new("NodeSocketCollection", "Collection")
+
+        self.outputs.new("NodeSocketColor", "Segmentation Map")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context, collection):
+        ade20k_map = ade20k.render_ade20k_map(context.depsgraph, collection=collection)
+        context.update(ade20k_map)
+        return {
+            'Segmentation Map': ade20k_map
         }

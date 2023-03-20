@@ -214,3 +214,34 @@ def engine_panels():
             layout.prop(bone.dream_textures_openpose, "side")
 
     yield OpenPoseBonePanel
+
+    class ADE20KObjectPanel(bpy.types.Panel):
+        bl_idname = "DREAM_PT_dream_textures_object_ade20k"
+        bl_label = "ADE20K Segmentation"
+        bl_space_type = 'PROPERTIES'
+        bl_region_type = 'WINDOW'
+        bl_context = "object"
+
+        @classmethod
+        def poll(cls, context):
+            return context.object and context.scene.render.engine == 'DREAM_TEXTURES'
+        
+        def draw_header(self, context):
+            object = context.object
+            if object:
+                self.layout.prop(object.dream_textures_ade20k, "enabled", text="")
+
+        def draw(self, context):
+            layout = self.layout
+            layout.use_property_split = True
+
+            object = context.object
+
+            layout.enabled = object.dream_textures_ade20k.enabled
+            r = layout.split(factor=0.9)
+            r.prop(object.dream_textures_ade20k, "annotation")
+            c = r.column()
+            c.enabled = False
+            c.prop(object.dream_textures_ade20k, "color")
+
+    yield ADE20KObjectPanel

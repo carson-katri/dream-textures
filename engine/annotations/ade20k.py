@@ -66,14 +66,13 @@ def render_ade20k_map(context, collection=None, invert=True):
                     
                     color = annotation_colors[object.dream_textures_ade20k.annotation]
 
-                    draw_annotation(vertices, indices, (color[0], color[1], color[2], 1))
+                    draw_annotation(vertices, indices, color)
             result = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
             result[:, :, 3] = 1
         offscreen.free()
         e.set()
     bpy.app.timers.register(_execute, first_interval=0)
     e.wait()
-    print(result)
     return result
 
 def draw_annotation(vertices, indices, color):

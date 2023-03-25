@@ -44,16 +44,85 @@ def control_net(
         case Pipeline.STABLE_DIFFUSION:
             import diffusers
             from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_controlnet import MultiControlNetModel, ControlNetModel
+            from diffusers.utils import deprecate, randn_tensor
             import torch
             import PIL.Image
             import PIL.ImageOps
 
             class GeneratorPipeline(diffusers.StableDiffusionControlNetPipeline):
+                # copied from diffusers.StableDiffusionImg2ImgPipeline
+                def get_timesteps(self, num_inference_steps, strength, device):
+                    # get the original timestep using init_timestep
+                    init_timestep = min(int(num_inference_steps * strength), num_inference_steps)
+
+                    t_start = max(num_inference_steps - init_timestep, 0)
+                    timesteps = self.scheduler.timesteps[t_start:]
+
+                    return timesteps, num_inference_steps - t_start
+                
+                # copied from diffusers.StableDiffusionImg2ImgPipeline
+                def prepare_img2img_latents(self, image, timestep, batch_size, num_images_per_prompt, dtype, device, generator=None):
+                    if not isinstance(image, (torch.Tensor, PIL.Image.Image, list)):
+                        raise ValueError(
+                            f"`image` has to be of type `torch.Tensor`, `PIL.Image.Image` or list but is {type(image)}"
+                        )
+
+                    image = image.to(device=device, dtype=dtype)
+
+                    batch_size = batch_size * num_images_per_prompt
+                    if isinstance(generator, list) and len(generator) != batch_size:
+                        raise ValueError(
+                            f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
+                            f" size of {batch_size}. Make sure the batch size matches the length of the generators."
+                        )
+
+                    if isinstance(generator, list):
+                        init_latents = [
+                            self.vae.encode(image[i : i + 1]).latent_dist.sample(generator[i]) for i in range(batch_size)
+                        ]
+                        init_latents = torch.cat(init_latents, dim=0)
+                    else:
+                        init_latents = self.vae.encode(image).latent_dist.sample(generator)
+
+                    init_latents = self.vae.config.scaling_factor * init_latents
+
+                    if batch_size > init_latents.shape[0] and batch_size % init_latents.shape[0] == 0:
+                        # expand init_latents for batch_size
+                        deprecation_message = (
+                            f"You have passed {batch_size} text prompts (`prompt`), but only {init_latents.shape[0]} initial"
+                            " images (`image`). Initial images are now duplicating to match the number of text prompts. Note"
+                            " that this behavior is deprecated and will be removed in a version 1.0.0. Please make sure to update"
+                            " your script to pass as many initial images as text prompts to suppress this warning."
+                        )
+                        deprecate("len(prompt) != len(image)", "1.0.0", deprecation_message, standard_warn=False)
+                        additional_image_per_prompt = batch_size // init_latents.shape[0]
+                        init_latents = torch.cat([init_latents] * additional_image_per_prompt, dim=0)
+                    elif batch_size > init_latents.shape[0] and batch_size % init_latents.shape[0] != 0:
+                        raise ValueError(
+                            f"Cannot duplicate `image` of batch size {init_latents.shape[0]} to {batch_size} text prompts."
+                        )
+                    else:
+                        init_latents = torch.cat([init_latents], dim=0)
+
+                    shape = init_latents.shape
+                    noise = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
+
+                    # get latents
+                    init_latents = self.scheduler.add_noise(init_latents, noise, timestep)
+                    latents = init_latents
+
+                    return latents
+                
                 @torch.no_grad()
                 def __call__(
                     self,
                     prompt: Union[str, List[str]] = None,
                     image: Union[torch.FloatTensor, PIL.Image.Image, List[torch.FloatTensor], List[PIL.Image.Image]] = None,
+                    
+                    # NOTE: Modified to support initial image.
+                    init_image: Union[torch.FloatTensor, PIL.Image.Image, List[torch.FloatTensor], List[PIL.Image.Image]] = None,
+                    strength: float = 1.0,
+
                     height: Optional[int] = None,
                     width: Optional[int] = None,
                     num_inference_steps: int = 50,
@@ -152,21 +221,40 @@ def control_net(
                         assert False
 
                     # 5. Prepare timesteps
-                    self.scheduler.set_timesteps(num_inference_steps, device=device)
-                    timesteps = self.scheduler.timesteps
+                    # NOTE: Modified to support initial image
+                    if init_image is not None:
+                        self.scheduler.set_timesteps(num_inference_steps, device=device)
+                        timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, strength, device)
+                        latent_timestep = timesteps[:1].repeat(batch_size * num_images_per_prompt)
+                    else:
+                        self.scheduler.set_timesteps(num_inference_steps, device=device)
+                        timesteps = self.scheduler.timesteps
 
                     # 6. Prepare latent variables
                     num_channels_latents = self.unet.in_channels
-                    latents = self.prepare_latents(
-                        batch_size * num_images_per_prompt,
-                        num_channels_latents,
-                        height,
-                        width,
-                        prompt_embeds.dtype,
-                        device,
-                        generator,
-                        latents,
-                    )
+                    # NOTE: Modified to support initial image
+                    if init_image is not None:
+                        init_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.preprocess(init_image)
+                        latents = self.prepare_img2img_latents(
+                            init_image,
+                            latent_timestep,
+                            batch_size,
+                            num_images_per_prompt,
+                            prompt_embeds.dtype,
+                            device,
+                            generator
+                        )
+                    else:
+                        latents = self.prepare_latents(
+                            batch_size * num_images_per_prompt,
+                            num_channels_latents,
+                            height,
+                            width,
+                            prompt_embeds.dtype,
+                            device,
+                            generator,
+                            latents,
+                        )
 
                     # 7. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
                     extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
@@ -309,7 +397,7 @@ def control_net(
                     prompt=prompt,
                     image=control_image,
                     controlnet_conditioning_scale=controlnet_conditioning_scale,
-                    # image=init_image,
+                    init_image=init_image,
                     strength=strength,
                     width=rounded_size[0],
                     height=rounded_size[1],

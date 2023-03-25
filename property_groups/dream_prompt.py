@@ -59,9 +59,11 @@ seamless_axes = [
 def modify_action_source_type(self, context):
     return [
         ('color', 'Color', 'Use the color information from the image', 1),
+        None,
         ('depth_generated', 'Color and Generated Depth', 'Use MiDaS to infer the depth of the initial image and include it in the conditioning. Can give results that more closely match the composition of the source image', 2),
         ('depth_map', 'Color and Depth Map', 'Specify a secondary image to use as the depth map. Can give results that closely match the composition of the depth map', 3),
         ('depth', 'Depth', 'Treat the initial image as a depth map, and ignore any color. Matches the composition of the source image without any color influence', 4),
+        None,
         ('control_net', 'ControlNet', 'Treat the initial image as the input to a ControlNet model', 5),
         ('control_net_color', 'Color and ControlNet', 'Specify a secondary image to use with a ControlNet model', 6),
     ]

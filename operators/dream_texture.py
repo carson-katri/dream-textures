@@ -216,6 +216,14 @@ class DreamTexture(bpy.types.Operator):
                                     control=[init_image],
                                     **generated_args
                                 )
+                            case 'control_net_color':
+                                f = gen.control_net(
+                                    image=init_image,
+                                    control=[np.flipud(np.array(scene.init_depth.pixels)
+                                        .astype(np.float32)
+                                        .reshape((scene.init_depth.size[1], scene.init_depth.size[0], scene.init_depth.channels)))],
+                                    **generated_args
+                                )
                     case 'inpaint':
                         f = gen.inpaint(
                             image=init_image,

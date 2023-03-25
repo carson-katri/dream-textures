@@ -78,6 +78,7 @@ def dream_texture_panels():
                                 get_seamless_result=get_seamless_result)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, size_panel, get_prompt)
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, init_image_panels, get_prompt)
+        yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, control_net_panel, get_prompt)
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, actions_panel, get_prompt)
 
@@ -232,12 +233,27 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                 layout.prop(prompt, "use_init_img_color")
             if prompt.init_img_action == 'modify':
                 layout.prop(prompt, "modify_action_source_type")
-                if prompt.modify_action_source_type in {'control_net', 'control_net_color'}:
-                    layout.prop(context.scene.dream_textures_prompt, 'control_net')
-                    layout.prop(context.scene.dream_textures_prompt, 'controlnet_conditioning_scale')
-                if prompt.modify_action_source_type == 'depth_map' or prompt.modify_action_source_type == 'control_net_color':
+                if prompt.modify_action_source_type == 'depth_map':
                     layout.template_ID(context.scene, "init_depth", open="image.open")
     yield InitImagePanel
+
+def control_net_panel(sub_panel, space_type, get_prompt):
+    class ControlNetPanel(sub_panel):
+        """Create a subpanel for ControlNet options"""
+        bl_idname = f"DREAM_PT_dream_panel_control_net_{space_type}"
+        bl_label = "ControlNet"
+        bl_options = {'DEFAULT_CLOSED'}
+
+        def draw(self, context):
+            layout = self.layout
+            prompt = get_prompt(context)
+            
+            row = layout.row()
+            row.template_list("SCENE_UL_ControlNetList", "", prompt, "control_nets", prompt, "active_control_net")
+            col = row.column(align=True)
+            col.operator("dream_textures.control_nets_add", icon='ADD', text="")
+            col.operator("dream_textures.control_nets_remove", icon='REMOVE', text="")
+    return ControlNetPanel
 
 def advanced_panel(sub_panel, space_type, get_prompt):
     class AdvancedPanel(sub_panel):

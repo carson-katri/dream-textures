@@ -5,7 +5,8 @@ from typing import Any
 import enum
 from ..node import DreamTexturesNode
 from ...generator_process import Generator
-from ...property_groups.dream_prompt import DreamPrompt, control_net_options
+from ...property_groups.control_net import control_net_options
+from ...property_groups.dream_prompt import DreamPrompt
 from ..annotations import openpose
 from ..annotations import depth
 import threading

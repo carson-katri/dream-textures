@@ -21,7 +21,9 @@ def control_net(
     control_net: list[str],
     control: list[NDArray] | None,
     controlnet_conditioning_scale: list[float],
-    image: NDArray | str | None,
+    
+    image: NDArray | str | None, # image to image
+
     strength: float,
     prompt: str | list[str],
     steps: int,

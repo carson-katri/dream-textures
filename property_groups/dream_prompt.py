@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty
+from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty, CollectionProperty
 import os
 import sys
 from typing import _AnnotatedAlias
@@ -10,6 +10,9 @@ from ..generator_process.actions.huggingface_hub import ModelType
 from ..prompt_engineering import *
 from ..preferences import StableDiffusionPreferences
 from .dream_prompt_validation import validate
+from .control_net import ControlNet
+
+import numpy as np
 
 from functools import reduce
 
@@ -63,9 +66,6 @@ def modify_action_source_type(self, context):
         ('depth_generated', 'Color and Generated Depth', 'Use MiDaS to infer the depth of the initial image and include it in the conditioning. Can give results that more closely match the composition of the source image', 2),
         ('depth_map', 'Color and Depth Map', 'Specify a secondary image to use as the depth map. Can give results that closely match the composition of the depth map', 3),
         ('depth', 'Depth', 'Treat the initial image as a depth map, and ignore any color. Matches the composition of the source image without any color influence', 4),
-        None,
-        ('control_net', 'ControlNet', 'Treat the initial image as the input to a ControlNet model', 5),
-        ('control_net_color', 'Color and ControlNet', 'Specify a secondary image to use with a ControlNet model', 6),
     ]
 
 def model_options(self, context):
@@ -113,12 +113,6 @@ def pipeline_options(self, context):
         (Pipeline.STABILITY_SDK.name, 'DreamStudio', 'Cloud compute via DreamStudio', 2),
     ]
 
-def control_net_options(self, context):
-    return [
-        (model.model_base, model.model_base.replace('models--', '').replace('--', '/'), '') for model in context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
-        if model.model_type == ModelType.CONTROL_NET.name
-    ]
-
 def seed_clamp(self, ctx):
     # clamp seed right after input to make it clear what the limits are
     try:
@@ -132,8 +126,8 @@ attributes = {
     "pipeline": EnumProperty(name="Pipeline", items=pipeline_options, default=1 if Pipeline.local_available() else 2, description="Specify which model and target should be used."),
     "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference"),
     
-    "control_net": EnumProperty(name="ControlNet", items=control_net_options, description="Specify which ControlNet to use"),
-    "controlnet_conditioning_scale": FloatProperty(name="ControlNet Conditioning Scale", default=1.0, description="Increases the strength of the ControlNet's effect"),
+    "control_nets": CollectionProperty(type=ControlNet),
+    "active_control_net": IntProperty(name="Active ControlNet"),
 
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
@@ -281,8 +275,17 @@ def generate_args(self):
     args['width'] = args['width'] if args['use_size'] else None
     args['height'] = args['height'] if args['use_size'] else None
 
-    args['control_net'] = [args['control_net']]
-    args['controlnet_conditioning_scale'] = [args['controlnet_conditioning_scale']]
+    args['control_net'] = [net.control_net for net in args['control_nets']]
+    args['controlnet_conditioning_scale'] = [net.conditioning_scale for net in args['control_nets']]
+    args['control'] = [
+        np.flipud(
+            (np.array(net.control_image.pixels) * 255)
+                .astype(np.uint8)
+                .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
+        )
+        for net in args['control_nets']
+    ]
+    del args['control_nets']
     return args
 
 DreamPrompt.generate_prompt = generate_prompt

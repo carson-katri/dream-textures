@@ -279,8 +279,7 @@ def generate_args(self):
     args['controlnet_conditioning_scale'] = [net.conditioning_scale for net in args['control_nets']]
     args['control'] = [
         np.flipud(
-            (np.array(net.control_image.pixels) * 255)
-                .astype(np.uint8)
+            np.array(net.control_image.pixels)
                 .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
         )
         for net in args['control_nets']

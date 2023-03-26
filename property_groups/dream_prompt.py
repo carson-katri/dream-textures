@@ -283,6 +283,7 @@ def generate_args(self):
                 .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
         )
         for net in args['control_nets']
+        if net.control_image is not None
     ]
     del args['control_nets']
     return args

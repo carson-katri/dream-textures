@@ -102,7 +102,13 @@ if current_process().name != "__actor__":
         bpy.types.Scene.dream_textures_project_prompt = PointerProperty(type=DreamPrompt)
         bpy.types.Scene.dream_textures_project_framebuffer_arguments = EnumProperty(name="Inputs", items=framebuffer_arguments)
         bpy.types.Scene.dream_textures_project_bake = BoolProperty(name="Bake", default=False, description="Re-maps the generated texture onto the specified UV map")
-        bpy.types.Scene.dream_textures_project_use_control_net = BoolProperty(name="Use ControlNet", default=False, description="Use a depth ControlNet instead of a depth model")
+        def project_use_controlnet(self, context):
+            if self.dream_textures_project_use_control_net:
+                if len(self.dream_textures_project_prompt.control_nets) < 1:
+                    self.dream_textures_project_prompt.control_nets.add()
+            else:
+                self.dream_textures_project_prompt.control_nets.clear()
+        bpy.types.Scene.dream_textures_project_use_control_net = BoolProperty(name="Use ControlNet", default=False, description="Use a depth ControlNet instead of a depth model", update=project_use_controlnet)
 
         engine.register()
 

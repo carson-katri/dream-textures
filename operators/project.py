@@ -439,18 +439,11 @@ class ProjectDreamTexture(bpy.types.Operator):
         context.scene.render.filepath, context.scene.render.image_settings.file_format = render_filepath, file_format
         return init_img_path
 
-    def masked_init_image(self, context, camera, texture, mesh, split_mesh, uvs, threshold=0.75):
+    def masked_init_image(self, context, camera, texture, mesh, split_mesh, uvs, threshold=0.5):
         mask = draw_mask_map(512, 512, context, mesh, camera.matrix_world.inverted(), context.space_data.region_3d.window_matrix, threshold, bake=None)
         color = draw_color(512, 512, context, split_mesh, camera.matrix_world.inverted(), context.space_data.region_3d.window_matrix, texture, uvs)
         bake_uvs = [(uv[0] * 2 - 1, uv[1] * 2 - 1, 0) for uv in uvs]
         baked_mask = draw_mask_map(512, 512, context, split_mesh, camera.matrix_world.inverted(), context.space_data.region_3d.window_matrix, threshold, bake=bake_uvs)
-
-        kernel = np.array([0, 0.1, 0.2, 1.0, 0.2, 0.1, 0])
-        mask = np.apply_along_axis(lambda x: np.convolve(x, kernel, mode='same'), 0, mask)
-        mask = np.apply_along_axis(lambda x: np.convolve(x, kernel, mode='same'), 1, mask)
-        kernel = np.array([0.1, 0.1, 0.2, 0.3, 0.2, 0.1, 0.1])
-        baked_mask = np.apply_along_axis(lambda x: np.convolve(x, kernel, mode='same'), 0, baked_mask)
-        baked_mask = np.apply_along_axis(lambda x: np.convolve(x, kernel, mode='same'), 1, baked_mask)
 
         return color, mask, baked_mask
 
@@ -460,37 +453,51 @@ class ProjectDreamTexture(bpy.types.Operator):
         inpaint_result = bpy.data.images['inpaint_result']
         mask_result = bpy.data.images['mask']
 
-        mesh = bmesh.from_edit_mesh(context.object.data)
-        mesh.verts.ensure_lookup_table()
-        mesh.verts.index_update()
-
-        split_mesh = mesh.copy()
-        split_mesh.transform(context.object.matrix_world)
-        split_mesh.select_mode = {'FACE'}
-        bmesh.ops.split_edges(split_mesh, edges=split_mesh.edges)
-        
-        split_mesh.faces.ensure_lookup_table()
-        split_mesh.verts.ensure_lookup_table()
-        split_mesh.verts.index_update()
-
-        def vert_to_uv(v):
-            screen_space = view3d_utils.location_3d_to_region_2d(context.region, context.space_data.region_3d, v.co)
-            if screen_space is None:
-                return None
-            return (screen_space[0] / context.region.width, screen_space[1] / context.region.height)
-
-        uv_layer = split_mesh.loops.layers.uv.active
-        uvs = np.empty((len(split_mesh.verts), 2), dtype=np.float32)
-        projection_uvs = np.empty((len(split_mesh.verts), 2), dtype=np.float32)
-        for face in split_mesh.faces:
-            for loop in face.loops:
-                projection_uvs[loop.vert.index] = vert_to_uv(split_mesh.verts[loop.vert.index])
-                uvs[loop.vert.index] = loop[uv_layer].uv
-
         gen = Generator.shared()
 
         step_i = 0
         def step(camera, inpaint):
+            def location_3d_to_region_2d(coord):
+                perspective_matrix = context.space_data.region_3d.window_matrix @ camera.matrix_world.inverted()
+                prj = perspective_matrix @ mathutils.Vector((coord[0], coord[1], coord[2], 1.0))
+                if prj.w > 0.0:
+                    width_half = context.region.width / 2.0
+                    height_half = context.region.height / 2.0
+
+                    return mathutils.Vector((
+                        width_half + width_half * (prj.x / prj.w),
+                        height_half + height_half * (prj.y / prj.w),
+                    ))
+                else:
+                    return None
+                
+            mesh = bmesh.from_edit_mesh(context.object.data)
+            mesh.verts.ensure_lookup_table()
+            mesh.verts.index_update()
+
+            split_mesh = mesh.copy()
+            split_mesh.transform(context.object.matrix_world)
+            split_mesh.select_mode = {'FACE'}
+            bmesh.ops.split_edges(split_mesh, edges=split_mesh.edges)
+            
+            split_mesh.faces.ensure_lookup_table()
+            split_mesh.verts.ensure_lookup_table()
+            split_mesh.verts.index_update()
+
+            def vert_to_uv(v):
+                screen_space = location_3d_to_region_2d(v.co)
+                if screen_space is None:
+                    return None
+                return (screen_space[0] / context.region.width, screen_space[1] / context.region.height)
+
+            uv_layer = split_mesh.loops.layers.uv.active
+            uvs = np.empty((len(split_mesh.verts), 2), dtype=np.float32)
+            projection_uvs = np.empty((len(split_mesh.verts), 2), dtype=np.float32)
+            for face in split_mesh.faces:
+                for loop in face.loops:
+                    projection_uvs[loop.vert.index] = vert_to_uv(split_mesh.verts[loop.vert.index])
+                    uvs[loop.vert.index] = loop[uv_layer].uv
+
             depth = np.flipud(
                 draw_depth_map(512, 512, context, camera.matrix_world.inverted(), context.space_data.region_3d.window_matrix)
             )
@@ -512,7 +519,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                 ).result()
                 inpaint_result.pixels[:] = res[-1].images[0].ravel()
                 inpaint_result.update()
-                mask_result.pixels[:] = baked_mask.ravel()
+                mask_result.pixels[:] = mask.ravel()
                 mask_result.update()
                 color = bake(context, split_mesh, 512, 512, res[-1].images[0].ravel(), projection_uvs, uvs).ravel()
                 baked_mask = baked_mask.ravel()
@@ -529,7 +536,6 @@ class ProjectDreamTexture(bpy.types.Operator):
                 generation_result.pixels[:] = res[-1].images[0].ravel()
                 generation_result.update()
                 color = bake(context, split_mesh, 512, 512, res[-1].images[0].ravel(), projection_uvs, uvs)
-                # color = bake(context, split_mesh, 512, 512, np.array(generation_result.pixels, dtype=np.float32), projection_uvs, uvs)
 
             texture.pixels[:] = color.ravel()
             texture.update()

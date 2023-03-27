@@ -23,6 +23,11 @@ def control_net(
     controlnet_conditioning_scale: list[float],
     
     image: NDArray | str | None, # image to image
+    # inpaint
+    inpaint: bool,
+    inpaint_mask_src: str,
+    text_mask: str,
+    text_mask_confidence: float,
 
     strength: float,
     prompt: str | list[str],
@@ -115,15 +120,68 @@ def control_net(
 
                     return latents
                 
+                # copied from diffusers.StableDiffusionInpaintPipeline
+                def prepare_mask_latents(
+                    self, mask, masked_image, batch_size, height, width, dtype, device, generator, do_classifier_free_guidance
+                ):
+                    # resize the mask to latents shape as we concatenate the mask to the latents
+                    # we do that before converting to dtype to avoid breaking in case we're using cpu_offload
+                    # and half precision
+                    mask = torch.nn.functional.interpolate(
+                        mask, size=(height // self.vae_scale_factor, width // self.vae_scale_factor)
+                    )
+                    mask = mask.to(device=device, dtype=dtype)
+
+                    masked_image = masked_image.to(device=device, dtype=dtype)
+
+                    # encode the mask image into latents space so we can concatenate it to the latents
+                    if isinstance(generator, list):
+                        masked_image_latents = [
+                            self.vae.encode(masked_image[i : i + 1]).latent_dist.sample(generator=generator[i])
+                            for i in range(batch_size)
+                        ]
+                        masked_image_latents = torch.cat(masked_image_latents, dim=0)
+                    else:
+                        masked_image_latents = self.vae.encode(masked_image).latent_dist.sample(generator=generator)
+                    masked_image_latents = self.vae.config.scaling_factor * masked_image_latents
+
+                    # duplicate mask and masked_image_latents for each generation per prompt, using mps friendly method
+                    if mask.shape[0] < batch_size:
+                        if not batch_size % mask.shape[0] == 0:
+                            raise ValueError(
+                                "The passed mask and the required batch size don't match. Masks are supposed to be duplicated to"
+                                f" a total batch size of {batch_size}, but {mask.shape[0]} masks were passed. Make sure the number"
+                                " of masks that you pass is divisible by the total requested batch size."
+                            )
+                        mask = mask.repeat(batch_size // mask.shape[0], 1, 1, 1)
+                    if masked_image_latents.shape[0] < batch_size:
+                        if not batch_size % masked_image_latents.shape[0] == 0:
+                            raise ValueError(
+                                "The passed images and the required batch size don't match. Images are supposed to be duplicated"
+                                f" to a total batch size of {batch_size}, but {masked_image_latents.shape[0]} images were passed."
+                                " Make sure the number of images that you pass is divisible by the total requested batch size."
+                            )
+                        masked_image_latents = masked_image_latents.repeat(batch_size // masked_image_latents.shape[0], 1, 1, 1)
+
+                    mask = torch.cat([mask] * 2) if do_classifier_free_guidance else mask
+                    masked_image_latents = (
+                        torch.cat([masked_image_latents] * 2) if do_classifier_free_guidance else masked_image_latents
+                    )
+
+                    # aligning device to prevent device errors when concating it with the latent model input
+                    masked_image_latents = masked_image_latents.to(device=device, dtype=dtype)
+                    return mask, masked_image_latents
+
                 @torch.no_grad()
                 def __call__(
                     self,
                     prompt: Union[str, List[str]] = None,
                     image: Union[torch.FloatTensor, PIL.Image.Image, List[torch.FloatTensor], List[PIL.Image.Image]] = None,
                     
-                    # NOTE: Modified to support initial image.
+                    # NOTE: Modified to support initial image and inpaint.
                     init_image: Union[torch.FloatTensor, PIL.Image.Image, List[torch.FloatTensor], List[PIL.Image.Image]] = None,
                     strength: float = 1.0,
+                    mask: Union[torch.FloatTensor, PIL.Image.Image, List[torch.FloatTensor], List[PIL.Image.Image]] = None,
 
                     height: Optional[int] = None,
                     width: Optional[int] = None,
@@ -224,7 +282,7 @@ def control_net(
 
                     # 5. Prepare timesteps
                     # NOTE: Modified to support initial image
-                    if init_image is not None:
+                    if init_image is not None and not inpaint:
                         self.scheduler.set_timesteps(num_inference_steps, device=device)
                         timesteps, num_inference_steps = self.get_timesteps(num_inference_steps, strength, device)
                         latent_timestep = timesteps[:1].repeat(batch_size * num_images_per_prompt)
@@ -235,7 +293,37 @@ def control_net(
                     # 6. Prepare latent variables
                     num_channels_latents = self.unet.in_channels
                     # NOTE: Modified to support initial image
-                    if init_image is not None:
+                    if mask is not None:
+                        num_channels_latents = self.vae.config.latent_channels
+                        mask, masked_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint.prepare_mask_and_masked_image(init_image, mask)
+                        mask, masked_image_latents = self.prepare_mask_latents(
+                            mask,
+                            masked_image,
+                            batch_size * num_images_per_prompt,
+                            height,
+                            width,
+                            prompt_embeds.dtype,
+                            device,
+                            generator,
+                            do_classifier_free_guidance,
+                        )
+                        num_channels_mask = mask.shape[1]
+                        num_channels_masked_image = masked_image_latents.shape[1]
+                        if num_channels_latents + num_channels_mask + num_channels_masked_image != self.unet.config.in_channels:
+                            raise ValueError(
+                                f"Select an inpainting model, such as 'stabilityai/stable-diffusion-2-inpainting'"
+                            )
+                        latents = self.prepare_latents(
+                            batch_size * num_images_per_prompt,
+                            num_channels_latents,
+                            height,
+                            width,
+                            prompt_embeds.dtype,
+                            device,
+                            generator,
+                            latents,
+                        )
+                    elif init_image is not None:
                         init_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.preprocess(init_image)
                         latents = self.prepare_img2img_latents(
                             init_image,
@@ -278,6 +366,9 @@ def control_net(
                                 conditioning_scale=controlnet_conditioning_scale,
                                 return_dict=False,
                             )
+
+                            if mask is not None:
+                                latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents], dim=1)
 
                             # predict the noise residual
                             noise_pred = self.unet(
@@ -377,7 +468,21 @@ def control_net(
                 int(8 * (height // 8)),
             )
             control_image = [PIL.Image.fromarray(np.uint8(c * 255)).convert('RGB').resize(rounded_size) for c in control] if control is not None else None
-            init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
+            init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).resize(rounded_size)
+            if inpaint:
+                match inpaint_mask_src:
+                    case 'alpha':
+                        mask_image = PIL.ImageOps.invert(init_image.getchannel('A'))
+                    case 'prompt':
+                        from transformers import AutoProcessor, CLIPSegForImageSegmentation
+
+                        processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+                        clipseg = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
+                        inputs = processor(text=[text_mask], images=[init_image.convert('RGB')], return_tensors="pt", padding=True)
+                        outputs = clipseg(**inputs)
+                        mask_image = PIL.Image.fromarray(np.uint8((1 - torch.sigmoid(outputs.logits).lt(text_mask_confidence).int().detach().numpy()) * 255), 'L').resize(init_image.size)
+            else:
+                mask_image = None
 
             # Seamless
             if seamless_axes == SeamlessAxes.AUTO:
@@ -399,7 +504,8 @@ def control_net(
                     prompt=prompt,
                     image=control_image,
                     controlnet_conditioning_scale=controlnet_conditioning_scale,
-                    init_image=init_image,
+                    init_image=init_image.convert('RGB') if init_image is not None else None,
+                    mask=mask_image,
                     strength=strength,
                     width=rounded_size[0],
                     height=rounded_size[1],

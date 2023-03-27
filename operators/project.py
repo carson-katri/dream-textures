@@ -198,23 +198,24 @@ def draw_depth_map(width, height, context, matrix, projection_matrix):
     offscreen.free()
     return depth
 
-def bake(context, mesh, width, height, src, src_uv, dest_uv):
+def bake(context, mesh, width, height, src, projection_uvs, uvs):
     def bake_shader():
         vert_out = gpu.types.GPUStageInterfaceInfo("my_interface")
         vert_out.smooth('VEC2', "uvInterp")
 
         shader_info = gpu.types.GPUShaderCreateInfo()
+        shader_info.push_constant('MAT4', 'ModelViewProjectionMatrix')
         shader_info.sampler(0, 'FLOAT_2D', "image")
-        shader_info.vertex_in(0, 'VEC2', "src_uv")
-        shader_info.vertex_in(1, 'VEC2', "dest_uv")
+        shader_info.vertex_in(0, 'VEC2', "pos")
+        shader_info.vertex_in(1, 'VEC2', "uv")
         shader_info.vertex_out(vert_out)
         shader_info.fragment_out(0, 'VEC4', "fragColor")
 
         shader_info.vertex_source("""
 void main()
 {
-    gl_Position = vec4(dest_uv * 2 - 1, 0.0, 1.0);
-    uvInterp = src_uv;
+    gl_Position = ModelViewProjectionMatrix * vec4(pos * 2 - 1, 0.0, 1.0);
+    uvInterp = uv;
 }
 """)
 
@@ -244,7 +245,7 @@ void main()
             shader = bake_shader()
             batch = batch_for_shader(
                 shader, 'TRIS',
-                {"src_uv": src_uv, "dest_uv": dest_uv},
+                {"pos": uvs, "uv": projection_uvs},
                 indices=vertices,
             )
             shader.uniform_sampler("image", texture)
@@ -325,7 +326,7 @@ def draw_mask_map(width, height, context, mesh, matrix, projection_matrix, thres
 
     def mask_shader():
         vert_out = gpu.types.GPUStageInterfaceInfo("my_interface")
-        vert_out.smooth('VEC4', "color")
+        vert_out.smooth('VEC3', "normal")
 
         shader_info = gpu.types.GPUShaderCreateInfo()
         shader_info.push_constant('MAT4', 'ModelViewProjectionMatrix')
@@ -341,7 +342,7 @@ def draw_mask_map(width, height, context, mesh, matrix, projection_matrix, thres
 void main()
 {
     gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
-    color = dot(NormalMatrix * nor, CameraNormal) > Threshold ? vec4(1, 1, 1, 1) : vec4(0, 0, 0, 1);
+    normal = nor;
 }
 """)
 
@@ -349,7 +350,7 @@ void main()
         shader_info.fragment_source("""
 void main()
 {
-    fragColor = color;
+    fragColor = dot(NormalMatrix * normal, CameraNormal) > Threshold ? vec4(1, 1, 1, 1) : vec4(0, 0, 0, 1);
 }
 """)
 
@@ -357,7 +358,7 @@ void main()
 
     with offscreen.bind():
         fb = gpu.state.active_framebuffer_get()
-        fb.clear(color=(0.0, 0.0, 0.0, 1.0))
+        fb.clear(color=(0.0, 0.0, 0.0, 0.0))
         gpu.state.depth_test_set('LESS_EQUAL')
         gpu.state.depth_mask_set(True)
         with gpu.matrix.push_pop():
@@ -444,6 +445,13 @@ class ProjectDreamTexture(bpy.types.Operator):
         bake_uvs = [(uv[0] * 2 - 1, uv[1] * 2 - 1, 0) for uv in uvs]
         baked_mask = draw_mask_map(512, 512, context, split_mesh, camera.matrix_world.inverted(), context.space_data.region_3d.window_matrix, threshold, bake=bake_uvs)
 
+        kernel = np.array([0, 0.1, 0.2, 1.0, 0.2, 0.1, 0])
+        mask = np.apply_along_axis(lambda x: np.convolve(x, kernel, mode='same'), 0, mask)
+        mask = np.apply_along_axis(lambda x: np.convolve(x, kernel, mode='same'), 1, mask)
+        kernel = np.array([0.1, 0.1, 0.2, 0.3, 0.2, 0.1, 0.1])
+        baked_mask = np.apply_along_axis(lambda x: np.convolve(x, kernel, mode='same'), 0, baked_mask)
+        baked_mask = np.apply_along_axis(lambda x: np.convolve(x, kernel, mode='same'), 1, baked_mask)
+
         return color, mask, baked_mask
 
     def execute(self, context):
@@ -457,22 +465,31 @@ class ProjectDreamTexture(bpy.types.Operator):
         mesh.verts.index_update()
 
         split_mesh = mesh.copy()
+        split_mesh.transform(context.object.matrix_world)
         split_mesh.select_mode = {'FACE'}
         bmesh.ops.split_edges(split_mesh, edges=split_mesh.edges)
         
-        mesh.faces.ensure_lookup_table()
+        split_mesh.faces.ensure_lookup_table()
+        split_mesh.verts.ensure_lookup_table()
+        split_mesh.verts.index_update()
+
+        def vert_to_uv(v):
+            screen_space = view3d_utils.location_3d_to_region_2d(context.region, context.space_data.region_3d, v.co)
+            if screen_space is None:
+                return None
+            return (screen_space[0] / context.region.width, screen_space[1] / context.region.height)
 
         uv_layer = split_mesh.loops.layers.uv.active
-        projection_uv_layer, _ = ProjectDreamTexture.get_uv_layer(split_mesh)
         uvs = np.empty((len(split_mesh.verts), 2), dtype=np.float32)
         projection_uvs = np.empty((len(split_mesh.verts), 2), dtype=np.float32)
         for face in split_mesh.faces:
             for loop in face.loops:
-                projection_uvs[loop.vert.index] = loop[projection_uv_layer].uv
+                projection_uvs[loop.vert.index] = vert_to_uv(split_mesh.verts[loop.vert.index])
                 uvs[loop.vert.index] = loop[uv_layer].uv
 
         gen = Generator.shared()
 
+        step_i = 0
         def step(camera, inpaint):
             depth = np.flipud(
                 draw_depth_map(512, 512, context, camera.matrix_world.inverted(), context.space_data.region_3d.window_matrix)
@@ -495,9 +512,10 @@ class ProjectDreamTexture(bpy.types.Operator):
                 ).result()
                 inpaint_result.pixels[:] = res[-1].images[0].ravel()
                 inpaint_result.update()
-                mask_result.pixels[:] = color.ravel()
+                mask_result.pixels[:] = baked_mask.ravel()
                 mask_result.update()
-                color = bake(context, split_mesh, 512, 512, res[-1].images[0].ravel(), projection_uvs, uvs)
+                color = bake(context, split_mesh, 512, 512, res[-1].images[0].ravel(), projection_uvs, uvs).ravel()
+                baked_mask = baked_mask.ravel()
                 color = (np.array(texture.pixels, dtype=np.float32) * (1 - baked_mask)) + (color * baked_mask)
             else:
                 res = gen.control_net(
@@ -511,9 +529,13 @@ class ProjectDreamTexture(bpy.types.Operator):
                 generation_result.pixels[:] = res[-1].images[0].ravel()
                 generation_result.update()
                 color = bake(context, split_mesh, 512, 512, res[-1].images[0].ravel(), projection_uvs, uvs)
+                # color = bake(context, split_mesh, 512, 512, np.array(generation_result.pixels, dtype=np.float32), projection_uvs, uvs)
 
             texture.pixels[:] = color.ravel()
             texture.update()
+            nonlocal step_i
+            bpy.data.images.new(name=f"Step {step_i}", width=512, height=512).pixels[:] = color.ravel()
+            step_i += 1
         
         started = False
         for camera in [ob for ob in bpy.context.scene.objects if ob.type == 'CAMERA' and not ob.hide_viewport]:

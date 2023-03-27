@@ -198,7 +198,7 @@ def draw_depth_map(width, height, context, matrix, projection_matrix):
     offscreen.free()
     return depth
 
-def bake(context, mesh, src, dest, src_uv, dest_uv):
+def bake(context, mesh, width, height, src, src_uv, dest_uv):
     def bake_shader():
         vert_out = gpu.types.GPUStageInterfaceInfo("my_interface")
         vert_out.smooth('VEC2', "uvInterp")
@@ -227,7 +227,6 @@ void main()
 
         return gpu.shader.create_from_info(shader_info)
 
-    width, height = dest.size[0], dest.size[1]
     offscreen = gpu.types.GPUOffScreen(width, height)
 
     buffer = gpu.types.Buffer('FLOAT', width * height * 4, src)
@@ -252,7 +251,143 @@ void main()
             batch.draw(shader)
         projected = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
     offscreen.free()
-    dest.pixels[:] = projected.ravel()
+    return projected
+
+def draw_color(width, height, context, mesh, matrix, projection_matrix, texture, uvs):
+    """
+    Generate a depth map for the given matrices.
+    """
+    offscreen = gpu.types.GPUOffScreen(width, height)
+    buffer = gpu.types.Buffer('FLOAT', width * height * 4, texture)
+    texture = gpu.types.GPUTexture(size=(width, height), data=buffer, format='RGBA16F')
+
+    def color_shader():
+        vert_out = gpu.types.GPUStageInterfaceInfo("my_interface")
+        vert_out.smooth('VEC2', "uvInterp")
+
+        shader_info = gpu.types.GPUShaderCreateInfo()
+        shader_info.push_constant('MAT4', 'ModelViewProjectionMatrix')
+        shader_info.sampler(0, 'FLOAT_2D', "image")
+        shader_info.vertex_in(0, 'VEC3', "pos")
+        shader_info.vertex_in(1, 'VEC2', "uv")
+        shader_info.vertex_out(vert_out)
+        shader_info.fragment_out(0, 'VEC4', "fragColor")
+
+        shader_info.vertex_source("""
+void main()
+{
+    gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+    uvInterp = uv;
+}
+""")
+
+        shader_info.fragment_source("""
+void main()
+{
+    fragColor = texture(image, uvInterp);
+}
+""")
+
+        return gpu.shader.create_from_info(shader_info)
+
+    with offscreen.bind():
+        fb = gpu.state.active_framebuffer_get()
+        fb.clear(color=(0.0, 0.0, 0.0, 1.0))
+        gpu.state.depth_test_set('LESS_EQUAL')
+        gpu.state.depth_mask_set(True)
+        with gpu.matrix.push_pop():
+            gpu.matrix.load_matrix(matrix)
+            gpu.matrix.load_projection_matrix(projection_matrix)
+
+            mesh.calc_loop_triangles()
+
+            vertices = np.array([vert.co for vert in mesh.verts], dtype='f')
+            indices = np.array([[l.vert.index for l in loop] for loop in mesh.calc_loop_triangles()], dtype='i')
+            
+            shader = color_shader()
+            batch = batch_for_shader(
+                shader, 'TRIS',
+                {"pos": vertices, "uv": uvs},
+                indices=indices,
+            )
+            shader.uniform_sampler("image", texture)
+            batch.draw(shader)
+        color = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
+    offscreen.free()
+    
+    return color
+
+def draw_mask_map(width, height, context, mesh, matrix, projection_matrix, threshold, bake):
+    """
+    Generate a depth map for the given matrices.
+    """
+    offscreen = gpu.types.GPUOffScreen(width, height)
+
+    def mask_shader():
+        vert_out = gpu.types.GPUStageInterfaceInfo("my_interface")
+        vert_out.smooth('VEC4', "color")
+
+        shader_info = gpu.types.GPUShaderCreateInfo()
+        shader_info.push_constant('MAT4', 'ModelViewProjectionMatrix')
+        shader_info.push_constant('MAT3', 'NormalMatrix')
+        shader_info.push_constant('FLOAT', 'Threshold')
+        shader_info.push_constant('VEC3', 'CameraNormal')
+        shader_info.vertex_in(0, 'VEC3', "pos")
+        shader_info.vertex_in(1, 'VEC3', "nor")
+        shader_info.vertex_out(vert_out)
+        shader_info.fragment_out(0, 'VEC4', "fragColor")
+
+        shader_info.vertex_source("""
+void main()
+{
+    gl_Position = ModelViewProjectionMatrix * vec4(pos, 1.0);
+    color = dot(NormalMatrix * nor, CameraNormal) > Threshold ? vec4(1, 1, 1, 1) : vec4(0, 0, 0, 1);
+}
+""")
+
+
+        shader_info.fragment_source("""
+void main()
+{
+    fragColor = color;
+}
+""")
+
+        return gpu.shader.create_from_info(shader_info)
+
+    with offscreen.bind():
+        fb = gpu.state.active_framebuffer_get()
+        fb.clear(color=(0.0, 0.0, 0.0, 1.0))
+        gpu.state.depth_test_set('LESS_EQUAL')
+        gpu.state.depth_mask_set(True)
+        with gpu.matrix.push_pop():
+            if bake is not None:
+                gpu.matrix.load_matrix(mathutils.Matrix.Identity(4))
+                gpu.matrix.load_projection_matrix(mathutils.Matrix.Identity(4))
+            else:
+                gpu.matrix.load_matrix(matrix)
+                gpu.matrix.load_projection_matrix(projection_matrix)
+
+            mesh.calc_loop_triangles()
+
+            vertices = np.array([vert.co for vert in mesh.verts], dtype='f')
+            normals = np.array([vert.normal for vert in mesh.verts], dtype='f')
+            indices = np.array([[l.vert.index for l in loop] for loop in mesh.calc_loop_triangles()], dtype='i')
+            
+            shader = mask_shader()
+            shader.uniform_float('CameraNormal', context.region_data.view_rotation @ mathutils.Vector((0, 0, 1)) if bake is not None else (0, 0, 1))
+            shader.uniform_float('Threshold', threshold)
+            
+            batch = batch_for_shader(
+                shader, 'TRIS',
+                {"pos": bake if bake is not None else vertices, "nor": normals},
+                indices=indices,
+            )
+            batch.draw(shader)
+        mask = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
+    offscreen.free()
+    
+    return mask
 
 class ProjectDreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture_project"
@@ -262,12 +397,13 @@ class ProjectDreamTexture(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        try:
-            context.scene.dream_textures_project_prompt.validate(context, task=None if context.scene.dream_textures_project_use_control_net else ModelType.DEPTH)
-            _validate_projection(context)
-        except:
-            return False
-        return Generator.shared().can_use()
+        return True
+        # try:
+        #     context.scene.dream_textures_project_prompt.validate(context, task=None if context.scene.dream_textures_project_use_control_net else ModelType.DEPTH)
+        #     _validate_projection(context)
+        # except:
+        #     return False
+        # return Generator.shared().can_use()
 
     @classmethod
     def get_uv_layer(cls, mesh: bmesh.types.BMesh):
@@ -278,7 +414,116 @@ class ProjectDreamTexture(bpy.types.Operator):
 
         return mesh.loops.layers.uv.new("Projected UVs"), len(mesh.loops.layers.uv) - 1
 
+    def draw_color(self, context):
+        res_x, res_y = context.scene.render.resolution_x, context.scene.render.resolution_y
+        view3d_spaces = []
+        for area in context.screen.areas:
+            if area.type == 'VIEW_3D':
+                for region in area.regions:
+                    if region.type == 'WINDOW':
+                        context.scene.render.resolution_x, context.scene.render.resolution_y = region.width, region.height
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        if space.overlay.show_overlays:
+                            view3d_spaces.append(space)
+                            space.overlay.show_overlays = False
+        init_img_path = tempfile.NamedTemporaryFile(suffix='.png').name
+        render_filepath, file_format = context.scene.render.filepath, context.scene.render.image_settings.file_format
+        context.scene.render.image_settings.file_format = 'PNG'
+        context.scene.render.filepath = init_img_path
+        bpy.ops.render.opengl(write_still=True, view_context=True)
+        for space in view3d_spaces:
+            space.overlay.show_overlays = True
+        context.scene.render.resolution_x, context.scene.render.resolution_y = res_x, res_y
+        context.scene.render.filepath, context.scene.render.image_settings.file_format = render_filepath, file_format
+        return init_img_path
+
+    def masked_init_image(self, context, camera, texture, mesh, split_mesh, uvs, threshold=0.75):
+        mask = draw_mask_map(512, 512, context, mesh, camera.matrix_world.inverted(), context.space_data.region_3d.window_matrix, threshold, bake=None)
+        color = draw_color(512, 512, context, split_mesh, camera.matrix_world.inverted(), context.space_data.region_3d.window_matrix, texture, uvs)
+        bake_uvs = [(uv[0] * 2 - 1, uv[1] * 2 - 1, 0) for uv in uvs]
+        baked_mask = draw_mask_map(512, 512, context, split_mesh, camera.matrix_world.inverted(), context.space_data.region_3d.window_matrix, threshold, bake=bake_uvs)
+
+        return color, mask, baked_mask
+
     def execute(self, context):
+        texture = bpy.data.images['result']
+        generation_result = bpy.data.images['generation_result']
+        inpaint_result = bpy.data.images['inpaint_result']
+        mask_result = bpy.data.images['mask']
+
+        mesh = bmesh.from_edit_mesh(context.object.data)
+        mesh.verts.ensure_lookup_table()
+        mesh.verts.index_update()
+
+        split_mesh = mesh.copy()
+        split_mesh.select_mode = {'FACE'}
+        bmesh.ops.split_edges(split_mesh, edges=split_mesh.edges)
+        
+        mesh.faces.ensure_lookup_table()
+
+        uv_layer = split_mesh.loops.layers.uv.active
+        projection_uv_layer, _ = ProjectDreamTexture.get_uv_layer(split_mesh)
+        uvs = np.empty((len(split_mesh.verts), 2), dtype=np.float32)
+        projection_uvs = np.empty((len(split_mesh.verts), 2), dtype=np.float32)
+        for face in split_mesh.faces:
+            for loop in face.loops:
+                projection_uvs[loop.vert.index] = loop[projection_uv_layer].uv
+                uvs[loop.vert.index] = loop[uv_layer].uv
+
+        gen = Generator.shared()
+
+        def step(camera, inpaint):
+            depth = np.flipud(
+                draw_depth_map(512, 512, context, camera.matrix_world.inverted(), context.space_data.region_3d.window_matrix)
+            )
+            generated_args = context.scene.dream_textures_project_prompt.generate_args()
+            del generated_args['model']
+            del generated_args['control']
+            del generated_args['inpaint_mask_src']
+
+            if inpaint:
+                color, mask, baked_mask = self.masked_init_image(context, camera, np.array(texture.pixels, dtype=np.float32), mesh, split_mesh, uvs)
+                color[:, :, 3] = 1 - mask[:, :, 0]
+                res = gen.control_net(
+                    model='models--runwayml--stable-diffusion-inpainting',
+                    control=[depth],
+                    image=np.flipud(color * 255),
+                    inpaint=True,
+                    inpaint_mask_src='alpha',
+                    **generated_args
+                ).result()
+                inpaint_result.pixels[:] = res[-1].images[0].ravel()
+                inpaint_result.update()
+                mask_result.pixels[:] = color.ravel()
+                mask_result.update()
+                color = bake(context, split_mesh, 512, 512, res[-1].images[0].ravel(), projection_uvs, uvs)
+                color = (np.array(texture.pixels, dtype=np.float32) * (1 - baked_mask)) + (color * baked_mask)
+            else:
+                res = gen.control_net(
+                    model='models--runwayml--stable-diffusion-v1-5',
+                    control=[depth],
+                    image=None,
+                    inpaint=False,
+                    inpaint_mask_src='alpha',
+                    **generated_args
+                ).result()
+                generation_result.pixels[:] = res[-1].images[0].ravel()
+                generation_result.update()
+                color = bake(context, split_mesh, 512, 512, res[-1].images[0].ravel(), projection_uvs, uvs)
+
+            texture.pixels[:] = color.ravel()
+            texture.update()
+        
+        started = False
+        for camera in [ob for ob in bpy.context.scene.objects if ob.type == 'CAMERA' and not ob.hide_viewport]:
+            modelview_matrix = camera.matrix_world.inverted()
+            context.space_data.region_3d.view_matrix = modelview_matrix
+            step(camera, started)
+            started = True
+
+        return {'FINISHED'}
+
         # Setup the progress indicator
         def step_progress_update(self, context):
             if hasattr(context.area, "regions"):
@@ -424,7 +669,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                         for loop in face.loops:
                             src_uvs[loop.vert.index] = loop[src_uv_layer].uv
                             dest_uvs[loop.vert.index] = loop[dest_uv_layer].uv
-                    bake(context, bm, generated.images[0].ravel(), dest, src_uvs, dest_uvs)
+                    dest.pixels[:] = bake(context, bm, dest.size[0], dest.size[1], generated.images[0].ravel(), src_uvs, dest_uvs)
                     dest.update()
                     dest.pack()
                     image_texture_node.image = dest

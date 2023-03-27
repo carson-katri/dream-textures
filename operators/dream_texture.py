@@ -180,6 +180,7 @@ class DreamTexture(bpy.types.Operator):
             if len(generated_args['control_net']) > 0:
                 f = gen.control_net(
                     image=init_image,
+                    inpaint=generated_args['init_img_action'] == 'inpaint',
                     **generated_args
                 )
             elif init_image is not None:

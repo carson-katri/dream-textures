@@ -378,6 +378,11 @@ def actions_panel(sub_panel, space_type, get_prompt):
                 row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
             row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
 
+            if context.scene.dream_textures_last_execution_time != "":
+                t = layout.label(text=context.scene.dream_textures_last_execution_time, icon="SORTTIME")
+                t.scale_x = 0.5
+                t.scale_y = 0.5
+
             # Validation
             try:
                 prompt.validate(context)

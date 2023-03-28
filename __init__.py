@@ -88,6 +88,8 @@ if current_process().name != "__actor__":
         bpy.types.Scene.dream_textures_history_selection_preview = bpy.props.StringProperty(name="", default="", get=get_selection_preview, set=lambda _, __: None)
         bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=0)
         bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info")
+        import time
+        bpy.types.Scene.dream_textures_last_execution_time = bpy.props.StringProperty(name="Last Execution Time", default=f"{time.time()} seconds")
 
         bpy.types.Scene.dream_textures_viewport_enabled = BoolProperty(name="Viewport Enabled", default=False)
         bpy.types.Scene.dream_textures_render_properties_enabled = BoolProperty(default=False)

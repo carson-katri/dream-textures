@@ -520,7 +520,7 @@ def prompt_to_image(
                         prompt, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt
                     )
                     if kwargs['cfg_end'] < 1:
-                        zero_embeddings = torch.zeros_like(text_embeddings)
+                        first_embeddings = text_embeddings[None, 0]
 
                     # 4. Prepare timesteps
                     self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -550,7 +550,7 @@ def prompt_to_image(
                         latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                         # predict the noise residual
-                        noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings if use_cfg else zero_embeddings).sample
+                        noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings if use_cfg else first_embeddings).sample
 
                         # perform guidance
                         if use_cfg:

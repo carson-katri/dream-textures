@@ -223,7 +223,7 @@ optimization("vae_tiling", property=EnumProperty, items=(
 ), default=0, name="VAE Tiling", description="Decodes generated images in tiled regions to reduce memory usage in exchange for longer decode time and less accurate colors.\nCan allow for generating larger images that would otherwise run out of memory on the final step")
 optimization("vae_tile_size", min=1, name="VAE Tile Size", description="Width and height measurement of tiles. Smaller sizes are more likely to cause inaccurate colors and other undesired artifacts")
 optimization("vae_tile_blend", min=0, name="VAE Tile Blend", description="Minimum amount of how much each edge of a tile will intersect its adjacent tile")
-optimization("cfg_end", name="CFG End", description="The percentage of steps to complete before disabling classifier-free guidance")
+optimization("cfg_end", name="CFG End", min=0, max=1, description="The percentage of steps to complete before disabling classifier-free guidance")
 optimization("cpu_only", name="CPU Only", description="Disables GPU acceleration and is extremely slow")
 
 def map_structure_token_items(value):

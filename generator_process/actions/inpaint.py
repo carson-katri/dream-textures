@@ -127,6 +127,10 @@ def inpaint(
                         generator,
                         do_classifier_free_guidance,
                     )
+                    if kwargs['cfg_end'] < 1:
+                        first_embeddings = text_embeddings[None, 0]
+                        first_mask = mask[None, 0]
+                        first_masked_image_latents = masked_image_latents[None, 0]
 
                     # 8. Check that sizes of mask, masked image and latents match
                     num_channels_mask = mask.shape[1]
@@ -143,18 +147,19 @@ def inpaint(
                     num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
                     with self.progress_bar(total=num_inference_steps) as progress_bar:
                         for i, t in enumerate(timesteps):
+                            use_cfg = do_classifier_free_guidance and (i / len(timesteps)) < kwargs['cfg_end']
                             # expand the latents if we are doing classifier free guidance
-                            latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+                            latent_model_input = torch.cat([latents] * 2) if use_cfg else latents
 
                             # concat latents, mask, masked_image_latents in the channel dimension
                             latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-                            latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents], dim=1)
+                            latent_model_input = torch.cat([latent_model_input, mask if use_cfg else first_mask, masked_image_latents if use_cfg else first_masked_image_latents], dim=1)
 
                             # predict the noise residual
-                            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+                            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings if use_cfg else first_embeddings).sample
 
                             # perform guidance
-                            if do_classifier_free_guidance:
+                            if use_cfg:
                                 noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
                                 noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
@@ -248,7 +253,8 @@ def inpaint(
                     return_dict=True,
                     callback=None,
                     callback_steps=1,
-                    step_preview_mode=step_preview_mode
+                    step_preview_mode=step_preview_mode,
+                    cfg_end=optimizations.cfg_end
                 )
         case Pipeline.STABILITY_SDK:
             import stability_sdk.client

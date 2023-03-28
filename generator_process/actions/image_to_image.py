@@ -84,6 +84,8 @@ def image_to_image(
                     text_embeddings = self._encode_prompt(
                         prompt, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt
                     )
+                    if kwargs['cfg_end'] < 1:
+                        first_embeddings = text_embeddings[None, 0]
 
                     # 4. Preprocess image
                     image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.preprocess(image)
@@ -105,15 +107,16 @@ def image_to_image(
                     num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
                     with self.progress_bar(total=num_inference_steps) as progress_bar:
                         for i, t in enumerate(timesteps):
+                            use_cfg = do_classifier_free_guidance and (i / len(timesteps)) < kwargs['cfg_end']
                             # expand the latents if we are doing classifier free guidance
-                            latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+                            latent_model_input = torch.cat([latents] * 2) if use_cfg else latents
                             latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                             # predict the noise residual
-                            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+                            noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings if use_cfg else first_embeddings).sample
 
                             # perform guidance
-                            if do_classifier_free_guidance:
+                            if use_cfg:
                                 noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
                                 noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
@@ -131,6 +134,8 @@ def image_to_image(
                     # TODO: Add UI to enable this
                     # 10. Run safety checker
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
+                    
+                    image = self.image_processor.postprocess(image, output_type=output_type)
 
                     # Offload last model to CPU
                     if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
@@ -139,7 +144,7 @@ def image_to_image(
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield ImageGenerationResult(
                         [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                            for i, image in enumerate(self.numpy_to_pil(image))],
+                            for i, image in enumerate(image)],
                         [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
                         num_inference_steps,
                         True
@@ -199,7 +204,8 @@ def image_to_image(
                     return_dict=True,
                     callback=None,
                     callback_steps=1,
-                    step_preview_mode=step_preview_mode
+                    step_preview_mode=step_preview_mode,
+                    cfg_end=optimizations.cfg_end
                 )
         case Pipeline.STABILITY_SDK:
             import stability_sdk.client

@@ -308,6 +308,9 @@ def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
             optimization("half_precision")
             optimization("channels_last_memory_format")
             optimization("batch_size")
+            optimization("cfg_end")
+            if prompt.optimizations_cfg_end:
+                optimization("cfg_end_ratio")
     yield SpeedOptimizationPanel
 
     class MemoryOptimizationPanel(sub_panel):
@@ -379,9 +382,10 @@ def actions_panel(sub_panel, space_type, get_prompt):
             row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
 
             if context.scene.dream_textures_last_execution_time != "":
-                t = layout.label(text=context.scene.dream_textures_last_execution_time, icon="SORTTIME")
-                t.scale_x = 0.5
-                t.scale_y = 0.5
+                r = layout.row()
+                r.scale_x = 0.5
+                r.scale_y = 0.5
+                r.label(text=context.scene.dream_textures_last_execution_time, icon="SORTTIME")
 
             # Validation
             try:

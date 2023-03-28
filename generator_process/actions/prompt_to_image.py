@@ -160,6 +160,7 @@ class Optimizations:
     vae_tiling: str = "off"
     vae_tile_size: int = 512
     vae_tile_blend: int = 64
+    cfg_end: float = 1.0
 
     cpu_only: bool = False
 
@@ -518,6 +519,8 @@ def prompt_to_image(
                     text_embeddings = self._encode_prompt(
                         prompt, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt
                     )
+                    if kwargs['cfg_end'] < 1:
+                        zero_embeddings = torch.zeros_like(text_embeddings)
 
                     # 4. Prepare timesteps
                     self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -541,15 +544,16 @@ def prompt_to_image(
 
                     # 7. Denoising loop
                     for i, t in enumerate(self.progress_bar(timesteps)):
+                        use_cfg = do_classifier_free_guidance and (i / len(timesteps)) < kwargs['cfg_end']
                         # expand the latents if we are doing classifier free guidance
-                        latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+                        latent_model_input = torch.cat([latents] * 2) if use_cfg else latents
                         latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
                         # predict the noise residual
-                        noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
+                        noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings if use_cfg else zero_embeddings).sample
 
                         # perform guidance
-                        if do_classifier_free_guidance:
+                        if use_cfg:
                             noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
                             noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
@@ -621,7 +625,8 @@ def prompt_to_image(
                     return_dict=True,
                     callback=None,
                     callback_steps=1,
-                    step_preview_mode=step_preview_mode
+                    step_preview_mode=step_preview_mode,
+                    cfg_end=optimizations.cfg_end
                 )
         case Pipeline.STABILITY_SDK:
             import stability_sdk.client

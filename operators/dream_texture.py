@@ -93,7 +93,7 @@ class DreamTexture(bpy.types.Operator):
         execution_start = time.time()
         def step_callback(_, step_image: ImageGenerationResult):
             nonlocal last_data_block
-            scene.dream_textures_last_execution_time = f"{time.time() - execution_start} seconds"
+            scene.dream_textures_last_execution_time = f"{time.time() - execution_start:.2f} seconds"
             if step_image.final:
                 return
             scene.dream_textures_progress = step_image.step

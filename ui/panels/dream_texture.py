@@ -309,8 +309,6 @@ def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
             optimization("channels_last_memory_format")
             optimization("batch_size")
             optimization("cfg_end")
-            if prompt.optimizations_cfg_end:
-                optimization("cfg_end_ratio")
     yield SpeedOptimizationPanel
 
     class MemoryOptimizationPanel(sub_panel):

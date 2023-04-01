@@ -139,7 +139,7 @@ def render_openpose_map(context, collection=None):
 
         with offscreen.bind():
             fb = gpu.state.active_framebuffer_get()
-            fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+            fb.clear(color=(0.0, 0.0, 0.0, 0.0), depth=1)
             gpu.state.depth_test_set('LESS_EQUAL')
             gpu.state.depth_mask_set(True)
 
@@ -186,6 +186,10 @@ def render_openpose_map(context, collection=None):
                 shader.uniform_float("color", (0, 0, 0, 1))
                 batch.draw(shader)
 
+                batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": [(-ratio, -1, 0), (-ratio, 1, 0), (ratio, -1, 0), (ratio, 1, 0)]})
+                shader.uniform_float("color", (0, 0, 0, 1))
+                batch.draw(shader)
+
                 for object in (context.scene.objects if collection is None else collection.objects):
                     object = object.evaluated_get(context)
                     if object.hide_render:
@@ -208,6 +212,7 @@ def render_openpose_map(context, collection=None):
                         draw_circle_2d(transform(tail[0], tail[1]), .015, 16, (color[0] / 255.0, color[1] / 255.0, color[2] / 255.0, 0.5))
 
             depth = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
+        gpu.state.depth_test_set('NONE')
         offscreen.free()
         result = depth
         e.set()
@@ -221,7 +226,8 @@ def draw_circle_2d(center, radius, segments, color):
     coords = [
         (
             center[0] + math.cos(m * p) * radius,
-            center[1] + math.sin(m * p) * radius
+            center[1] + math.sin(m * p) * radius,
+            0
         )
         for p in range(segments)
     ]
@@ -244,7 +250,8 @@ def draw_ellipse_2d(start, end, thickness, segments, color):
     coords = [
         (
             center[0] + major * math.cos(m * p) * math.cos(theta) - minor * math.sin(m * p) * math.sin(theta),
-            center[1] + major * math.cos(m * p) * math.sin(theta) + minor * math.sin(m * p) * math.cos(theta)
+            center[1] + major * math.cos(m * p) * math.sin(theta) + minor * math.sin(m * p) * math.cos(theta),
+            0
         )
         for p in range(segments)
     ]

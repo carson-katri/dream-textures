@@ -20,7 +20,7 @@ def render_depth_map(context, collection=None, invert=True):
 
         with offscreen.bind():
             fb = gpu.state.active_framebuffer_get()
-            fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+            fb.clear(color=(0.0, 0.0, 0.0, 0.0), depth=1)
             gpu.state.depth_test_set('LESS_EQUAL')
             gpu.state.depth_mask_set(True)
             with gpu.matrix.push_pop():
@@ -32,15 +32,16 @@ def render_depth_map(context, collection=None, invert=True):
                 for object in (context.scene.objects if collection is None else collection.objects):
                     object = object.evaluated_get(context)
                     try:
-                        mesh = object.to_mesh(depsgraph=context).copy()
+                        mesh = object.to_mesh(depsgraph=context)
                     except:
                         continue
                     if mesh is None:
                         continue
+                    mesh.transform(object.matrix_world)
+                    mesh.calc_loop_triangles()
                     vertices = np.empty((len(mesh.vertices), 3), 'f')
                     indices = np.empty((len(mesh.loop_triangles), 3), 'i')
 
-                    mesh.transform(object.matrix_world)
                     mesh.vertices.foreach_get("co", np.reshape(vertices, len(mesh.vertices) * 3))
                     mesh.loop_triangles.foreach_get("vertices", np.reshape(indices, len(mesh.loop_triangles) * 3))
                     

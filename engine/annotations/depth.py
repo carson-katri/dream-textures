@@ -31,15 +31,8 @@ def render_depth_map(context, collection=None, invert=True, width=None, height=N
                 
                 shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
 
-                for object in (context.scene.objects if collection is None else collection.objects):
-                    object = object.evaluated_get(context)
-                    try:
-                        mesh = object.to_mesh(depsgraph=context)
-                    except:
-                        continue
-                    if mesh is None:
-                        continue
-                    mesh.transform(object.matrix_world)
+                def render_mesh(mesh, transform):
+                    mesh.transform(transform)
                     mesh.calc_loop_triangles()
                     vertices = np.empty((len(mesh.vertices), 3), 'f')
                     indices = np.empty((len(mesh.loop_triangles), 3), 'i')
@@ -53,6 +46,14 @@ def render_depth_map(context, collection=None, invert=True, width=None, height=N
                         indices=indices,
                     )
                     batch.draw(shader)
+                for object in (context.object_instances if collection is None else collection.objects):
+                    try:
+                        mesh = object.object.to_mesh()
+                        if mesh is not None:
+                            render_mesh(mesh, object.matrix_world)
+                            object.object.to_mesh_clear()
+                    except:
+                        continue
             depth = np.array(fb.read_depth(0, 0, width, height).to_list())
             if invert:
                 depth = 1 - depth

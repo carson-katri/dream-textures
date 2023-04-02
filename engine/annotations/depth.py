@@ -60,6 +60,7 @@ def render_depth_map(context, collection=None, invert=True, width=None, height=N
                 mask = np.array(fb.read_color(0, 0, width, height, 4, 0, 'UBYTE').to_list())[:, :, 3]
                 depth *= mask
             depth = np.interp(depth, [np.ma.masked_equal(depth, 0, copy=False).min(), depth.max()], [0, 1]).clip(0, 1)
+        gpu.state.depth_test_set('NONE')
         offscreen.free()
         result = depth
         e.set()

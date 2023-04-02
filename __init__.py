@@ -25,7 +25,7 @@ from multiprocessing import current_process
 
 if current_process().name != "__actor__":
     import bpy
-    from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty, CollectionProperty, FloatProperty
+    from bpy.props import IntProperty, PointerProperty, EnumProperty, BoolProperty, CollectionProperty
     import sys
     import os
 
@@ -45,8 +45,9 @@ if current_process().name != "__actor__":
     from .operators.dream_texture import DreamTexture, kill_generator
     from .property_groups.dream_prompt import DreamPrompt
     from .property_groups.seamless_result import SeamlessResult
-    from .preferences import StableDiffusionPreferences
     from .ui.presets import register_default_presets
+    
+    from . import engine
 
     requirements_path_items = (
         ('requirements/win-linux-cuda.txt', 'Linux/Windows (CUDA)', 'Linux or Windows with NVIDIA GPU'),
@@ -101,12 +102,25 @@ if current_process().name != "__actor__":
         bpy.types.Scene.dream_textures_project_prompt = PointerProperty(type=DreamPrompt)
         bpy.types.Scene.dream_textures_project_framebuffer_arguments = EnumProperty(name="Inputs", items=framebuffer_arguments)
         bpy.types.Scene.dream_textures_project_bake = BoolProperty(name="Bake", default=False, description="Re-maps the generated texture onto the specified UV map")
+        def project_use_controlnet(self, context):
+            if self.dream_textures_project_use_control_net:
+                if len(self.dream_textures_project_prompt.control_nets) < 1:
+                    self.dream_textures_project_prompt.control_nets.add()
+            else:
+                self.dream_textures_project_prompt.control_nets.clear()
+        bpy.types.Scene.dream_textures_project_use_control_net = BoolProperty(name="Use ControlNet", default=False, description="Use a depth ControlNet instead of a depth model", update=project_use_controlnet)
+
+        engine.register()
 
         for cls in CLASSES:
             bpy.utils.register_class(cls)
 
         for tool in TOOLS:
             bpy.utils.register_tool(tool)
+
+        bpy.types.Scene.dream_textures_render_engine = PointerProperty(type=engine.DreamTexturesRenderEngineProperties)
+
+        bpy.types.RENDER_PT_context.append(engine.draw_device)
 
         # Monkey patch cycles render passes
         register_render_pass()
@@ -121,6 +135,10 @@ if current_process().name != "__actor__":
             bpy.utils.unregister_class(cls)
         for tool in TOOLS:
             bpy.utils.unregister_tool(tool)
+
+        bpy.types.RENDER_PT_context.remove(engine.draw_device)
+
+        engine.unregister()
         
         unregister_render_pass()
 

@@ -161,7 +161,7 @@ def _template_model_download_progress(context, layout):
     preferences = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences
     if is_downloading:
         progress_col = layout.column()
-        progress_col.label(text=f"Downloading {preferences.download_file}")
+        progress_col.label(text=preferences.download_file)
         progress_col.prop(preferences, "download_progress", slider=True)
         progress_col.enabled = False
     return is_downloading

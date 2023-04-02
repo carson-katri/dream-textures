@@ -31,7 +31,15 @@ class RecallHistoryEntry(bpy.types.Operator):
         selection = context.scene.dream_textures_history[context.scene.dream_textures_history_selection]
         for prop in selection.__annotations__.keys():
             if hasattr(context.scene.dream_textures_prompt, prop):
-                setattr(context.scene.dream_textures_prompt, prop, getattr(selection, prop))
+                match prop:
+                    case 'control_nets':
+                        context.scene.dream_textures_prompt.control_nets.clear()
+                        for net in selection.control_nets:
+                            n = context.scene.dream_textures_prompt.control_nets.add()
+                            for k in n.__annotations__.keys():
+                                setattr(n, k, getattr(net, k))
+                    case _:
+                        setattr(context.scene.dream_textures_prompt, prop, getattr(selection, prop))
             # when the seed of the promt is found in the available image datablocks, use that one in the open image editor
             # note: when there is more than one image with the seed in it's name, do nothing. Same when no image with that seed is available.
             if prop == 'hash':

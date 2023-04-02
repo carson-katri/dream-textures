@@ -4,18 +4,20 @@ from gpu_extras.batch import batch_for_shader
 import numpy as np
 import threading
 
-def render_depth_map(context, collection=None, invert=True):
+def render_depth_map(context, collection=None, invert=True, width=None, height=None, matrix=None, projection_matrix=None, main_thread=False):
     e = threading.Event()
     result = None
+
+    width, height = width or context.scene.render.resolution_x, height or context.scene.render.resolution_y
+    matrix = matrix or context.scene.camera.matrix_world.inverted()
+    projection_matrix = projection_matrix or context.scene.camera.calc_matrix_camera(
+        context,
+        x=width,
+        y=height
+    )
+
     def _execute():
         nonlocal result
-        width, height = context.scene.render.resolution_x, context.scene.render.resolution_y
-        matrix = context.scene.camera.matrix_world.inverted()
-        projection_matrix = context.scene.camera.calc_matrix_camera(
-            context,
-            x=width,
-            y=height
-        )
         offscreen = gpu.types.GPUOffScreen(width, height)
 
         with offscreen.bind():
@@ -60,6 +62,10 @@ def render_depth_map(context, collection=None, invert=True):
         offscreen.free()
         result = depth
         e.set()
-    bpy.app.timers.register(_execute, first_interval=0)
-    e.wait()
-    return result
+    if main_thread:
+        _execute()
+        return result
+    else:
+        bpy.app.timers.register(_execute, first_interval=0)
+        e.wait()
+        return result

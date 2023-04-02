@@ -69,6 +69,7 @@ def render_ade20k_map(context, collection=None, invert=True):
                     draw_annotation(vertices, indices, color)
             result = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
             result[:, :, 3] = 1
+        gpu.state.depth_test_set('NONE')
         offscreen.free()
         e.set()
     bpy.app.timers.register(_execute, first_interval=0)

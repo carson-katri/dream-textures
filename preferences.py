@@ -130,9 +130,6 @@ class InstallModel(bpy.types.Operator):
             is_downloading = True
             f = Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token, "fp16" if self.prefer_fp16_revision else None)
             def on_progress(_, response: DownloadStatus):
-                print(response)
-                print(response.index)
-                print(response.total)
                 bpy.context.preferences.addons[__package__].preferences.download_file = response.file
                 bpy.context.preferences.addons[__package__].preferences.download_progress = int((response.index / response.total) * 100)
             def on_done(future):

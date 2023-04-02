@@ -47,26 +47,38 @@ def render_ade20k_map(context, collection=None, invert=True):
                 gpu.matrix.load_matrix(matrix)
                 gpu.matrix.load_projection_matrix(projection_matrix)
 
-                for object in (context.scene.objects if collection is None else collection.objects):
-                    object = object.evaluated_get(context)
-                    if not hasattr(object, 'dream_textures_ade20k') or not object.dream_textures_ade20k.enabled:
-                        continue
-                    try:
-                        mesh = object.to_mesh(depsgraph=context).copy()
-                    except:
-                        continue
-                    if mesh is None:
-                        continue
+                def render_mesh(mesh, transform, color):
+                    mesh.transform(transform)
+                    mesh.calc_loop_triangles()
                     vertices = np.empty((len(mesh.vertices), 3), 'f')
                     indices = np.empty((len(mesh.loop_triangles), 3), 'i')
 
-                    mesh.transform(object.matrix_world)
                     mesh.vertices.foreach_get("co", np.reshape(vertices, len(mesh.vertices) * 3))
                     mesh.loop_triangles.foreach_get("vertices", np.reshape(indices, len(mesh.loop_triangles) * 3))
                     
-                    color = annotation_colors[object.dream_textures_ade20k.annotation]
-
                     draw_annotation(vertices, indices, color)
+                if collection is None:
+                    for object in context.object_instances:
+                        if not hasattr(object.object, 'dream_textures_ade20k') or not object.object.dream_textures_ade20k.enabled:
+                            continue
+                        try:
+                            mesh = object.object.to_mesh()
+                            if mesh is not None:
+                                render_mesh(mesh, object.matrix_world, annotation_colors[object.object.dream_textures_ade20k.annotation])
+                                object.object.to_mesh_clear()
+                        except:
+                            continue
+                else:
+                    for object in collection.objects:
+                        if not hasattr(object, 'dream_textures_ade20k') or not object.dream_textures_ade20k.enabled:
+                            continue
+                        try:
+                            mesh = object.to_mesh(depsgraph=context)
+                            if mesh is not None:
+                                render_mesh(mesh, object.matrix_world, annotation_colors[object.dream_textures_ade20k.annotation])
+                                object.to_mesh_clear()
+                        except:
+                            continue
             result = np.array(fb.read_color(0, 0, width, height, 4, 0, 'FLOAT').to_list())
             result[:, :, 3] = 1
         gpu.state.depth_test_set('NONE')

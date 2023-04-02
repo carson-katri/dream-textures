@@ -46,14 +46,24 @@ def render_depth_map(context, collection=None, invert=True, width=None, height=N
                         indices=indices,
                     )
                     batch.draw(shader)
-                for object in (context.object_instances if collection is None else collection.objects):
-                    try:
-                        mesh = object.object.to_mesh()
-                        if mesh is not None:
-                            render_mesh(mesh, object.matrix_world)
-                            object.object.to_mesh_clear()
-                    except:
-                        continue
+                if collection is None:
+                    for object in context.object_instances:
+                        try:
+                            mesh = object.object.to_mesh()
+                            if mesh is not None:
+                                render_mesh(mesh, object.matrix_world)
+                                object.object.to_mesh_clear()
+                        except:
+                            continue
+                else:
+                    for object in collection.objects:
+                        try:
+                            mesh = object.to_mesh(depsgraph=context)
+                            if mesh is not None:
+                                render_mesh(mesh, object.matrix_world)
+                                object.to_mesh_clear()
+                        except:
+                            continue
             depth = np.array(fb.read_depth(0, 0, width, height).to_list())
             if invert:
                 depth = 1 - depth

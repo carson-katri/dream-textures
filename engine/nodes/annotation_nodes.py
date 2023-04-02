@@ -38,16 +38,18 @@ class NodeAnnotationOpenPose(DreamTexturesNode):
     bl_idname = "dream_textures.node_annotation_openpose"
     bl_label = "OpenPose Map"
 
+    src: bpy.props.EnumProperty(name="", items=annotation_src, update=_update_annotation_inputs)
+
     def init(self, context):
         self.inputs.new("NodeSocketCollection", "Collection")
 
         self.outputs.new("NodeSocketColor", "OpenPose Map")
 
     def draw_buttons(self, context, layout):
-        pass
+        layout.prop(self, "src")
 
     def execute(self, context, collection):
-        openpose_map = openpose.render_openpose_map(context.depsgraph, collection=collection)
+        openpose_map = openpose.render_openpose_map(context.depsgraph, collection=collection if self.src == 'collection' else None)
         context.update(openpose_map)
         return {
             'OpenPose Map': openpose_map
@@ -57,16 +59,18 @@ class NodeAnnotationADE20K(DreamTexturesNode):
     bl_idname = "dream_textures.node_annotation_ade20k"
     bl_label = "ADE20K Segmentation Map"
 
+    src: bpy.props.EnumProperty(name="", items=annotation_src, update=_update_annotation_inputs)
+
     def init(self, context):
         self.inputs.new("NodeSocketCollection", "Collection")
 
         self.outputs.new("NodeSocketColor", "Segmentation Map")
 
     def draw_buttons(self, context, layout):
-        pass
+        layout.prop(self, "src")
 
     def execute(self, context, collection):
-        ade20k_map = ade20k.render_ade20k_map(context.depsgraph, collection=collection)
+        ade20k_map = ade20k.render_ade20k_map(context.depsgraph, collection=collection if self.src == 'collection' else None)
         context.update(ade20k_map)
         return {
             'Segmentation Map': ade20k_map

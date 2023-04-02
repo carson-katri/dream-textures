@@ -160,18 +160,12 @@ def hf_snapshot_download(
     token: str,
     revision: str | None = None
 ):
-    from huggingface_hub._snapshot_download import snapshot_download
-    from huggingface_hub.utils.tqdm import tqdm
-    from huggingface_hub.utils._errors import RevisionNotFoundError
-    
-    from diffusers import StableDiffusionPipeline
-    from diffusers.utils import DIFFUSERS_CACHE, WEIGHTS_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME
-    from diffusers.schedulers.scheduling_utils import SCHEDULER_CONFIG_NAME
+    from huggingface_hub import utils
 
     future = Future()
     yield future
 
-    class future_tqdm(tqdm):
+    class future_tqdm(utils.tqdm):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             future.add_response(DownloadStatus(self.desc, 0, self.total))
@@ -179,6 +173,14 @@ def hf_snapshot_download(
         def update(self, n=1):
             future.add_response(DownloadStatus(self.desc, self.last_print_n + n, self.total))
             return super().update(n=n)
+    
+    from huggingface_hub import file_download
+    file_download.tqdm = future_tqdm
+    from huggingface_hub import _snapshot_download
+    
+    from diffusers import StableDiffusionPipeline
+    from diffusers.utils import DIFFUSERS_CACHE, WEIGHTS_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME
+    from diffusers.schedulers.scheduling_utils import SCHEDULER_CONFIG_NAME
     
     try:
         config_dict = StableDiffusionPipeline.load_config(
@@ -198,25 +200,23 @@ def hf_snapshot_download(
     ignore_patterns = ["*.msgpack", "*.safetensors", "*.ckpt"]
 
     try:
-        snapshot_download(
+        _snapshot_download.snapshot_download(
             model,
             cache_dir=DIFFUSERS_CACHE,
             token=token,
             revision=revision,
             resume_download=True,
             allow_patterns=allow_patterns,
-            ignore_patterns=ignore_patterns,
-            tqdm_class=future_tqdm
+            ignore_patterns=ignore_patterns
         )
-    except RevisionNotFoundError:
-        snapshot_download(
+    except utils._errors.RevisionNotFoundError:
+        _snapshot_download.snapshot_download(
             model,
             cache_dir=DIFFUSERS_CACHE,
             token=token,
             resume_download=True,
             allow_patterns=allow_patterns,
-            ignore_patterns=ignore_patterns,
-            tqdm_class=future_tqdm
+            ignore_patterns=ignore_patterns
         )
 
     future.set_done()

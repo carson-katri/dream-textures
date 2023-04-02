@@ -64,7 +64,7 @@ class Future:
         try:
             import bpy
             bpy.app.timers.register(func)
-        except ModuleNotFoundError:
+        except:
             func()
 
     def add_response(self, response):

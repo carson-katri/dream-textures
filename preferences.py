@@ -130,6 +130,9 @@ class InstallModel(bpy.types.Operator):
             is_downloading = True
             f = Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token, "fp16" if self.prefer_fp16_revision else None)
             def on_progress(_, response: DownloadStatus):
+                print(response)
+                print(response.index)
+                print(response.total)
                 bpy.context.preferences.addons[__package__].preferences.download_file = response.file
                 bpy.context.preferences.addons[__package__].preferences.download_progress = int((response.index / response.total) * 100)
             def on_done(future):
@@ -161,7 +164,7 @@ def _template_model_download_progress(context, layout):
     preferences = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences
     if is_downloading:
         progress_col = layout.column()
-        progress_col.label(text=f"Downloading {preferences.download_file}")
+        progress_col.label(text=preferences.download_file)
         progress_col.prop(preferences, "download_progress", slider=True)
         progress_col.enabled = False
     return is_downloading

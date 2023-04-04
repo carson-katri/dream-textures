@@ -117,6 +117,8 @@ def engine_panels():
             col = layout.column(align=True)
             col.prop(context.scene.render, "resolution_x")
             col.prop(context.scene.render, "resolution_y", text="Y")
+            
+            layout.prop(context.scene.render, "resolution_percentage")
     yield FormatPanel
 
     class NodeTreeInputsPanel(RenderPanel):

@@ -32,6 +32,7 @@ categories = [
     DreamTexturesNodeCategory("DREAM_TEXTURES_UTILITY", "Utilities", items = [
         nodeitems_utils.NodeItem(NodeMath.bl_idname),
         nodeitems_utils.NodeItem(NodeRandomValue.bl_idname),
+        nodeitems_utils.NodeItem(NodeRandomSeed.bl_idname),
         nodeitems_utils.NodeItem(NodeClamp.bl_idname),
     ]),
     DreamTexturesNodeCategory("DREAM_TEXTURES_ANNOTATIONS", "Annotations", items = [
@@ -83,6 +84,7 @@ def register():
 
     bpy.utils.register_class(NodeMath)
     bpy.utils.register_class(NodeRandomValue)
+    bpy.utils.register_class(NodeRandomSeed)
     bpy.utils.register_class(NodeClamp)
 
     nodeitems_utils.register_node_categories("DREAM_TEXTURES_CATEGORIES", categories)
@@ -117,6 +119,7 @@ def unregister():
     
     bpy.utils.unregister_class(NodeMath)
     bpy.utils.unregister_class(NodeRandomValue)
+    bpy.utils.unregister_class(NodeRandomSeed)
     bpy.utils.unregister_class(NodeClamp)
 
     nodeitems_utils.unregister_node_categories("DREAM_TEXTURES_CATEGORIES")

@@ -64,6 +64,21 @@ class NodeRandomValue(DreamTexturesNode):
             'Value': random.randrange(min, max)
         }
 
+class NodeRandomSeed(DreamTexturesNode):
+    bl_idname = "dream_textures.node_random_seed"
+    bl_label = "Random Seed"
+
+    def init(self, context):
+        self.outputs.new("NodeSocketInt", "Value")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context):
+        return {
+            'Value': random.randrange(0, np.iinfo(np.uint32).max)
+        }
+
 class NodeClamp(DreamTexturesNode):
     bl_idname = "dream_textures.node_clamp"
     bl_label = "Clamp"

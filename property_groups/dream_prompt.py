@@ -198,10 +198,10 @@ optimization("cpu_offload", property=EnumProperty, items=(
     ("submodule", "Submodule", "Better memory savings with large speed penalty", 2)
 ), default=0, name="CPU Offload", description="Dynamically moves models in and out of device memory for reduced memory usage with reduced speed")
 optimization("channels_last_memory_format", description="An alternative way of ordering NCHW tensors that may be faster or slower depending on the device")
-optimization("xformers_attention", name="xFormers Attention",
-             description="Memory efficient attention that also often inscreases speed.\n"
-                         "Requires a Pascal (GTX 10xx) or newer GPU. Overrides attention slicing.\n"
-                         "Prompt recall may not produce the same image")
+optimization("sdp_attention", name="SDP Attention",
+             description="Scaled dot product attention requires less memory and often comes with a good speed increase.\n"
+                         "Prompt recall may not produce the exact same image, but usually only minor noise differences.\n"
+                         "Overrides attention slicing")
 optimization("batch_size", default=1, min=1, description="Improves speed when using iterations or upscaling in exchange for higher memory usage.\nHighly recommended to use with VAE slicing enabled")
 optimization("vae_slicing", name="VAE Slicing", description="Reduces memory usage of batched VAE decoding. Has no effect if batch size is 1.\nMay have a small performance improvement with large batches")
 optimization("vae_tiling", property=EnumProperty, items=(

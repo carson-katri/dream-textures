@@ -152,7 +152,7 @@ class Optimizations:
     half_precision: Annotated[bool, {"cuda", "privateuseone"}] = True
     cpu_offload: Annotated[str, {"cuda", "privateuseone"}] = "off"
     channels_last_memory_format: bool = False
-    xformers_attention: Annotated[bool, "cuda"] = False
+    sdp_attention: Annotated[bool, {"cpu", "cuda", "mps"}] = True
     batch_size: int = 1
     vae_slicing: bool = True
     vae_tiling: str = "off"
@@ -205,10 +205,13 @@ class Optimizations:
         torch.backends.cuda.matmul.allow_tf32 = self.can_use("tf32", device)
 
         try:
-            if self.can_use("attention_slicing", device):
+            if self.can_use("sdp_attention", device):
+                from diffusers.models.cross_attention import AttnProcessor2_0
+                pipeline.unet.set_attn_processor(AttnProcessor2_0())
+            elif self.can_use("attention_slicing", device):
                 pipeline.enable_attention_slicing(self.attention_slice_size)
             else:
-                pipeline.disable_attention_slicing()
+                pipeline.disable_attention_slicing()  # will also disable AttnProcessor2_0
         except: pass
         
         try:
@@ -245,14 +248,6 @@ class Optimizations:
                 pipeline.unet.to(memory_format=torch.channels_last)
             else:
                 pipeline.unet.to(memory_format=torch.contiguous_format)
-        except: pass
-
-        try:
-            if self.can_use("xformers_attention", device):
-                pipeline.enable_xformers_memory_efficient_attention()
-            elif not self.can_use("attention_slicing", device):
-                # disabling xformers will also disable attention slicing
-                pipeline.disable_xformers_memory_efficient_attention()
         except: pass
 
         try:

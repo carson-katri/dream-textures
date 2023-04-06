@@ -312,7 +312,7 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             slice_size_row.prop(prompt, "optimizations_attention_slice_size_src")
             if prompt.optimizations_attention_slice_size_src == 'manual':
                 slice_size_row.prop(prompt, "optimizations_attention_slice_size", text="Size")
-            optimization("xformers_attention")
+            optimization("sdp_attention")
             optimization("cpu_offload")
             optimization("cpu_only")
             optimization("vae_slicing")

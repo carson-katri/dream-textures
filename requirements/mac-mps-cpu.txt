@@ -3,7 +3,7 @@ transformers
 accelerate==0.14.0
 huggingface_hub
 
-torch>=1.13
+torch>=2.0
 
 # Original SD checkpoint conversion
 pytorch-lightning

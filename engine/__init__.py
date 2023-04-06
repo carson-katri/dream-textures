@@ -39,6 +39,7 @@ categories = [
         nodeitems_utils.NodeItem(NodeAnnotationDepth.bl_idname),
         nodeitems_utils.NodeItem(NodeAnnotationOpenPose.bl_idname),
         nodeitems_utils.NodeItem(NodeAnnotationADE20K.bl_idname),
+        nodeitems_utils.NodeItem(NodeAnnotationViewport.bl_idname),
     ]),
     DreamTexturesNodeCategory("DREAM_TEXTURES_GROUP", "Group", items = [
         nodeitems_utils.NodeItem(bpy.types.NodeGroupOutput.__name__),
@@ -81,6 +82,7 @@ def register():
     bpy.utils.register_class(NodeAnnotationDepth)
     bpy.utils.register_class(NodeAnnotationOpenPose)
     bpy.utils.register_class(NodeAnnotationADE20K)
+    bpy.utils.register_class(NodeAnnotationViewport)
 
     bpy.utils.register_class(NodeMath)
     bpy.utils.register_class(NodeRandomValue)
@@ -116,6 +118,7 @@ def unregister():
     bpy.utils.unregister_class(NodeAnnotationDepth)
     bpy.utils.unregister_class(NodeAnnotationOpenPose)
     bpy.utils.unregister_class(NodeAnnotationADE20K)
+    bpy.utils.unregister_class(NodeAnnotationViewport)
     
     bpy.utils.unregister_class(NodeMath)
     bpy.utils.unregister_class(NodeRandomValue)

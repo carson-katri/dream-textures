@@ -3,6 +3,7 @@ from ..node import DreamTexturesNode
 from ..annotations import depth
 from ..annotations import openpose
 from ..annotations import ade20k
+from ..annotations import viewport
 
 annotation_src = (
     ('collection', 'Collection', 'Render the annotation for a specific collection'),
@@ -74,4 +75,21 @@ class NodeAnnotationADE20K(DreamTexturesNode):
         context.update(ade20k_map)
         return {
             'Segmentation Map': ade20k_map
+        }
+
+class NodeAnnotationViewport(DreamTexturesNode):
+    bl_idname = "dream_textures.node_annotation_viewport"
+    bl_label = "Viewport Color"
+
+    def init(self, context):
+        self.outputs.new("NodeSocketColor", "Viewport Color")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context):
+        color = viewport.render_viewport_color(context.depsgraph)
+        context.update(color)
+        return {
+            'Viewport Color': color
         }

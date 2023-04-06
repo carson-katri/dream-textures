@@ -2,10 +2,12 @@ import bpy
 import gpu
 from bl_ui.properties_render import RenderButtonsPanel
 from bl_ui.properties_output import RenderOutputButtonsPanel
+from bl_ui.properties_view_layer import ViewLayerButtonsPanel
 import numpy as np
 from ..ui.panels.dream_texture import optimization_panels
 from .node_tree import DreamTexturesNodeTree
 from ..engine import node_executor
+from .annotations import depth
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -60,7 +62,16 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
             raise error
 
         layer.rect = node_result.reshape(-1, node_result.shape[-1])
+
+        if "Depth" in result.layers[0].passes:
+            z = depth.render_depth_map(depsgraph, invert=True)
+            result.layers[0].passes["Depth"].rect = z.reshape((scene.render.resolution_x * scene.render.resolution_y, 1))
+
         self.end_result(result)
+    
+    def update_render_passes(self, scene=None, renderlayer=None):
+        self.register_pass(scene, renderlayer, "Combined", 4, "RGBA", 'COLOR')
+        self.register_pass(scene, renderlayer, "Depth", 1, "Z", 'VALUE')
 
 class NewEngineNodeTree(bpy.types.Operator):
     bl_idname = "dream_textures.new_engine_node_tree"
@@ -92,6 +103,7 @@ def engine_panels():
         return context.scene.dream_textures_engine_prompt
     class RenderPanel(bpy.types.Panel, RenderButtonsPanel):
         COMPAT_ENGINES = {DreamTexturesRenderEngine.bl_idname}
+
         def draw(self, context):
             self.layout.use_property_decorate = True
     class OutputPanel(bpy.types.Panel, RenderOutputButtonsPanel):
@@ -99,6 +111,12 @@ def engine_panels():
 
         def draw(self, context):
             self.layout.use_property_decorate = True
+    
+    class ViewLayerPanel(bpy.types.Panel, ViewLayerButtonsPanel):
+        COMPAT_ENGINES = {DreamTexturesRenderEngine.bl_idname}
+
+        def draw(self, context):
+            pass
 
     # Render Properties
     yield from optimization_panels(RenderPanel, 'engine', get_prompt, "")
@@ -135,6 +153,24 @@ def engine_panels():
                 for input in context.scene.dream_textures_render_engine.node_tree.inputs:
                     layout.prop(input, "default_value", text=input.name)
     yield NodeTreeInputsPanel
+
+    # View Layer
+    class ViewLayerPassesPanel(ViewLayerPanel):
+        bl_idname = "DREAM_PT_dream_panel_view_layer_passes"
+        bl_label = "Passes"
+
+        def draw(self, context):
+            layout = self.layout
+            layout.use_property_split = True
+            layout.use_property_decorate = False
+
+            view_layer = context.view_layer
+
+            col = layout.column()
+            col.prop(view_layer, "use_pass_combined")
+            col.prop(view_layer, "use_pass_z")
+            col.prop(view_layer, "use_pass_normal")
+    yield ViewLayerPassesPanel
 
     # Bone properties
     class OpenPoseArmaturePanel(bpy.types.Panel):

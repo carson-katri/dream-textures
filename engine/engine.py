@@ -55,7 +55,11 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
                 nonlocal progress
                 progress += 1
                 self.update_progress(progress / len(scene.dream_textures_render_engine.node_tree.nodes))
-            node_result = node_executor.execute(scene.dream_textures_render_engine.node_tree, depsgraph, node_begin=node_begin, node_update=node_update, node_end=node_end, test_break=self.test_break)
+            group_outputs = node_executor.execute(scene.dream_textures_render_engine.node_tree, depsgraph, node_begin=node_begin, node_update=node_update, node_end=node_end, test_break=self.test_break)
+            node_result = group_outputs[0][1]
+            for k, v in group_outputs:
+                if type(v) == int or type(v) == str or type(v) == float:
+                    self.get_result().stamp_data_add_field(k, str(v))
             node_result = prepare_result(node_result)
         except Exception as error:
             self.report({'ERROR'}, str(error))
@@ -66,7 +70,7 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
         if "Depth" in result.layers[0].passes:
             z = depth.render_depth_map(depsgraph, invert=True)
             result.layers[0].passes["Depth"].rect = z.reshape((scene.render.resolution_x * scene.render.resolution_y, 1))
-
+        
         self.end_result(result)
     
     def update_render_passes(self, scene=None, renderlayer=None):
@@ -99,6 +103,7 @@ def engine_panels():
     bpy.types.RENDER_PT_output.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     bpy.types.RENDER_PT_color_management.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     bpy.types.DATA_PT_lens.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
+    bpy.types.RENDER_PT_stamp.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     def get_prompt(context):
         return context.scene.dream_textures_engine_prompt
     class RenderPanel(bpy.types.Panel, RenderButtonsPanel):

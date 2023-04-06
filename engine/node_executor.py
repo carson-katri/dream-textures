@@ -17,7 +17,10 @@ def execute_node(node, context, cache):
                 for input in context.depsgraph.scene.dream_textures_render_engine.node_tree.inputs
             }
         case 'GROUP_OUTPUT':
-            return cache[node.inputs[0].links[0].from_socket.node]
+            return [
+                (input.name, cache[input.links[0].from_socket.node][input.links[0].from_socket.name])
+                for input in node.inputs if len(input.links) > 0
+            ]
         case _:
             if node in cache:
                 return cache[node]
@@ -51,4 +54,4 @@ def execute(node_tree, depsgraph, node_begin=lambda node: None, node_update=lamb
         result = execute_node(node, NodeExecutionContext(depsgraph, node_update, test_break), cache)
         cache[node] = result
         node_end(node)
-    return next(iter(cache[output].values()))
+    return cache[output]

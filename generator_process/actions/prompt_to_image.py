@@ -224,7 +224,10 @@ class Optimizations:
                 from accelerate import cpu_offload_with_hook
 
                 hook = None
-                for cpu_offloaded_model in [pipeline.text_encoder, pipeline.unet, pipeline.vae]:
+                models = [pipeline.text_encoder, pipeline.unet, pipeline.vae]
+                if hasattr(pipeline, "controlnet"):
+                    models.append(pipeline.controlnet)
+                for cpu_offloaded_model in models:
                     _, hook = cpu_offload_with_hook(cpu_offloaded_model, device, prev_module_hook=hook)
 
                 # FIXME: due to the safety checker not running it prevents the VAE from being offloaded, uncomment when safety checker is enabled
@@ -237,9 +240,11 @@ class Optimizations:
                 # adapted from diffusers.StableDiffusionPipeline.enable_sequential_cpu_offload() to allow DirectML device and unimplemented pipelines
                 from accelerate import cpu_offload
 
-                for cpu_offloaded_model in [pipeline.unet, pipeline.text_encoder, pipeline.vae]:
-                    if cpu_offloaded_model is not None:
-                        cpu_offload(cpu_offloaded_model, device)
+                models = [pipeline.text_encoder, pipeline.unet, pipeline.vae]
+                if hasattr(pipeline, "controlnet"):
+                    models.append(pipeline.controlnet)
+                for cpu_offloaded_model in models:
+                    cpu_offload(cpu_offloaded_model, device)
 
                 if pipeline.safety_checker is not None:
                     cpu_offload(pipeline.safety_checker.vision_model, device, offload_buffers=True)

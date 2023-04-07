@@ -39,7 +39,7 @@ def render_ade20k_map(context, collection=None, invert=True):
 
         with offscreen.bind():
             fb = gpu.state.active_framebuffer_get()
-            fb.clear(color=(0.0, 0.0, 0.0, 0.0))
+            fb.clear(color=(0.0, 0.0, 0.0, 0.0), depth=1)
             
             gpu.state.depth_test_set('LESS_EQUAL')
             gpu.state.depth_mask_set(True)

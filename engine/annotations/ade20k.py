@@ -95,5 +95,6 @@ def draw_annotation(vertices, indices, color):
         {"pos": vertices},
         indices=indices,
     )
+    shader.bind()
     shader.uniform_float("color", color)
     batch.draw(shader)

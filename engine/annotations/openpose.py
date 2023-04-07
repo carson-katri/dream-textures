@@ -185,10 +185,7 @@ def render_openpose_map(context, collection=None):
 
                 shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
                 batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": [(-ratio, -1, 0), (-ratio, 1, 0), (ratio, -1, 0), (ratio, 1, 0)]})
-                shader.uniform_float("color", (0, 0, 0, 1))
-                batch.draw(shader)
-
-                batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": [(-ratio, -1, 0), (-ratio, 1, 0), (ratio, -1, 0), (ratio, 1, 0)]})
+                shader.bind()
                 shader.uniform_float("color", (0, 0, 0, 1))
                 batch.draw(shader)
 

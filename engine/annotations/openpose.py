@@ -109,6 +109,8 @@ class Bone(enum.IntEnum):
             case Bone.EAR_L: return (255, 0, 85)
             case Bone.EAR_R: return (255, 0, 170)
 
+openpose_bones = ((str(b.value), b.name.title(), '') for b in Bone)
+openpose_sides = ((str(s.value), s.name.title(), '') for s in Side)
 class BoneOpenPoseData(bpy.types.PropertyGroup):
     bl_label = "OpenPose"
     bl_idname = "dream_textures.BoneOpenPoseData"
@@ -116,11 +118,11 @@ class BoneOpenPoseData(bpy.types.PropertyGroup):
     enabled: bpy.props.BoolProperty(name="Enabled", default=False)
     bone: bpy.props.EnumProperty(
         name="OpenPose Bone",
-        items=((str(b.value), b.name.title(), '') for b in Bone)
+        items=openpose_bones
     )
     side: bpy.props.EnumProperty(
         name="Bone Side",
-        items=((str(s.value), s.name.title(), '') for s in Side)
+        items=openpose_sides
     )
 
 ArmatureOpenPoseData = type('ArmatureOpenPoseData', (bpy.types.PropertyGroup,), {

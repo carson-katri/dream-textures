@@ -130,7 +130,7 @@ class NodeFramePath(DreamTexturesNode):
 
     def execute(self, context, frame):
         return {
-            'Frame Path': bpy.context.scene.render.frame_path(frame=frame),
+            'Frame Path': context.depsgraph.scene.render.frame_path(frame=frame),
         }
 
 class NodeCropImage(DreamTexturesNode):
@@ -226,4 +226,82 @@ class NodeCombineColor(DreamTexturesNode):
     def execute(self, context, red, green, blue, alpha):
         return {
             'Color': np.stack([red, green, blue, alpha], axis=-1)
+        }
+
+class NodeSwitch(DreamTexturesNode):
+    bl_idname = "dream_textures.node_switch"
+    bl_label = "Switch"
+
+    def init(self, context):
+        self.inputs.new("NodeSocketBool", "Switch")
+        self.inputs.new("NodeSocketColor", "False")
+        self.inputs.new("NodeSocketColor", "True")
+
+        self.outputs.new("NodeSocketColor", "Output")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context, switch, false, true):
+        return {
+            'Output': true if switch else false
+        }
+
+class NodeCompare(DreamTexturesNode):
+    bl_idname = "dream_textures.node_compare"
+    bl_label = "Compare"
+
+    operation: bpy.props.EnumProperty(name="", items=(
+        ('<', 'Less Than', ''),
+        ('<=', 'Less Than or Equal', ''),
+        ('>', 'Greater Than', ''),
+        ('>=', 'Greater Than or Equal', ''),
+        ('==', 'Equal', ''),
+        ('!=', 'Not Equal', ''),
+    ))
+
+    def init(self, context):
+        self.inputs.new("NodeSocketFloat", "A")
+        self.inputs.new("NodeSocketFloat", "B")
+
+        self.outputs.new("NodeSocketBool", "Result")
+
+    def draw_buttons(self, context, layout):
+        layout.prop(self, "operation")
+
+    def execute(self, context, a, b):
+        match self.operation:
+            case '<':
+                result = a < b
+            case '<=':
+                result = a <= b
+            case '>':
+                result = a > b
+            case '>=':
+                result = a >= b
+            case '==':
+                result = a == b
+            case '!=':
+                result = a != b
+        return {
+            'Result': result
+        }
+
+class NodeReplaceString(DreamTexturesNode):
+    bl_idname = "dream_textures.node_replace_string"
+    bl_label = "Replace String"
+
+    def init(self, context):
+        self.inputs.new("NodeSocketString", "String")
+        self.inputs.new("NodeSocketString", "Find")
+        self.inputs.new("NodeSocketString", "Replace")
+
+        self.outputs.new("NodeSocketString", "String")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context, string, find, replace):
+        return {
+            'String': string.replace(find, replace)
         }

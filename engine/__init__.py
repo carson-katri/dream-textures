@@ -41,6 +41,9 @@ categories = [
         nodeitems_utils.NodeItem(NodeJoinImages.bl_idname),
         nodeitems_utils.NodeItem(NodeSeparateColor.bl_idname),
         nodeitems_utils.NodeItem(NodeCombineColor.bl_idname),
+        nodeitems_utils.NodeItem(NodeSwitch.bl_idname),
+        nodeitems_utils.NodeItem(NodeCompare.bl_idname),
+        nodeitems_utils.NodeItem(NodeReplaceString.bl_idname),
     ]),
     DreamTexturesNodeCategory("DREAM_TEXTURES_ANNOTATIONS", "Annotations", items = [
         nodeitems_utils.NodeItem(NodeAnnotationDepth.bl_idname),
@@ -105,6 +108,9 @@ def register():
     bpy.utils.register_class(NodeJoinImages)
     bpy.utils.register_class(NodeSeparateColor)
     bpy.utils.register_class(NodeCombineColor)
+    bpy.utils.register_class(NodeSwitch)
+    bpy.utils.register_class(NodeCompare)
+    bpy.utils.register_class(NodeReplaceString)
 
     nodeitems_utils.register_node_categories("DREAM_TEXTURES_CATEGORIES", categories)
 
@@ -150,5 +156,8 @@ def unregister():
     bpy.utils.unregister_class(NodeJoinImages)
     bpy.utils.unregister_class(NodeSeparateColor)
     bpy.utils.unregister_class(NodeCombineColor)
+    bpy.utils.unregister_class(NodeSwitch)
+    bpy.utils.unregister_class(NodeCompare)
+    bpy.utils.unregister_class(NodeReplaceString)
 
     nodeitems_utils.unregister_node_categories("DREAM_TEXTURES_CATEGORIES")

@@ -47,10 +47,22 @@ def execute(node_tree, depsgraph, node_begin=lambda node: None, node_update=lamb
         for node in node_tree.nodes 
     }
     sort = graphlib.TopologicalSorter(graph)
+    def is_used(node):
+        if node.type == 'GROUP_OUTPUT':
+            return True
+        for output in node.outputs:
+            for link in output.links:
+                # if link.to_socket.node.bl_idname == 'dream_textures.node_switch':
+                #     input = link.to_socket.node.inputs[0]
+                #     switch_result = cache[input.links[0].from_socket.node][input.links[0].from_socket.name] if input.is_linked else input.default_value
+                #     return (switch_result and link.to_socket.name == 'True') or (not switch_result and link.to_socket.name == 'False')
+                if is_used(link.to_socket.node):
+                    return True
+        return False
     for node in sort.static_order():
         if test_break():
             return None
-        if len(node.outputs) > 0 and next((l for i in node.outputs for l in i.links), None) is None:
+        if not is_used(node):
             continue # node outputs are unused
         node_begin(node)
         result = execute_node(node, NodeExecutionContext(depsgraph, node_update, test_break), cache)

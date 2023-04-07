@@ -107,6 +107,7 @@ class NodeRenderProperties(DreamTexturesNode):
         self.outputs.new("NodeSocketInt", "Resolution X")
         self.outputs.new("NodeSocketInt", "Resolution Y")
         self.outputs.new("NodeSocketString", "Output Filepath")
+        self.outputs.new("NodeSocketInt", "Frame")
 
     def draw_buttons(self, context, layout):
         pass
@@ -115,5 +116,6 @@ class NodeRenderProperties(DreamTexturesNode):
         return {
             'Resolution X': context.depsgraph.scene.render.resolution_x,
             'Resolution Y': context.depsgraph.scene.render.resolution_y,
-            'Output Filepath': context.depsgraph.scene.render.filepath
+            'Output Filepath': context.depsgraph.scene.render.filepath,
+            'Frame': context.depsgraph.scene.frame_current
         }

@@ -55,12 +55,11 @@ class ControlNet:
                     return np.flipud(ade20k.render_ade20k_map(context, collection=self.collection))
 
 def _update_stable_diffusion_sockets(self, context):
-    self.inputs['Source Image'].enabled = self.task in {'image_to_image', 'depth_to_image'}
+    self.inputs['Source Image'].enabled = self.task in {'image_to_image', 'depth_to_image', 'inpaint'}
     self.inputs['Noise Strength'].enabled = self.task in {'image_to_image', 'depth_to_image'}
     if self.task == 'depth_to_image':
         self.inputs['Noise Strength'].default_value = 1.0
     self.inputs['Depth Map'].enabled = self.task == 'depth_to_image'
-    self.inputs['Mask Image'].enabled = self.task == 'inpaint'
     self.inputs['ControlNets'].enabled = self.task != 'depth_to_image'
 class NodeStableDiffusion(DreamTexturesNode):
     bl_idname = "dream_textures.node_stable_diffusion"
@@ -77,7 +76,6 @@ class NodeStableDiffusion(DreamTexturesNode):
     def init(self, context):
         self.inputs.new("NodeSocketColor", "Depth Map")
         self.inputs.new("NodeSocketColor", "Source Image")
-        self.inputs.new("NodeSocketColor", "Mask Image")
         self.inputs.new("NodeSocketFloat", "Noise Strength").default_value = 0.75
 
         self.inputs.new("NodeSocketString", "Prompt")
@@ -207,6 +205,33 @@ class NodeStableDiffusion(DreamTexturesNode):
                         depth=depth_map,
                         image=np.uint8(source_image * 255) if source_image is not None else None,
                         strength=noise_strength,
+
+                        prompt=prompt,
+                        steps=steps,
+                        seed=seed,
+                        width=width,
+                        height=height,
+                        cfg_scale=cfg_scale,
+                        use_negative_prompt=True,
+                        negative_prompt=negative_prompt
+                    )
+                case 'inpaint':
+                    future = Generator.shared().inpaint(
+                        pipeline=args['pipeline'],
+                        model=args['model'],
+                        scheduler=args['scheduler'],
+                        optimizations=shared_args['optimizations'],
+                        seamless_axes=args['seamless_axes'],
+                        iterations=args['iterations'],
+                        step_preview_mode=args['step_preview_mode'],
+                        
+                        image=np.uint8(source_image * 255),
+                        strength=noise_strength,
+
+                        fit=args['fit'],
+                        inpaint_mask_src='alpha',
+                        text_mask='',
+                        text_mask_confidence=1,
 
                         prompt=prompt,
                         steps=steps,

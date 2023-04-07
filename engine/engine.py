@@ -48,9 +48,12 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
                 self.update_stats("Node", node.name)
             def node_update(response):
                 if isinstance(response, np.ndarray):
-                    node_result = prepare_result(response)
-                    layer.rect = node_result.reshape(-1, node_result.shape[-1])
-                    self.update_result(result)
+                    try:
+                        node_result = prepare_result(response)
+                        layer.rect = node_result.reshape(-1, node_result.shape[-1])
+                        self.update_result(result)
+                    except:
+                        pass
             def node_end(_):
                 nonlocal progress
                 progress += 1

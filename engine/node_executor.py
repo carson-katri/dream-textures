@@ -21,6 +21,8 @@ def execute_node(node, context, cache):
                 (input.name, cache[input.links[0].from_socket.node][input.links[0].from_socket.name])
                 for input in node.inputs if len(input.links) > 0
             ]
+        case 'FRAME':
+            return None
         case _:
             if node in cache:
                 return cache[node]

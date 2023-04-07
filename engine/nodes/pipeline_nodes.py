@@ -9,6 +9,7 @@ from ...property_groups.control_net import control_net_options
 from ...property_groups.dream_prompt import DreamPrompt
 from ..annotations import openpose
 from ..annotations import depth
+from ..annotations import ade20k
 import threading
 
 class NodeSocketControlNet(bpy.types.NodeSocket):
@@ -28,6 +29,7 @@ class ControlType(enum.IntEnum):
     DEPTH = 1
     OPENPOSE = 2
     NORMAL = 3
+    ADE20K_SEGMENTATION = 4
 
 @dataclass
 class ControlNet:
@@ -48,6 +50,8 @@ class ControlNet:
                     return np.flipud(openpose.render_openpose_map(context, collection=self.collection))
                 case ControlType.NORMAL:
                     pass
+                case ControlType.ADE20K_SEGMENTATION:
+                    return np.flipud(ade20k.render_ade20k_map(context, collection=self.collection))
 
 def _update_stable_diffusion_sockets(self, context):
     self.inputs['Source Image'].enabled = self.task in {'image_to_image', 'depth_to_image'}
@@ -94,6 +98,7 @@ class NodeStableDiffusion(DreamTexturesNode):
         layout.prop(prompt, "pipeline", text="")
         layout.prop(prompt, "model", text="")
         layout.prop(prompt, "scheduler", text="")
+        layout.prop(prompt, "seamless_axes", text="")
     
     def execute(self, context, prompt, negative_prompt, width, height, steps, seed, cfg_scale, controlnets, depth_map, source_image, noise_strength):
         self.prompt.use_negative_prompt = True
@@ -237,6 +242,7 @@ class NodeControlNet(DreamTexturesNode):
         ('DEPTH', 'Depth', '', 1),
         ('OPENPOSE', 'OpenPose', '', 2),
         ('NORMAL', 'Normal Map', '', 3),
+        ('ADE20K_SEGMENTATION', 'ADE20K Segmentation', '', 4),
     ))
 
     def init(self, context):
@@ -251,7 +257,8 @@ class NodeControlNet(DreamTexturesNode):
     def draw_buttons(self, context, layout):
         layout.prop(self, "control_net")
         layout.prop(self, "input_type")
-        layout.prop(self, "control_type")
+        if self.input_type != 'image':
+            layout.prop(self, "control_type")
     
     def execute(self, context, collection, image, conditioning_scale):
         return {

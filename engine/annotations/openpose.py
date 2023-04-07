@@ -52,33 +52,33 @@ class Bone(enum.IntEnum):
     def name_detection_options(self):
         match self:
             case Bone.NOSE:
-                return [('nose_master', Side.TAIL), ('nose.001', Side.TAIL)]
+                return [('nose_master', Side.TAIL), ('nose.001', Side.TAIL), ('Head', Side.TAIL)]
             case Bone.CHEST:
-                return [('spine_fk.003', Side.TAIL), ('spine.003', Side.TAIL)]
+                return [('spine_fk.003', Side.TAIL), ('spine.003', Side.TAIL), ('Spine4', Side.TAIL)]
             case Bone.SHOULDER_L:
-                return [('shoulder_ik.L', Side.TAIL), ('shoulder.L', Side.TAIL)]
+                return [('shoulder_ik.L', Side.TAIL), ('shoulder.L', Side.TAIL), ('LeftShoulder', Side.TAIL)]
             case Bone.SHOULDER_R:
-                return [('shoulder_ik.R', Side.TAIL), ('shoulder.R', Side.TAIL)]
+                return [('shoulder_ik.R', Side.TAIL), ('shoulder.R', Side.TAIL), ('RightShoulder', Side.TAIL)]
             case Bone.ELBOW_L:
-                return [('upper_arm_ik.L', Side.TAIL), ('upper_arm.L', Side.TAIL)]
+                return [('upper_arm_ik.L', Side.TAIL), ('upper_arm.L', Side.TAIL), ('LeftArm', Side.TAIL)]
             case Bone.ELBOW_R:
-                return [('upper_arm_ik.R', Side.TAIL), ('upper_arm.R', Side.TAIL)]
+                return [('upper_arm_ik.R', Side.TAIL), ('upper_arm.R', Side.TAIL), ('RightArm', Side.TAIL)]
             case Bone.HAND_L:
-                return [('hand_ik.L', Side.TAIL), ('forearm.L', Side.TAIL)]
+                return [('hand_ik.L', Side.TAIL), ('forearm.L', Side.TAIL), ('LeftForeArm', Side.TAIL)]
             case Bone.HAND_R:
-                return [('hand_ik.R', Side.TAIL), ('forearm.R', Side.TAIL)]
+                return [('hand_ik.R', Side.TAIL), ('forearm.R', Side.TAIL), ('RightForeArm', Side.TAIL)]
             case Bone.HIP_L:
-                return [('thigh_ik.L', Side.HEAD), ('thigh.L', Side.HEAD)]
+                return [('thigh_ik.L', Side.HEAD), ('thigh.L', Side.HEAD), ('LeftThigh', Side.HEAD)]
             case Bone.HIP_R:
-                return [('thigh_ik.R', Side.HEAD), ('thigh.R', Side.HEAD)]
+                return [('thigh_ik.R', Side.HEAD), ('thigh.R', Side.HEAD), ('RightThigh', Side.HEAD)]
             case Bone.KNEE_L:
-                return [('thigh_ik.L', Side.TAIL), ('thigh.L', Side.TAIL)]
+                return [('thigh_ik.L', Side.TAIL), ('thigh.L', Side.TAIL), ('LeftShin', Side.HEAD)]
             case Bone.KNEE_R:
-                return [('thigh_ik.R', Side.TAIL), ('thigh.R', Side.TAIL)]
+                return [('thigh_ik.R', Side.TAIL), ('thigh.R', Side.TAIL), ('RightShin', Side.HEAD)]
             case Bone.FOOT_L:
-                return [('foot_ik.L', Side.TAIL), ('shin.L', Side.TAIL)]
+                return [('foot_ik.L', Side.TAIL), ('shin.L', Side.TAIL), ('LeftFoot', Side.HEAD)]
             case Bone.FOOT_R:
-                return [('foot_ik.R', Side.TAIL), ('shin.R', Side.TAIL)]
+                return [('foot_ik.R', Side.TAIL), ('shin.R', Side.TAIL), ('RightFoot', Side.HEAD)]
             case Bone.EYE_L:
                 return [('master_eye.L', Side.TAIL), ('eye.L', Side.TAIL)]
             case Bone.EYE_R:
@@ -109,6 +109,8 @@ class Bone(enum.IntEnum):
             case Bone.EAR_L: return (255, 0, 85)
             case Bone.EAR_R: return (255, 0, 170)
 
+openpose_bones = ((str(b.value), b.name.title(), '') for b in Bone)
+openpose_sides = ((str(s.value), s.name.title(), '') for s in Side)
 class BoneOpenPoseData(bpy.types.PropertyGroup):
     bl_label = "OpenPose"
     bl_idname = "dream_textures.BoneOpenPoseData"
@@ -116,11 +118,11 @@ class BoneOpenPoseData(bpy.types.PropertyGroup):
     enabled: bpy.props.BoolProperty(name="Enabled", default=False)
     bone: bpy.props.EnumProperty(
         name="OpenPose Bone",
-        items=((str(b.value), b.name.title(), '') for b in Bone)
+        items=openpose_bones
     )
     side: bpy.props.EnumProperty(
         name="Bone Side",
-        items=((str(s.value), s.name.title(), '') for s in Side)
+        items=openpose_sides
     )
 
 ArmatureOpenPoseData = type('ArmatureOpenPoseData', (bpy.types.PropertyGroup,), {
@@ -183,10 +185,7 @@ def render_openpose_map(context, collection=None):
 
                 shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
                 batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": [(-ratio, -1, 0), (-ratio, 1, 0), (ratio, -1, 0), (ratio, 1, 0)]})
-                shader.uniform_float("color", (0, 0, 0, 1))
-                batch.draw(shader)
-
-                batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": [(-ratio, -1, 0), (-ratio, 1, 0), (ratio, -1, 0), (ratio, 1, 0)]})
+                shader.bind()
                 shader.uniform_float("color", (0, 0, 0, 1))
                 batch.draw(shader)
 

@@ -2,6 +2,7 @@ import bpy
 import numpy as np
 import random
 from ..node import DreamTexturesNode
+from ...property_groups.dream_prompt import seed_clamp
 
 class NodeMath(DreamTexturesNode):
     bl_idname = "dream_textures.node_math"
@@ -62,6 +63,38 @@ class NodeRandomValue(DreamTexturesNode):
     def execute(self, context, min, max):
         return {
             'Value': random.randrange(min, max)
+        }
+
+class NodeRandomSeed(DreamTexturesNode):
+    bl_idname = "dream_textures.node_random_seed"
+    bl_label = "Random Seed"
+
+    def init(self, context):
+        self.outputs.new("NodeSocketInt", "Value")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context):
+        return {
+            'Value': random.randrange(0, np.iinfo(np.uint32).max)
+        }
+
+class NodeSeed(DreamTexturesNode):
+    bl_idname = "dream_textures.node_seed"
+    bl_label = "Seed"
+
+    seed: bpy.props.StringProperty(name="", default="", update=seed_clamp)
+
+    def init(self, context):
+        self.outputs.new("NodeSocketInt", "Value")
+
+    def draw_buttons(self, context, layout):
+        layout.prop(self, "seed")
+
+    def execute(self, context):
+        return {
+            'Value': int(self.seed)
         }
 
 class NodeClamp(DreamTexturesNode):

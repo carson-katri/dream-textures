@@ -2,10 +2,12 @@ import bpy
 import gpu
 from bl_ui.properties_render import RenderButtonsPanel
 from bl_ui.properties_output import RenderOutputButtonsPanel
+from bl_ui.properties_view_layer import ViewLayerButtonsPanel
 import numpy as np
 from ..ui.panels.dream_texture import optimization_panels
 from .node_tree import DreamTexturesNodeTree
 from ..engine import node_executor
+from .annotations import depth
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -53,14 +55,27 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
                 nonlocal progress
                 progress += 1
                 self.update_progress(progress / len(scene.dream_textures_render_engine.node_tree.nodes))
-            node_result = node_executor.execute(scene.dream_textures_render_engine.node_tree, depsgraph, node_begin=node_begin, node_update=node_update, node_end=node_end, test_break=self.test_break)
+            group_outputs = node_executor.execute(scene.dream_textures_render_engine.node_tree, depsgraph, node_begin=node_begin, node_update=node_update, node_end=node_end, test_break=self.test_break)
+            node_result = group_outputs[0][1]
+            for k, v in group_outputs:
+                if type(v) == int or type(v) == str or type(v) == float:
+                    self.get_result().stamp_data_add_field(k, str(v))
             node_result = prepare_result(node_result)
         except Exception as error:
             self.report({'ERROR'}, str(error))
             raise error
 
         layer.rect = node_result.reshape(-1, node_result.shape[-1])
+
+        if "Depth" in result.layers[0].passes:
+            z = depth.render_depth_map(depsgraph, invert=True)
+            result.layers[0].passes["Depth"].rect = z.reshape((scene.render.resolution_x * scene.render.resolution_y, 1))
+        
         self.end_result(result)
+    
+    def update_render_passes(self, scene=None, renderlayer=None):
+        self.register_pass(scene, renderlayer, "Combined", 4, "RGBA", 'COLOR')
+        self.register_pass(scene, renderlayer, "Depth", 1, "Z", 'VALUE')
 
 class NewEngineNodeTree(bpy.types.Operator):
     bl_idname = "dream_textures.new_engine_node_tree"
@@ -87,11 +102,14 @@ class DreamTexturesRenderEngineProperties(bpy.types.PropertyGroup):
 def engine_panels():
     bpy.types.RENDER_PT_output.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     bpy.types.RENDER_PT_color_management.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
+    bpy.types.RENDER_PT_stamp.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
+    bpy.types.RENDER_PT_format.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     bpy.types.DATA_PT_lens.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     def get_prompt(context):
         return context.scene.dream_textures_engine_prompt
     class RenderPanel(bpy.types.Panel, RenderButtonsPanel):
         COMPAT_ENGINES = {DreamTexturesRenderEngine.bl_idname}
+
         def draw(self, context):
             self.layout.use_property_decorate = True
     class OutputPanel(bpy.types.Panel, RenderOutputButtonsPanel):
@@ -99,25 +117,15 @@ def engine_panels():
 
         def draw(self, context):
             self.layout.use_property_decorate = True
+    
+    class ViewLayerPanel(bpy.types.Panel, ViewLayerButtonsPanel):
+        COMPAT_ENGINES = {DreamTexturesRenderEngine.bl_idname}
+
+        def draw(self, context):
+            pass
 
     # Render Properties
     yield from optimization_panels(RenderPanel, 'engine', get_prompt, "")
-
-    # Output Properties
-    class FormatPanel(OutputPanel):
-        """Create a subpanel for format options"""
-        bl_idname = f"DREAM_PT_dream_panel_format_engine"
-        bl_label = "Format"
-
-        def draw(self, context):
-            super().draw(context)
-            layout = self.layout
-            layout.use_property_split = True
-
-            col = layout.column(align=True)
-            col.prop(context.scene.render, "resolution_x")
-            col.prop(context.scene.render, "resolution_y", text="Y")
-    yield FormatPanel
 
     class NodeTreeInputsPanel(RenderPanel):
         """Create a subpanel for format options"""
@@ -133,6 +141,24 @@ def engine_panels():
                 for input in context.scene.dream_textures_render_engine.node_tree.inputs:
                     layout.prop(input, "default_value", text=input.name)
     yield NodeTreeInputsPanel
+
+    # View Layer
+    class ViewLayerPassesPanel(ViewLayerPanel):
+        bl_idname = "DREAM_PT_dream_panel_view_layer_passes"
+        bl_label = "Passes"
+
+        def draw(self, context):
+            layout = self.layout
+            layout.use_property_split = True
+            layout.use_property_decorate = False
+
+            view_layer = context.view_layer
+
+            col = layout.column()
+            col.prop(view_layer, "use_pass_combined")
+            col.prop(view_layer, "use_pass_z")
+            col.prop(view_layer, "use_pass_normal")
+    yield ViewLayerPassesPanel
 
     # Bone properties
     class OpenPoseArmaturePanel(bpy.types.Panel):
@@ -214,3 +240,34 @@ def engine_panels():
             layout.prop(bone.dream_textures_openpose, "side")
 
     yield OpenPoseBonePanel
+
+    class ADE20KObjectPanel(bpy.types.Panel):
+        bl_idname = "DREAM_PT_dream_textures_object_ade20k"
+        bl_label = "ADE20K Segmentation"
+        bl_space_type = 'PROPERTIES'
+        bl_region_type = 'WINDOW'
+        bl_context = "object"
+
+        @classmethod
+        def poll(cls, context):
+            return context.object and context.scene.render.engine == 'DREAM_TEXTURES'
+        
+        def draw_header(self, context):
+            object = context.object
+            if object:
+                self.layout.prop(object.dream_textures_ade20k, "enabled", text="")
+
+        def draw(self, context):
+            layout = self.layout
+            layout.use_property_split = True
+
+            object = context.object
+
+            layout.enabled = object.dream_textures_ade20k.enabled
+            r = layout.split(factor=0.9)
+            r.prop(object.dream_textures_ade20k, "annotation")
+            c = r.column()
+            c.enabled = False
+            c.prop(object.dream_textures_ade20k, "color")
+
+    yield ADE20KObjectPanel

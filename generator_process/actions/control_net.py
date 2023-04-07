@@ -353,6 +353,11 @@ def control_net(
                     num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
                     with self.progress_bar(total=num_inference_steps) as progress_bar:
                         for i, t in enumerate(timesteps):
+                            # NOTE: Modified to support disabling CFG
+                            if (i / len(timesteps)) >= kwargs['cfg_end']:
+                                do_classifier_free_guidance = False
+                                prompt_embeds = prompt_embeds[None, 0]
+                                image = [i[None, 0] for i in image]
                             # expand the latents if we are doing classifier free guidance
                             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                             latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
@@ -522,7 +527,8 @@ def control_net(
                     return_dict=True,
                     callback=None,
                     callback_steps=1,
-                    step_preview_mode=step_preview_mode
+                    step_preview_mode=step_preview_mode,
+                    cfg_end=optimizations.cfg_end
                 )
         case Pipeline.STABILITY_SDK:
             import stability_sdk

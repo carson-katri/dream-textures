@@ -102,8 +102,9 @@ class DreamTexturesRenderEngineProperties(bpy.types.PropertyGroup):
 def engine_panels():
     bpy.types.RENDER_PT_output.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     bpy.types.RENDER_PT_color_management.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
-    bpy.types.DATA_PT_lens.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     bpy.types.RENDER_PT_stamp.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
+    bpy.types.RENDER_PT_format.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
+    bpy.types.DATA_PT_lens.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
     def get_prompt(context):
         return context.scene.dream_textures_engine_prompt
     class RenderPanel(bpy.types.Panel, RenderButtonsPanel):
@@ -125,24 +126,6 @@ def engine_panels():
 
     # Render Properties
     yield from optimization_panels(RenderPanel, 'engine', get_prompt, "")
-
-    # Output Properties
-    class FormatPanel(OutputPanel):
-        """Create a subpanel for format options"""
-        bl_idname = f"DREAM_PT_dream_panel_format_engine"
-        bl_label = "Format"
-
-        def draw(self, context):
-            super().draw(context)
-            layout = self.layout
-            layout.use_property_split = True
-
-            col = layout.column(align=True)
-            col.prop(context.scene.render, "resolution_x")
-            col.prop(context.scene.render, "resolution_y", text="Y")
-            
-            layout.prop(context.scene.render, "resolution_percentage")
-    yield FormatPanel
 
     class NodeTreeInputsPanel(RenderPanel):
         """Create a subpanel for format options"""

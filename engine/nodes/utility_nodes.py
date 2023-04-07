@@ -168,14 +168,15 @@ class NodeJoinImages(DreamTexturesNode):
     def init(self, context):
         self.inputs.new("NodeSocketColor", "A")
         self.inputs.new("NodeSocketColor", "B")
+        self.inputs.new("NodeSocketInt", "Width")
+        self.inputs.new("NodeSocketInt", "Height")
 
         self.outputs.new("NodeSocketColor", "Joined Images")
 
     def draw_buttons(self, context, layout):
         layout.prop(self, "direction")
 
-    def execute(self, context, a, b):
-        width, height = context.depsgraph.scene.render.resolution_x, context.depsgraph.scene.render.resolution_y
+    def execute(self, context, a, b, width, height):
         if self.direction == 'horizontal':
             width //= 2
         else:

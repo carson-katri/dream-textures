@@ -297,14 +297,14 @@ def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
             prompt = get_prompt(context)
 
             inferred_device = Optimizations.infer_device()
+            if prompt.optimizations_cpu_only:
+                inferred_device = "cpu"
             def optimization(prop):
-                if hasattr(prompt, f"optimizations_{prop}"):
-                    if Optimizations().can_use(prop, inferred_device):
-                        layout.prop(prompt, f"optimizations_{prop}")
+                if Optimizations.device_supports(prop, inferred_device):
+                    layout.prop(prompt, f"optimizations_{prop}")
 
             optimization("cudnn_benchmark")
             optimization("tf32")
-            optimization("amp")
             optimization("half_precision")
             optimization("channels_last_memory_format")
             optimization("batch_size")
@@ -322,8 +322,11 @@ def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
             layout.use_property_split = True
             prompt = get_prompt(context)
 
+            inferred_device = Optimizations.infer_device()
+            if prompt.optimizations_cpu_only:
+                inferred_device = "cpu"
             def optimization(prop):
-                if hasattr(prompt, f"optimizations_{prop}"):
+                if Optimizations.device_supports(prop, inferred_device):
                     layout.prop(prompt, f"optimizations_{prop}")
 
             optimization("attention_slicing")
@@ -331,10 +334,14 @@ def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
             slice_size_row.prop(prompt, "optimizations_attention_slice_size_src")
             if prompt.optimizations_attention_slice_size_src == 'manual':
                 slice_size_row.prop(prompt, "optimizations_attention_slice_size", text="Size")
-            optimization("sequential_cpu_offload")
+            optimization("sdp_attention")
+            optimization("cpu_offload")
             optimization("cpu_only")
-            # optimization("xformers_attention") # FIXME: xFormers is not yet available.
             optimization("vae_slicing")
+            optimization("vae_tiling")
+            if prompt.optimizations_vae_tiling == "manual":
+                optimization("vae_tile_size")
+                optimization("vae_tile_blend")
     yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):

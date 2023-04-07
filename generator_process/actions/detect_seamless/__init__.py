@@ -41,6 +41,18 @@ class SeamlessAxes(Enum):
             return True
         return False
 
+    def __and__(self, other):
+        return SeamlessAxes((self.x and other.x, self.y and other.y))
+
+    def __or__(self, other):
+        return SeamlessAxes((self.x or other.x, self.y or other.y))
+
+    def __xor__(self, other):
+        return SeamlessAxes((self.x != other.x, self.y != other.y))
+
+    def __invert__(self):
+        return SeamlessAxes((not self.x, not self.y))
+
     @classmethod
     def _missing_(cls, value):
         if isinstance(value, str):

@@ -173,6 +173,10 @@ def inpaint(
                     # 10. Run safety checker
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
 
+                    # Offload last model to CPU
+                    if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
+                        self.final_offload_hook.offload()
+
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield ImageGenerationResult(
                         [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
@@ -213,40 +217,39 @@ def inpaint(
             _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext()), \
-                    (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-                    match inpaint_mask_src:
-                        case 'alpha':
-                            mask_image = ImageOps.invert(init_image.getchannel('A'))
-                        case 'prompt':
-                            from transformers import AutoProcessor, CLIPSegForImageSegmentation
+            with torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext():
+                match inpaint_mask_src:
+                    case 'alpha':
+                        mask_image = ImageOps.invert(init_image.getchannel('A'))
+                    case 'prompt':
+                        from transformers import AutoProcessor, CLIPSegForImageSegmentation
 
-                            processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
-                            clipseg = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
-                            inputs = processor(text=[text_mask], images=[init_image.convert('RGB')], return_tensors="pt", padding=True)
-                            outputs = clipseg(**inputs)
-                            mask_image = Image.fromarray(np.uint8((1 - torch.sigmoid(outputs.logits).lt(text_mask_confidence).int().detach().numpy()) * 255), 'L').resize(init_image.size)
+                        processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+                        clipseg = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
+                        inputs = processor(text=[text_mask], images=[init_image.convert('RGB')], return_tensors="pt", padding=True)
+                        outputs = clipseg(**inputs)
+                        mask_image = Image.fromarray(np.uint8((1 - torch.sigmoid(outputs.logits).lt(text_mask_confidence).int().detach().numpy()) * 255), 'L').resize(init_image.size)
 
-                    yield from pipe(
-                        prompt=prompt,
-                        image=[init_image.convert('RGB')] * batch_size,
-                        mask_image=[mask_image] * batch_size,
-                        strength=strength,
-                        height=init_image.size[1] if fit else height,
-                        width=init_image.size[0] if fit else width,
-                        num_inference_steps=steps,
-                        guidance_scale=cfg_scale,
-                        negative_prompt=negative_prompt if use_negative_prompt else None,
-                        num_images_per_prompt=1,
-                        eta=0.0,
-                        generator=generator,
-                        latents=None,
-                        output_type="pil",
-                        return_dict=True,
-                        callback=None,
-                        callback_steps=1,
-                        step_preview_mode=step_preview_mode
-                    )
+                yield from pipe(
+                    prompt=prompt,
+                    image=[init_image.convert('RGB')] * batch_size,
+                    mask_image=[mask_image] * batch_size,
+                    strength=strength,
+                    height=init_image.size[1] if fit else height,
+                    width=init_image.size[0] if fit else width,
+                    num_inference_steps=steps,
+                    guidance_scale=cfg_scale,
+                    negative_prompt=negative_prompt if use_negative_prompt else None,
+                    num_images_per_prompt=1,
+                    eta=0.0,
+                    generator=generator,
+                    latents=None,
+                    output_type="pil",
+                    return_dict=True,
+                    callback=None,
+                    callback_steps=1,
+                    step_preview_mode=step_preview_mode
+                )
         case Pipeline.STABILITY_SDK:
             import stability_sdk.client
             import stability_sdk.interfaces.gooseai.generation.generation_pb2

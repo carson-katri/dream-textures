@@ -307,6 +307,10 @@ def depth_to_image(
                     # 12. Run safety checker
                     # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
 
+                    # Offload last model to CPU
+                    if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
+                        self.final_offload_hook.offload()
+
                     # NOTE: Modified to yield the decoded image as a numpy array.
                     yield ImageGenerationResult(
                         [np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
@@ -362,8 +366,7 @@ def depth_to_image(
             _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
-            with (torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext()), \
-                (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
+            with torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext():
                 yield from pipe(
                     prompt=prompt,
                     depth_image=depth_image,

@@ -98,6 +98,7 @@ class NodeStableDiffusion(DreamTexturesNode):
         layout.prop(prompt, "pipeline", text="")
         layout.prop(prompt, "model", text="")
         layout.prop(prompt, "scheduler", text="")
+        layout.prop(prompt, "seamless_axes", text="")
     
     def execute(self, context, prompt, negative_prompt, width, height, steps, seed, cfg_scale, controlnets, depth_map, source_image, noise_strength):
         self.prompt.use_negative_prompt = True

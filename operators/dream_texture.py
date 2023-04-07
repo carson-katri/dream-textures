@@ -135,7 +135,14 @@ class DreamTexture(bpy.types.Operator):
                 scene.dream_textures_prompt.hash = image_hash
                 history_entry = context.scene.dream_textures_history.add()
                 for key, value in history_template.items():
-                    setattr(history_entry, key, value)
+                    match key:
+                        case 'control_nets':
+                            for net in value:
+                                n = history_entry.control_nets.add()
+                                for prop in n.__annotations__.keys():
+                                    setattr(n, prop, getattr(net, prop))
+                        case _:
+                            setattr(history_entry, key, value)
                 history_entry.seed = str(seed)
                 history_entry.hash = image_hash
                 if is_file_batch:
@@ -170,7 +177,12 @@ class DreamTexture(bpy.types.Operator):
             else:
                 generated_args["prompt"] = [original_prompt] * batch_size
                 generated_args["negative_prompt"] = [original_negative_prompt] * batch_size
-            if init_image is not None:
+            if len(generated_args['control_net']) > 0:
+                f = gen.control_net(
+                    image=init_image,
+                    **generated_args
+                )
+            elif init_image is not None:
                 match generated_args['init_img_action']:
                     case 'modify':
                         models = list(filter(

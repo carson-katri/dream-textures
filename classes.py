@@ -6,12 +6,15 @@ from .operators.inpaint_area_brush import InpaintAreaBrushActivated
 from .operators.upscale import Upscale
 from .operators.project import ProjectDreamTexture, dream_texture_projection_panels
 from .operators.notify_result import NotifyResult
+from .property_groups.control_net import ControlNet, SCENE_UL_ControlNetList, ControlNetsAdd, ControlNetsRemove
 from .property_groups.dream_prompt import DreamPrompt
 from .property_groups.seamless_result import SeamlessResult
 from .ui.panels import dream_texture, history, upscaling, render_properties
 from .preferences import OpenURL, StableDiffusionPreferences, ImportWeights, Model, ModelSearch, InstallModel, PREFERENCES_UL_ModelList
 
 from .ui.presets import DREAM_PT_AdvancedPresets, DREAM_MT_AdvancedPresets, AddAdvancedPreset, RestoreDefaultPresets
+
+from . import engine
 
 CLASSES = (
     *render_properties.render_properties_panels(),
@@ -29,12 +32,21 @@ CLASSES = (
     InpaintAreaBrushActivated,
     Upscale,
     ProjectDreamTexture,
+    
+    SCENE_UL_ControlNetList,
+    ControlNetsAdd,
+    ControlNetsRemove,
 
     DREAM_PT_AdvancedPresets,
     DREAM_MT_AdvancedPresets,
     AddAdvancedPreset,
 
     NotifyResult,
+
+    engine.DreamTexturesRenderEngineProperties,
+    engine.DreamTexturesRenderEngine,
+    engine.NewEngineNodeTree,
+    *engine.engine_panels(),
     
     # The order these are registered in matters
     *dream_texture.dream_texture_panels(),
@@ -44,15 +56,17 @@ CLASSES = (
 )
 
 PREFERENCE_CLASSES = (
-                      PREFERENCES_UL_ModelList,
-                      ModelSearch,
-                      InstallModel,
-                      Model,
-                      DreamPrompt,
-                      SeamlessResult,
-                      UninstallDependencies,
-                      InstallDependencies,
-                      OpenURL,
-                      ImportWeights,
-                      RestoreDefaultPresets,
-                      StableDiffusionPreferences)
+    PREFERENCES_UL_ModelList,
+    ModelSearch,
+    InstallModel,
+    Model,
+    ControlNet,
+    DreamPrompt,
+    SeamlessResult,
+    UninstallDependencies,
+    InstallDependencies,
+    OpenURL,
+    ImportWeights,
+    RestoreDefaultPresets,
+    StableDiffusionPreferences,
+)

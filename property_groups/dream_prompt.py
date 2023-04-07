@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty
+from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty, CollectionProperty
 import os
 import sys
 from typing import _AnnotatedAlias
@@ -10,6 +10,9 @@ from ..generator_process.actions.huggingface_hub import ModelType
 from ..prompt_engineering import *
 from ..preferences import StableDiffusionPreferences
 from .dream_prompt_validation import validate
+from .control_net import ControlNet
+
+import numpy as np
 
 from functools import reduce
 
@@ -59,6 +62,7 @@ seamless_axes = [
 def modify_action_source_type(self, context):
     return [
         ('color', 'Color', 'Use the color information from the image', 1),
+        None,
         ('depth_generated', 'Color and Generated Depth', 'Use MiDaS to infer the depth of the initial image and include it in the conditioning. Can give results that more closely match the composition of the source image', 2),
         ('depth_map', 'Color and Depth Map', 'Specify a secondary image to use as the depth map. Can give results that closely match the composition of the depth map', 3),
         ('depth', 'Depth', 'Treat the initial image as a depth map, and ignore any color. Matches the composition of the source image without any color influence', 4),
@@ -76,6 +80,8 @@ def model_options(self, context):
                 )
             models = {}
             for i, model in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models):
+                if model.model_type in {ModelType.CONTROL_NET.name, ModelType.UNKNOWN.name}:
+                    continue
                 if model.model_type not in models:
                     models[model.model_type] = [model_case(model, i)]
                 else:
@@ -104,7 +110,7 @@ def model_options(self, context):
 def pipeline_options(self, context):
     return [
         (Pipeline.STABLE_DIFFUSION.name, 'Stable Diffusion', 'Stable Diffusion on your own hardware', 1),
-        (Pipeline.STABILITY_SDK.name, 'DreamStudio', 'Cloud compute via DreamStudio', 2)
+        (Pipeline.STABILITY_SDK.name, 'DreamStudio', 'Cloud compute via DreamStudio', 2),
     ]
 
 def seed_clamp(self, ctx):
@@ -119,6 +125,9 @@ def seed_clamp(self, ctx):
 attributes = {
     "pipeline": EnumProperty(name="Pipeline", items=pipeline_options, default=1 if Pipeline.local_available() else 2, description="Specify which model and target should be used."),
     "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference"),
+    
+    "control_nets": CollectionProperty(type=ControlNet),
+    "active_control_net": IntProperty(name="Active ControlNet"),
 
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
@@ -293,6 +302,18 @@ def generate_args(self):
     args['seamless_axes'] = SeamlessAxes(args['seamless_axes'])
     args['width'] = args['width'] if args['use_size'] else None
     args['height'] = args['height'] if args['use_size'] else None
+
+    args['control_net'] = [net.control_net for net in args['control_nets']]
+    args['controlnet_conditioning_scale'] = [net.conditioning_scale for net in args['control_nets']]
+    args['control'] = [
+        np.flipud(
+            np.array(net.control_image.pixels)
+                .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
+        )
+        for net in args['control_nets']
+        if net.control_image is not None
+    ]
+    del args['control_nets']
     return args
 
 DreamPrompt.generate_prompt = generate_prompt

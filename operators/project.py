@@ -21,6 +21,8 @@ from ..generator_process.models import Pipeline, FixItError
 from ..generator_process.actions.huggingface_hub import ModelType
 import tempfile
 
+from ..engine.annotations.depth import render_depth_map
+
 framebuffer_arguments = [
     ('depth', 'Depth', 'Only provide the scene depth as input'),
     ('color', 'Depth and Color', 'Provide the scene depth and color as input'),
@@ -98,7 +100,6 @@ def dream_texture_projection_panels():
             if Pipeline[context.scene.dream_textures_project_prompt.pipeline].model():
                 layout.prop(context.scene.dream_textures_project_prompt, 'model')
 
-
     yield DREAM_PT_dream_panel_projection
 
     def get_prompt(context):
@@ -125,6 +126,12 @@ def dream_texture_projection_panels():
                     layout.prop(prompt, "strength")
                 
                 col = layout.column()
+                
+                col.prop(context.scene, "dream_textures_project_use_control_net")
+                if context.scene.dream_textures_project_use_control_net and len(prompt.control_nets) > 0:
+                    col.prop(prompt.control_nets[0], "control_net", text="Depth ControlNet")
+                    col.prop(prompt.control_nets[0], "conditioning_scale", text="ControlNet Conditioning Scale")
+
                 col.prop(context.scene, "dream_textures_project_bake")
                 if context.scene.dream_textures_project_bake:
                     for obj in context.selected_objects:
@@ -150,7 +157,7 @@ def dream_texture_projection_panels():
                 
                 # Validation
                 try:
-                    prompt.validate(context, task=ModelType.DEPTH)
+                    prompt.validate(context, task=None if context.scene.dream_textures_project_use_control_net else ModelType.DEPTH)
                     _validate_projection(context)
                 except FixItError as e:
                     error_box = layout.box()
@@ -162,36 +169,6 @@ def dream_texture_projection_panels():
                     print(e)
         return ActionsPanel
     yield create_panel('VIEW_3D', 'UI', DREAM_PT_dream_panel_projection.bl_idname, actions_panel, get_prompt)
-
-def draw_depth_map(width, height, context, matrix, projection_matrix):
-    """
-    Generate a depth map for the given matrices.
-    """
-    offscreen = gpu.types.GPUOffScreen(width, height)
-
-    with offscreen.bind():
-        fb = gpu.state.active_framebuffer_get()
-        fb.clear(color=(0.0, 0.0, 0.0, 0.0))
-        gpu.state.depth_test_set('LESS_EQUAL')
-        gpu.state.depth_mask_set(True)
-        with gpu.matrix.push_pop():
-            gpu.matrix.load_matrix(matrix)
-            gpu.matrix.load_projection_matrix(projection_matrix)
-
-            offscreen.draw_view3d(
-                context.scene,
-                context.view_layer,
-                context.space_data,
-                context.region,
-                matrix,
-                projection_matrix,
-                do_color_management=False
-            )
-        depth = np.array(fb.read_depth(0, 0, width, height).to_list())
-        depth = 1 - depth
-        depth = np.interp(depth, [np.ma.masked_equal(depth, 0, copy=False).min(), depth.max()], [0, 1]).clip(0, 1)
-    offscreen.free()
-    return depth
 
 def bake(context, mesh, src, dest, src_uv, dest_uv):
     def bake_shader():
@@ -258,7 +235,7 @@ class ProjectDreamTexture(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         try:
-            context.scene.dream_textures_project_prompt.validate(context, task=ModelType.DEPTH)
+            context.scene.dream_textures_project_prompt.validate(context, task=None if context.scene.dream_textures_project_use_control_net else ModelType.DEPTH)
             _validate_projection(context)
         except:
             return False
@@ -367,7 +344,15 @@ class ProjectDreamTexture(bpy.types.Operator):
 
         context.scene.dream_textures_info = "Rendering viewport depth..."
 
-        depth = draw_depth_map(region_width, region_height, context, context.space_data.region_3d.view_matrix, context.space_data.region_3d.window_matrix)
+        depth = render_depth_map(
+            context.evaluated_depsgraph_get(),
+            collection=None,
+            width=region_width,
+            height=region_height,
+            matrix=context.space_data.region_3d.view_matrix,
+            projection_matrix=context.space_data.region_3d.window_matrix,
+            main_thread=True
+        )
         
         gen = Generator.shared()
         
@@ -433,11 +418,20 @@ class ProjectDreamTexture(bpy.types.Operator):
             raise exception
         
         context.scene.dream_textures_info = "Starting..."
-        future = gen.depth_to_image(
-            depth=depth,
-            image=init_img_path,
-            **context.scene.dream_textures_project_prompt.generate_args()
-        )
+        if context.scene.dream_textures_project_use_control_net:
+            generated_args = context.scene.dream_textures_project_prompt.generate_args()
+            del generated_args['control']
+            future = gen.control_net(
+                control=[np.flipud(depth)], # the depth control needs to be flipped.
+                image=init_img_path,
+                **generated_args
+            )
+        else:
+            future = gen.depth_to_image(
+                depth=depth,
+                image=init_img_path,
+                **context.scene.dream_textures_project_prompt.generate_args()
+            )
         gen._active_generation_future = future
         future.call_done_on_exception = False
         future.add_response_callback(on_response)

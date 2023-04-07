@@ -130,7 +130,7 @@ class NodeFramePath(DreamTexturesNode):
 
     def execute(self, context, frame):
         return {
-            'Frame Path': context.depsgraph.scene.render.frame_path(frame=frame),
+            'Frame Path': context.depsgraph.scene.render.frame_path(frame=int(frame)),
         }
 
 class NodeCropImage(DreamTexturesNode):
@@ -244,7 +244,7 @@ class NodeSwitch(DreamTexturesNode):
 
     def execute(self, context, switch, false, true):
         return {
-            'Output': true if switch else false
+            'Output': true() if switch else false()
         }
 
 class NodeCompare(DreamTexturesNode):

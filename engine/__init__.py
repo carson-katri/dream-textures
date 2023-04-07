@@ -26,6 +26,7 @@ categories = [
         nodeitems_utils.NodeItem(NodeInteger.bl_idname),
         nodeitems_utils.NodeItem(NodeString.bl_idname),
         nodeitems_utils.NodeItem(NodeImage.bl_idname),
+        nodeitems_utils.NodeItem(NodeImageFile.bl_idname),
         nodeitems_utils.NodeItem(NodeCollection.bl_idname),
         nodeitems_utils.NodeItem(NodeRenderProperties.bl_idname),
     ]),
@@ -35,6 +36,11 @@ categories = [
         nodeitems_utils.NodeItem(NodeRandomSeed.bl_idname),
         nodeitems_utils.NodeItem(NodeSeed.bl_idname),
         nodeitems_utils.NodeItem(NodeClamp.bl_idname),
+        nodeitems_utils.NodeItem(NodeFramePath.bl_idname),
+        nodeitems_utils.NodeItem(NodeCropImage.bl_idname),
+        nodeitems_utils.NodeItem(NodeJoinImages.bl_idname),
+        nodeitems_utils.NodeItem(NodeSeparateColor.bl_idname),
+        nodeitems_utils.NodeItem(NodeCombineColor.bl_idname),
     ]),
     DreamTexturesNodeCategory("DREAM_TEXTURES_ANNOTATIONS", "Annotations", items = [
         nodeitems_utils.NodeItem(NodeAnnotationDepth.bl_idname),
@@ -79,6 +85,8 @@ def register():
     bpy.utils.register_class(NodeString)
     bpy.utils.register_class(NodeCollection)
     bpy.utils.register_class(NodeImage)
+    if bpy.app.version >= (3, 5, 0):
+        bpy.utils.register_class(NodeImageFile)
     bpy.utils.register_class(NodeRenderProperties)
     
     bpy.utils.register_class(NodeAnnotationDepth)
@@ -92,6 +100,11 @@ def register():
     bpy.utils.register_class(NodeRandomSeed)
     bpy.utils.register_class(NodeSeed)
     bpy.utils.register_class(NodeClamp)
+    bpy.utils.register_class(NodeFramePath)
+    bpy.utils.register_class(NodeCropImage)
+    bpy.utils.register_class(NodeJoinImages)
+    bpy.utils.register_class(NodeSeparateColor)
+    bpy.utils.register_class(NodeCombineColor)
 
     nodeitems_utils.register_node_categories("DREAM_TEXTURES_CATEGORIES", categories)
 
@@ -117,6 +130,8 @@ def unregister():
     bpy.utils.unregister_class(NodeString)
     bpy.utils.unregister_class(NodeCollection)
     bpy.utils.unregister_class(NodeImage)
+    if bpy.app.version >= (3, 5, 0):
+        bpy.utils.unregister_class(NodeImageFile)
     bpy.utils.unregister_class(NodeRenderProperties)
 
     bpy.utils.unregister_class(NodeAnnotationDepth)
@@ -130,5 +145,10 @@ def unregister():
     bpy.utils.unregister_class(NodeRandomSeed)
     bpy.utils.unregister_class(NodeSeed)
     bpy.utils.unregister_class(NodeClamp)
+    bpy.utils.unregister_class(NodeFramePath)
+    bpy.utils.unregister_class(NodeCropImage)
+    bpy.utils.unregister_class(NodeJoinImages)
+    bpy.utils.unregister_class(NodeSeparateColor)
+    bpy.utils.unregister_class(NodeCombineColor)
 
     nodeitems_utils.unregister_node_categories("DREAM_TEXTURES_CATEGORIES")

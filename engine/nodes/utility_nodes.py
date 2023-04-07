@@ -115,3 +115,124 @@ class NodeClamp(DreamTexturesNode):
         return {
             'Result': np.clip(value, min, max)
         }
+
+class NodeFramePath(DreamTexturesNode):
+    bl_idname = "dream_textures.node_frame_path"
+    bl_label = "Frame Path"
+
+    def init(self, context):
+        self.inputs.new("NodeSocketInt", "Frame")
+
+        self.outputs.new("NodeSocketString", "Frame Path")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context, frame):
+        return {
+            'Frame Path': bpy.context.scene.render.frame_path(frame=frame),
+        }
+
+class NodeCropImage(DreamTexturesNode):
+    bl_idname = "dream_textures.node_crop_image"
+    bl_label = "Crop Image"
+
+    def init(self, context):
+        self.inputs.new("NodeSocketColor", "Image")
+        self.inputs.new("NodeSocketInt", "X")
+        self.inputs.new("NodeSocketInt", "Y")
+        self.inputs.new("NodeSocketInt", "Width")
+        self.inputs.new("NodeSocketInt", "Height")
+
+        self.outputs.new("NodeSocketColor", "Cropped Image")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context, image, x, y, width, height):
+        result = image[y:y+height, x:x+width, ...]
+        context.update(result)
+        return {
+            'Cropped Image': result,
+        }
+
+class NodeJoinImages(DreamTexturesNode):
+    bl_idname = "dream_textures.node_join_images"
+    bl_label = "Join Images"
+
+    direction: bpy.props.EnumProperty(name="", items=(
+        ('horizontal', 'Horizontal', ''),
+        ('vertical', 'Vertical', ''),
+    ))
+
+    def init(self, context):
+        self.inputs.new("NodeSocketColor", "A")
+        self.inputs.new("NodeSocketColor", "B")
+
+        self.outputs.new("NodeSocketColor", "Joined Images")
+
+    def draw_buttons(self, context, layout):
+        layout.prop(self, "direction")
+
+    def execute(self, context, a, b):
+        width, height = context.depsgraph.scene.render.resolution_x, context.depsgraph.scene.render.resolution_y
+        if self.direction == 'horizontal':
+            width //= 2
+        else:
+            height //= 2
+        if len(np.shape(a)) < 2:
+            a = np.array(width * height * [a]).reshape((width, height, np.shape(a)[0]))
+        if len(np.shape(b)) < 2:
+            b = np.array(width * height * [b]).reshape((width, height, np.shape(b)[0]))
+        match self.direction:
+            case 'horizontal':
+                result = np.hstack([a, b])
+            case 'vertical':
+                result = np.vstack([a, b])
+        context.update(result)
+        return {
+            'Joined Images': result,
+        }
+
+class NodeSeparateColor(DreamTexturesNode):
+    bl_idname = "dream_textures.node_separate_color"
+    bl_label = "Separate Color"
+
+    def init(self, context):
+        self.inputs.new("NodeSocketColor", "Color")
+
+        self.outputs.new("NodeSocketFloat", "Red")
+        self.outputs.new("NodeSocketFloat", "Green")
+        self.outputs.new("NodeSocketFloat", "Blue")
+        self.outputs.new("NodeSocketFloat", "Alpha")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context, color):
+        return {
+            'Red': color[..., 0],
+            'Green': color[..., 1] if color.shape[-1] > 1 else 0,
+            'Blue': color[..., 2] if color.shape[-1] > 2 else 0,
+            'Alpha': color[..., 3] if color.shape[-1] > 3 else 0,
+        }
+
+class NodeCombineColor(DreamTexturesNode):
+    bl_idname = "dream_textures.node_combine_color"
+    bl_label = "Combine Color"
+
+    def init(self, context):
+        self.inputs.new("NodeSocketFloat", "Red")
+        self.inputs.new("NodeSocketFloat", "Green")
+        self.inputs.new("NodeSocketFloat", "Blue")
+        self.inputs.new("NodeSocketFloat", "Alpha")
+
+        self.outputs.new("NodeSocketColor", "Color")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context, red, green, blue, alpha):
+        return {
+            'Color': np.stack([red, green, blue, alpha], axis=-1)
+        }

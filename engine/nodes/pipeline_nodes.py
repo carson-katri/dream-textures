@@ -60,6 +60,7 @@ def _update_stable_diffusion_sockets(self, context):
     if self.task == 'depth_to_image':
         self.inputs['Noise Strength'].default_value = 1.0
     self.inputs['Depth Map'].enabled = self.task == 'depth_to_image'
+    self.inputs['Mask Image'].enabled = self.task == 'inpaint'
     self.inputs['ControlNets'].enabled = self.task != 'depth_to_image'
 class NodeStableDiffusion(DreamTexturesNode):
     bl_idname = "dream_textures.node_stable_diffusion"
@@ -70,11 +71,13 @@ class NodeStableDiffusion(DreamTexturesNode):
         ('prompt_to_image', 'Prompt to Image', '', 1),
         ('image_to_image', 'Image to Image', '', 2),
         ('depth_to_image', 'Depth to Image', '', 3),
+        ('inpaint', 'Inpaint', '', 4),
     ), update=_update_stable_diffusion_sockets)
 
     def init(self, context):
         self.inputs.new("NodeSocketColor", "Depth Map")
         self.inputs.new("NodeSocketColor", "Source Image")
+        self.inputs.new("NodeSocketColor", "Mask Image")
         self.inputs.new("NodeSocketFloat", "Noise Strength").default_value = 0.75
 
         self.inputs.new("NodeSocketString", "Prompt")

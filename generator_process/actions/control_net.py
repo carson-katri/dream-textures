@@ -357,7 +357,10 @@ def control_net(
                             if do_classifier_free_guidance and (i / len(timesteps)) >= kwargs['cfg_end']:
                                 do_classifier_free_guidance = False
                                 prompt_embeds = prompt_embeds[prompt_embeds.size(0) // 2:]
-                                image = [i[None, 0] for i in image]
+                                image = [i[i.size(0) // 2:] for i in image]
+                                if mask is not None:
+                                    mask = mask[mask.size(0) // 2:]
+                                    masked_image_latents = masked_image_latents[masked_image_latents.size(0) // 2:]
                             # expand the latents if we are doing classifier free guidance
                             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                             latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)

@@ -156,6 +156,28 @@ class NodeCropImage(DreamTexturesNode):
             'Cropped Image': result,
         }
 
+class NodeResizeImage(DreamTexturesNode):
+    bl_idname = "dream_textures.node_resize_image"
+    bl_label = "Resize Image"
+
+    def init(self, context):
+        self.inputs.new("NodeSocketColor", "Image")
+        self.inputs.new("NodeSocketInt", "Width")
+        self.inputs.new("NodeSocketInt", "Height")
+
+        self.outputs.new("NodeSocketColor", "Resized Image")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context, image, width, height):
+        import OpenImageIO as oiio
+        result = oiio.ImageBufAlgo.resize(oiio.ImageBuf(image), roi=oiio.ROI(0, width, 0, height)).get_pixels()
+        context.update(result)
+        return {
+            'Resized Image': result,
+        }
+
 class NodeJoinImages(DreamTexturesNode):
     bl_idname = "dream_textures.node_join_images"
     bl_label = "Join Images"

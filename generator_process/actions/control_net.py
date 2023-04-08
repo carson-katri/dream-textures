@@ -354,9 +354,9 @@ def control_net(
                     with self.progress_bar(total=num_inference_steps) as progress_bar:
                         for i, t in enumerate(timesteps):
                             # NOTE: Modified to support disabling CFG
-                            if (i / len(timesteps)) >= kwargs['cfg_end']:
+                            if do_classifier_free_guidance and (i / len(timesteps)) >= kwargs['cfg_end']:
                                 do_classifier_free_guidance = False
-                                prompt_embeds = prompt_embeds[None, 0]
+                                prompt_embeds = prompt_embeds[prompt_embeds.size(0) // 2:]
                                 image = [i[None, 0] for i in image]
                             # expand the latents if we are doing classifier free guidance
                             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents

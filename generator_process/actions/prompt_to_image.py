@@ -543,9 +543,9 @@ def prompt_to_image(
                     # 7. Denoising loop
                     for i, t in enumerate(self.progress_bar(timesteps)):
                         # NOTE: Modified to support disabling CFG
-                        if (i / len(timesteps)) >= kwargs['cfg_end']:
+                        if do_classifier_free_guidance and (i / len(timesteps)) >= kwargs['cfg_end']:
                             do_classifier_free_guidance = False
-                            text_embeddings = text_embeddings[None, 0]
+                            text_embeddings = text_embeddings[text_embeddings.size(0) // 2:]
 
                         # expand the latents if we are doing classifier free guidance
                         latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents

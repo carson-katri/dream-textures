@@ -150,6 +150,8 @@ class NodeCropImage(DreamTexturesNode):
         pass
 
     def execute(self, context, image, x, y, width, height):
+        x, y = int(x), int(y)
+        width, height = int(width), int(height)
         result = image[y:y+height, x:x+width, ...]
         context.update(result)
         return {
@@ -172,7 +174,7 @@ class NodeResizeImage(DreamTexturesNode):
 
     def execute(self, context, image, width, height):
         import OpenImageIO as oiio
-        result = oiio.ImageBufAlgo.resize(oiio.ImageBuf(image), roi=oiio.ROI(0, width, 0, height)).get_pixels()
+        result = oiio.ImageBufAlgo.resize(oiio.ImageBuf(image), roi=oiio.ROI(0, int(width), 0, int(height))).get_pixels()
         context.update(result)
         return {
             'Resized Image': result,

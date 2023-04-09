@@ -252,6 +252,43 @@ class NodeCombineColor(DreamTexturesNode):
             'Color': np.stack([red, green, blue, alpha], axis=-1)
         }
 
+class NodeColorCorrect(DreamTexturesNode):
+    bl_idname = "dream_textures.node_color_correct"
+    bl_label = "Color Correct"
+
+    mode: bpy.props.EnumProperty(name="Mode", items=(
+        ('histogram', 'Match Histograms', ''),
+    ))
+
+    def init(self, context):
+        self.inputs.new("NodeSocketColor", "Image")
+        self.inputs.new("NodeSocketColor", "Target")
+
+        self.outputs.new("NodeSocketColor", "Image")
+
+    def draw_buttons(self, context, layout):
+        layout.prop(self, "mode", text="")
+
+    def execute(self, context, image, target):
+        match self.mode:
+            case 'histogram':
+                flat_image = image.ravel()
+                flat_target = target.ravel()
+
+                _, image_indices, image_counts = np.unique(flat_image, return_inverse=True, return_counts=True)
+                target_values, target_counts = np.unique(flat_target, return_counts=True)
+                
+                image_quantiles = np.cumsum(image_counts).astype(np.float64)
+                image_quantiles /= image_quantiles[-1]
+                
+                target_quantiles = np.cumsum(target_counts).astype(np.float64)
+                target_quantiles /= target_quantiles[-1]
+
+                result = np.interp(image_quantiles, target_quantiles, target_values)[image_indices].reshape(image.shape)
+        return {
+            'Image': result
+        }
+
 class NodeSwitch(DreamTexturesNode):
     bl_idname = "dream_textures.node_switch"
     bl_label = "Switch"

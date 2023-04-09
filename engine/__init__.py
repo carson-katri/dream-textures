@@ -40,6 +40,7 @@ categories = [
         nodeitems_utils.NodeItem(NodeCropImage.bl_idname),
         nodeitems_utils.NodeItem(NodeResizeImage.bl_idname),
         nodeitems_utils.NodeItem(NodeJoinImages.bl_idname),
+        nodeitems_utils.NodeItem(NodeColorCorrect.bl_idname),
         nodeitems_utils.NodeItem(NodeSeparateColor.bl_idname),
         nodeitems_utils.NodeItem(NodeCombineColor.bl_idname),
         nodeitems_utils.NodeItem(NodeSwitch.bl_idname),
@@ -107,6 +108,7 @@ def register():
     if bpy.app.version >= (3, 5, 0):
         bpy.utils.register_class(NodeResizeImage)
     bpy.utils.register_class(NodeJoinImages)
+    bpy.utils.register_class(NodeColorCorrect)
     bpy.utils.register_class(NodeSeparateColor)
     bpy.utils.register_class(NodeCombineColor)
     bpy.utils.register_class(NodeSwitch)
@@ -156,6 +158,7 @@ def unregister():
     if bpy.app.version >= (3, 5, 0):
         bpy.utils.unregister_class(NodeResizeImage)
     bpy.utils.unregister_class(NodeJoinImages)
+    bpy.utils.unregister_class(NodeColorCorrect)
     bpy.utils.unregister_class(NodeSeparateColor)
     bpy.utils.unregister_class(NodeCombineColor)
     bpy.utils.unregister_class(NodeSwitch)

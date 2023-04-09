@@ -127,7 +127,7 @@ class NodeStableDiffusion(DreamTexturesNode):
                 control=[c.control(context.depsgraph) for c in controlnets],
                 controlnet_conditioning_scale=[c.conditioning_scale for c in controlnets],
 
-                image=np.uint8(source_image * 255) if self.task == 'image_to_image' or self.task == 'inpaint' else None,
+                image=np.flipud(np.uint8(source_image * 255)) if self.task in {'image_to_image', 'inpaint'} else None,
                 strength=noise_strength,
 
                 inpaint=self.task == 'inpaint',
@@ -174,7 +174,7 @@ class NodeStableDiffusion(DreamTexturesNode):
                         iterations=args['iterations'],
                         step_preview_mode=args['step_preview_mode'],
                         
-                        image=np.uint8(source_image * 255),
+                        image=np.flipud(np.uint8(source_image * 255)),
                         strength=noise_strength,
                         fit=True,
 
@@ -198,7 +198,7 @@ class NodeStableDiffusion(DreamTexturesNode):
                         step_preview_mode=args['step_preview_mode'],
                         
                         depth=depth_map,
-                        image=np.uint8(source_image * 255) if source_image is not None else None,
+                        image=np.flipud(np.uint8(source_image * 255)) if source_image is not None else None,
                         strength=noise_strength,
 
                         prompt=prompt,
@@ -220,7 +220,7 @@ class NodeStableDiffusion(DreamTexturesNode):
                         iterations=args['iterations'],
                         step_preview_mode=args['step_preview_mode'],
                         
-                        image=np.uint8(source_image * 255),
+                        image=np.flipud(np.uint8(source_image * 255)),
                         strength=noise_strength,
 
                         fit=args['fit'],

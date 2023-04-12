@@ -143,6 +143,12 @@ def inpaint(
                     num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
                     with self.progress_bar(total=num_inference_steps) as progress_bar:
                         for i, t in enumerate(timesteps):
+                            # NOTE: Modified to support disabling CFG
+                            if do_classifier_free_guidance and (i / len(timesteps)) >= kwargs['cfg_end']:
+                                do_classifier_free_guidance = False
+                                text_embeddings = text_embeddings[text_embeddings.size(0) // 2:]
+                                mask = mask[mask.size(0) // 2:]
+                                masked_image_latents = masked_image_latents[masked_image_latents.size(0) // 2:]
                             # expand the latents if we are doing classifier free guidance
                             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
 
@@ -248,7 +254,8 @@ def inpaint(
                     return_dict=True,
                     callback=None,
                     callback_steps=1,
-                    step_preview_mode=step_preview_mode
+                    step_preview_mode=step_preview_mode,
+                    cfg_end=optimizations.cfg_end
                 )
         case Pipeline.STABILITY_SDK:
             import stability_sdk.client

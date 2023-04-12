@@ -10,6 +10,7 @@ from ..prompt_engineering import *
 from ..generator_process import Generator
 from ..generator_process.actions.prompt_to_image import ImageGenerationResult, Pipeline
 from ..generator_process.actions.huggingface_hub import ModelType
+import time
 
 def bpy_image(name, width, height, pixels, existing_image):
     if existing_image is not None and (existing_image.size[0] != width or existing_image.size[1] != height):
@@ -89,8 +90,10 @@ class DreamTexture(bpy.types.Operator):
         scene.dream_textures_info = "Starting..."
 
         last_data_block = None
+        execution_start = time.time()
         def step_callback(_, step_image: ImageGenerationResult):
             nonlocal last_data_block
+            scene.dream_textures_last_execution_time = f"{time.time() - execution_start:.2f} seconds"
             if step_image.final:
                 return
             scene.dream_textures_progress = step_image.step

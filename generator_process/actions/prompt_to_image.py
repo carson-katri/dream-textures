@@ -160,6 +160,7 @@ class Optimizations:
     vae_tiling: str = "off"
     vae_tile_size: int = 512
     vae_tile_blend: int = 64
+    cfg_end: float = 1.0
 
     cpu_only: bool = False
 
@@ -541,6 +542,11 @@ def prompt_to_image(
 
                     # 7. Denoising loop
                     for i, t in enumerate(self.progress_bar(timesteps)):
+                        # NOTE: Modified to support disabling CFG
+                        if do_classifier_free_guidance and (i / len(timesteps)) >= kwargs['cfg_end']:
+                            do_classifier_free_guidance = False
+                            text_embeddings = text_embeddings[text_embeddings.size(0) // 2:]
+
                         # expand the latents if we are doing classifier free guidance
                         latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
                         latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
@@ -621,7 +627,8 @@ def prompt_to_image(
                     return_dict=True,
                     callback=None,
                     callback_steps=1,
-                    step_preview_mode=step_preview_mode
+                    step_preview_mode=step_preview_mode,
+                    cfg_end=optimizations.cfg_end
                 )
         case Pipeline.STABILITY_SDK:
             import stability_sdk.client

@@ -1,6 +1,7 @@
 import bpy
 import gpu
 from gpu_extras.batch import batch_for_shader
+import bmesh
 import numpy as np
 import threading
 
@@ -16,9 +17,12 @@ def render_normal_map(context, collection=None, width=None, height=None, matrix=
         y=height
     )
 
-    def normals_shader():
+    def normals_shader(smooth):
         vert_out = gpu.types.GPUStageInterfaceInfo("my_interface")
-        vert_out.smooth('VEC3', "color")
+        if smooth:
+            vert_out.smooth('VEC3', "color")
+        else:
+            vert_out.flat('VEC3', "color")
 
         shader_info = gpu.types.GPUShaderCreateInfo()
         shader_info.push_constant('MAT4', "ModelViewProjectionMatrix")
@@ -32,15 +36,15 @@ def render_normal_map(context, collection=None, width=None, height=None, matrix=
 void main()
 {
     gl_Position = ModelViewProjectionMatrix * vec4(position, 1.0f);
-    color = normalize(mat3(ModelViewMatrix) * vec3(normal.y, normal.x, normal.z));
+    color = normalize(mat3(ModelViewMatrix) * normal);
 }
 """)
 
         shader_info.fragment_source("""
 void main()
 {
-    // fragColor = vec4(color.b, color.g, color.r, color.a);
-    fragColor = vec4((color + 1) / 2, 1.0f);
+    vec4 c = vec4((color + 1) / 2, 1.0f);
+    fragColor = vec4(1 - c.r, c.g, c.b, c.a);
 }
 """)
 
@@ -58,29 +62,40 @@ void main()
             with gpu.matrix.push_pop():
                 gpu.matrix.load_matrix(matrix)
                 gpu.matrix.load_projection_matrix(projection_matrix)
-                
-                shader = normals_shader()
-                shader.uniform_float("ModelViewMatrix", gpu.matrix.get_model_view_matrix())
-                shader.bind()
 
                 def render_mesh(mesh, transform):
+                    smooth_shader = normals_shader(smooth=True)
+                    smooth_shader.uniform_float("ModelViewMatrix", gpu.matrix.get_model_view_matrix())
+                    flat_shader = normals_shader(smooth=False)
+                    flat_shader.uniform_float("ModelViewMatrix", gpu.matrix.get_model_view_matrix())
                     mesh.transform(transform)
-                    mesh.calc_loop_triangles()
-                    mesh.calc_normals()
-                    vertices = np.empty((len(mesh.vertices), 3), 'f')
-                    normals = np.empty((len(mesh.vertices), 3), 'f')
-                    indices = np.empty((len(mesh.loop_triangles), 3), 'i')
-
-                    mesh.vertices.foreach_get("co", np.reshape(vertices, len(mesh.vertices) * 3))
-                    mesh.vertices.foreach_get("normal", np.reshape(normals, len(mesh.vertices) * 3))
-                    mesh.loop_triangles.foreach_get("vertices", np.reshape(indices, len(mesh.loop_triangles) * 3))
                     
-                    batch = batch_for_shader(
-                        shader, 'TRIS',
-                        {"position": vertices, "normal": normals},
-                        indices=indices,
-                    )
-                    batch.draw(shader)
+                    bm = bmesh.new()
+                    bm.from_mesh(mesh)
+                    
+                    smooth_mesh = bm.copy()
+                    flat_mesh = bm.copy()
+                    bmesh.ops.delete(smooth_mesh, geom=[f for f in smooth_mesh.faces if not f.smooth], context='FACES')
+                    bmesh.ops.delete(flat_mesh, geom=[f for f in flat_mesh.faces if f.smooth], context='FACES')
+
+                    def draw(mesh, smooth):
+                        vertices = [v.co for v in mesh.verts]
+                        normals = [v.normal for v in mesh.verts]
+                        indices = [[loop.vert.index for loop in looptris] for looptris in mesh.calc_loop_triangles()]
+                        
+                        shader = smooth_shader if smooth else flat_shader
+                        shader.bind()
+                        batch = batch_for_shader(
+                            shader, 'TRIS',
+                            {"position": vertices, "normal": normals},
+                            indices=indices,
+                        )
+                        batch.draw(shader)
+                    
+                    if len(smooth_mesh.verts) > 0:
+                        draw(smooth_mesh, smooth=True)
+                    if len(flat_mesh.verts) > 0:
+                        draw(flat_mesh, smooth=False)
                 if collection is None:
                     for object in context.object_instances:
                         try:

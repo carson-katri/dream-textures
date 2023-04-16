@@ -258,6 +258,7 @@ def control_net(
                             device=device,
                             dtype=self.controlnet.dtype,
                             do_classifier_free_guidance=do_classifier_free_guidance,
+                            guess_mode=False
                         )
                     elif isinstance(self.controlnet, MultiControlNetModel):
                         images = []
@@ -272,6 +273,7 @@ def control_net(
                                 device=device,
                                 dtype=self.controlnet.dtype,
                                 do_classifier_free_guidance=do_classifier_free_guidance,
+                                guess_mode=False
                             )
 
                             images.append(image_)

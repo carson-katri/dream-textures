@@ -1,9 +1,11 @@
 import bpy
 from ..node import DreamTexturesNode
 from ..annotations import depth
+from ..annotations import normal
 from ..annotations import openpose
 from ..annotations import ade20k
 from ..annotations import viewport
+import numpy as np
 
 annotation_src = (
     ('collection', 'Collection', 'Render the annotation for a specific collection'),
@@ -33,6 +35,27 @@ class NodeAnnotationDepth(DreamTexturesNode):
         context.update(depth_map)
         return {
             'Depth Map': depth_map,
+        }
+
+class NodeAnnotationNormal(DreamTexturesNode):
+    bl_idname = "dream_textures.node_annotation_normal"
+    bl_label = "Normal Map"
+
+    src: bpy.props.EnumProperty(name="", items=annotation_src, update=_update_annotation_inputs)
+
+    def init(self, context):
+        self.inputs.new("NodeSocketCollection", "Collection")
+
+        self.outputs.new("NodeSocketColor", "Normal Map")
+
+    def draw_buttons(self, context, layout):
+        layout.prop(self, "src")
+
+    def execute(self, context, collection):
+        normal_map = normal.render_normal_map(context.depsgraph, collection=collection if self.src == 'collection' else None)
+        context.update(normal_map)
+        return {
+            'Normal Map': normal_map,
         }
 
 class NodeAnnotationOpenPose(DreamTexturesNode):

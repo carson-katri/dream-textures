@@ -424,6 +424,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             future = gen.control_net(
                 control=[np.flipud(depth)], # the depth control needs to be flipped.
                 image=init_img_path,
+                inpaint=False,
                 **generated_args
             )
         else:

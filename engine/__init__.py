@@ -38,6 +38,7 @@ categories = [
     ]),
     DreamTexturesNodeCategory("DREAM_TEXTURES_ANNOTATIONS", "Annotations", items = [
         nodeitems_utils.NodeItem(NodeAnnotationDepth.bl_idname),
+        nodeitems_utils.NodeItem(NodeAnnotationNormal.bl_idname),
         nodeitems_utils.NodeItem(NodeAnnotationOpenPose.bl_idname),
         nodeitems_utils.NodeItem(NodeAnnotationADE20K.bl_idname),
         nodeitems_utils.NodeItem(NodeAnnotationViewport.bl_idname),
@@ -81,6 +82,7 @@ def register():
     bpy.utils.register_class(NodeRenderProperties)
     
     bpy.utils.register_class(NodeAnnotationDepth)
+    bpy.utils.register_class(NodeAnnotationNormal)
     bpy.utils.register_class(NodeAnnotationOpenPose)
     bpy.utils.register_class(NodeAnnotationADE20K)
     bpy.utils.register_class(NodeAnnotationViewport)
@@ -118,6 +120,7 @@ def unregister():
     bpy.utils.unregister_class(NodeRenderProperties)
 
     bpy.utils.unregister_class(NodeAnnotationDepth)
+    bpy.utils.unregister_class(NodeAnnotationNormal)
     bpy.utils.unregister_class(NodeAnnotationOpenPose)
     bpy.utils.unregister_class(NodeAnnotationADE20K)
     bpy.utils.unregister_class(NodeAnnotationViewport)

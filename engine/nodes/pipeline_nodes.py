@@ -9,6 +9,7 @@ from ...property_groups.control_net import control_net_options
 from ...property_groups.dream_prompt import DreamPrompt
 from ..annotations import openpose
 from ..annotations import depth
+from ..annotations import normal
 from ..annotations import ade20k
 import threading
 
@@ -49,7 +50,7 @@ class ControlNet:
                 case ControlType.OPENPOSE:
                     return np.flipud(openpose.render_openpose_map(context, collection=self.collection))
                 case ControlType.NORMAL:
-                    pass
+                    return np.flipud(normal.render_normal_map(context, collection=self.collection))
                 case ControlType.ADE20K_SEGMENTATION:
                     return np.flipud(ade20k.render_ade20k_map(context, collection=self.collection))
 
@@ -126,8 +127,13 @@ class NodeStableDiffusion(DreamTexturesNode):
                 control=[c.control(context.depsgraph) for c in controlnets],
                 controlnet_conditioning_scale=[c.conditioning_scale for c in controlnets],
 
-                image=np.uint8(source_image * 255) if self.task == 'image_to_image' else None,
+                image=np.flipud(np.uint8(source_image * 255)) if self.task in {'image_to_image', 'inpaint'} else None,
                 strength=noise_strength,
+
+                inpaint=self.task == 'inpaint',
+                inpaint_mask_src='alpha',
+                text_mask='',
+                text_mask_confidence=1,
 
                 prompt=prompt,
                 steps=steps,

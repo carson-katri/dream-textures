@@ -111,9 +111,9 @@ class NodeStableDiffusion(DreamTexturesNode):
 
         shared_args = context.depsgraph.scene.dream_textures_engine_prompt.generate_args()
 
-        # the source image is a default color, turn it into an image.
+        # the source image is a default color, ignore it.
         if np.array(source_image).shape == (4,):
-            source_image = np.tile(source_image, (512, 512, 1))
+            source_image = None
         
         if controlnets is not None:
             if not isinstance(controlnets, list):

@@ -110,6 +110,10 @@ class NodeStableDiffusion(DreamTexturesNode):
         args = self.prompt.generate_args()
 
         shared_args = context.depsgraph.scene.dream_textures_engine_prompt.generate_args()
+
+        # the source image is a default color, turn it into an image.
+        if np.array(source_image).shape == (4,):
+            source_image = np.tile(source_image, (512, 512, 1))
         
         if controlnets is not None:
             if not isinstance(controlnets, list):
@@ -212,6 +216,7 @@ class NodeStableDiffusion(DreamTexturesNode):
                     )
         event = threading.Event()
         result = None
+        exception = None
         def on_response(_, response):
             context.update(response.images[0])
             if context.test_break():
@@ -225,9 +230,17 @@ class NodeStableDiffusion(DreamTexturesNode):
             result = future.result()
             event.set()
         
+        def on_exception(_, error):
+            nonlocal exception
+            exception = error
+            event.set()
+        
         future.add_response_callback(on_response)
         future.add_done_callback(on_done)
+        future.add_exception_callback(on_exception)
         event.wait()
+        if exception is not None:
+            raise exception
         return {
             'Image': result[-1].images[-1]
         }

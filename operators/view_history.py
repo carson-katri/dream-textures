@@ -12,7 +12,7 @@ class SCENE_UL_HistoryList(bpy.types.UIList):
             layout.label(text=f"{item.seed}", translate=False)
             layout.label(text=f"{item.width}x{item.height}", translate=False)
             layout.label(text=f"{item.steps} steps", translate=False)
-            layout.label(text=next(x for x in scheduler_options if x[0] == item.scheduler)[1], translate=False)
+            layout.label(text=item.scheduler, translate=False)
         elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)

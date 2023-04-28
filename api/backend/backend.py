@@ -8,7 +8,7 @@ try:
     from ..models.seamless_axes import SeamlessAxes
     from ..models.step_preview_mode import StepPreviewMode
 
-    StepCallback = Callable[[GenerationResult], None]
+    StepCallback = Callable[[List[GenerationResult]], None]
     Callback = Callable[[List[GenerationResult] | Exception], None]
 
     class Backend(bpy.types.PropertyGroup):

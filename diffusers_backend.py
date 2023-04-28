@@ -109,7 +109,7 @@ class DiffusersBackend(Backend):
         gen = Generator.shared()
         common_kwargs = {
             'model': model.id,
-            'scheduler': Scheduler[scheduler],
+            'scheduler': Scheduler(scheduler),
             'optimizations': self.optimizations(),
             'prompt': prompt.positive,
             'steps': steps,
@@ -120,12 +120,16 @@ class DiffusersBackend(Backend):
             'use_negative_prompt': prompt.negative is not None,
             'negative_prompt': prompt.negative or "",
             'seamless_axes': seamless_axes,
-            'iterations': 1,
+            'iterations': iterations,
             'step_preview_mode': step_preview_mode,
         }
         future: Future
         match task:
             case PromptToImage():
+                print(common_kwargs)
+                import pickle
+                del common_kwargs['optimizations'].__annotations__
+                print(pickle.dumps(common_kwargs))
                 future = gen.prompt_to_image(**common_kwargs)
             case ImageToImage(image=image, strength=strength, fit=fit):
                 future = gen.image_to_image(image=image, fit=fit, strength=strength, **common_kwargs)
@@ -157,11 +161,14 @@ class DiffusersBackend(Backend):
             case _:
                 raise NotImplementedError()
         def on_step(_, step_image: ImageGenerationResult):
-            step_callback(GenerationResult(image=step_image.images[-1], seed=step_image.seeds[-1]))
+            step_callback([
+                GenerationResult(image=step_image.images[i], seed=step_image.seeds[i], step=step_image.step)
+                for i in range(len(step_image.images))
+            ])
         def on_done(future: Future):
             result: ImageGenerationResult = future.result(last_only=True)
             callback([
-                GenerationResult(image=result.images[i], seed=result.seeds[i])
+                GenerationResult(image=result.images[i], seed=result.seeds[i], step=result.step)
                 for i in range(len(result.images))
             ])
         def on_exception(_, exception):

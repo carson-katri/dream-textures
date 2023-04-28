@@ -211,32 +211,103 @@ def get_optimizations(self: DreamPrompt):
         optimizations.attention_slice_size = 'auto'
     return optimizations
 
-def generate_args(self):
-    args = { key: getattr(self, key) for key in DreamPrompt.__annotations__ }
-    if not args['use_negative_prompt']:
-        args['negative_prompt'] = None
-    args['prompt'] = self.generate_prompt()
-    args['seed'] = self.get_seed()
-    args['optimizations'] = self.get_optimizations()
-    args['scheduler'] = Scheduler(args['scheduler'])
-    args['step_preview_mode'] = StepPreviewMode(args['step_preview_mode'])
-    args['outpaint_origin'] = (args['outpaint_origin'][0], args['outpaint_origin'][1])
-    args['key'] = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key
-    args['seamless_axes'] = SeamlessAxes(args['seamless_axes'])
-    args['width'] = args['width'] if args['use_size'] else None
-    args['height'] = args['height'] if args['use_size'] else None
+def generate_args(self, context, iteration=0):
+    is_file_batch = self.prompt_structure == file_batch_structure.id
+    file_batch_lines = []
+    file_batch_lines_negative = []
+    if is_file_batch:
+        file_batch_lines = [line.body for line in context.scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
+        file_batch_lines_negative = [""] * len(file_batch_lines)
 
-    args['control_net'] = [net.control_net for net in args['control_nets']]
-    args['controlnet_conditioning_scale'] = [net.conditioning_scale for net in args['control_nets']]
-    args['control'] = [
-        np.flipud(
-            np.array(net.control_image.pixels)
-                .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
-        )
-        for net in args['control_nets']
-        if net.control_image is not None
-    ]
-    del args['control_nets']
+    optim: Optimizations = self.get_optimizations()
+    iteration_limit = len(file_batch_lines) if is_file_batch else self.iterations
+    batch_size = min(optim.batch_size, iteration_limit-iteration)
+
+    task: api.Task = api.PromptToImage()
+    if self.use_init_img:
+        init_image = None
+        match self.init_img_src:
+            case 'file':
+                init_image = context.scene.init_img
+            case 'open_editor':
+                for area in context.screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        if area.spaces.active.image is not None:
+                            init_image = area.spaces.active.image
+        if init_image is not None:
+            init_image = np.flipud(
+                (np.array(init_image.pixels) * 255)
+                    .astype(np.uint8)
+                    .reshape((init_image.size[1], init_image.size[0], init_image.channels))
+            )
+        match self.init_img_action:
+            case 'modify':
+                match self.modify_action_source_type:
+                    case 'color':
+                        task = api.ImageToImage(
+                            image=init_image,
+                            strength=self.strength,
+                            fit=self.fit
+                        )
+                    case 'depth_generated':
+                        task = api.DepthToImage(
+                            depth=None,
+                            image=init_image,
+                            strength=self.strength
+                        )
+                    case 'depth_map':
+                        task = api.DepthToImage(
+                            depth=np.array(context.scene.init_depth.pixels)
+                                .astype(np.float32)
+                                .reshape((scene.init_depth.size[1], scene.init_depth.size[0], scene.init_depth.channels)),
+                            image=init_image,
+                            strength=self.strength
+                        )
+                    case 'depth':
+                        task = api.DepthToImage(
+                            image=None,
+                            depth=np.flipud(init_image.astype(np.float32) / 255.),
+                            strength=self.strength
+                        )
+            case 'inpaint':
+                task = api.Inpaint(
+                    image=init_image,
+                    strength=self.strength,
+                    fit=self.fit,
+                    mask_source=api.Inpaint.MaskSource.ALPHA if self.inpaint_mask_src == 'alpha' else api.Inpaint.MaskSource.PROMPT,
+                    mask_prompt=self.text_mask,
+                    confidence=self.text_mask_confidence
+                )
+            case 'outpaint':
+                task = api.Outpaint(
+                    image=init_image,
+                    origin=(self.outpaint_origin[0], self.outpaint_origin[1])
+                )
+
+    args = {
+        'task': task,
+        'model': next(model for model in self.get_backend().list_models(context) if model is not None and model.id == self.model),
+        'prompt': api.Prompt(
+            file_batch_lines[iteration:iteration+batch_size] if is_file_batch else [self.generate_prompt()] * batch_size,
+            file_batch_lines_negative[iteration:iteration+batch_size] if is_file_batch else ([self.negative_prompt] * batch_size if self.use_negative_prompt else None)
+        ),
+        'size': (self.width, self.height) if self.use_size else None,
+        'seed': self.get_seed(),
+        'steps': self.steps,
+        'guidance_scale': self.cfg_scale,
+        'scheduler': self.scheduler,
+        'seamless_axes': SeamlessAxes(self.seamless_axes),
+        'step_preview_mode': StepPreviewMode(self.step_preview_mode),
+        'iterations': self.iterations
+    }
+    # args['control'] = [
+    #     np.flipud(
+    #         np.array(net.control_image.pixels)
+    #             .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
+    #     )
+    #     for net in args['control_nets']
+    #     if net.control_image is not None
+    # ]
     return args
 
 def get_backend(self) -> api.Backend:

@@ -11,7 +11,6 @@ from .operators.install_dependencies import InstallDependencies, UninstallDepend
 from .operators.open_latest_version import OpenLatestVersion
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
 from .generator_process import Generator
-from .generator_process.actions.prompt_to_image import Pipeline
 from .generator_process.actions.huggingface_hub import DownloadStatus, ModelType
 from .generator_process.actions.convert_original_stable_diffusion_to_diffusers import ModelConfig
 
@@ -185,10 +184,9 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
     @staticmethod
     def register():
-        if Pipeline.local_available():
-            def on_done(future):
-                set_model_list('installed_models', future.result())
-            Generator.shared().hf_list_installed_models().add_done_callback(on_done)
+        def on_done(future):
+            set_model_list('installed_models', future.result())
+        Generator.shared().hf_list_installed_models().add_done_callback(on_done)
 
     def draw(self, context):
         layout = self.layout
@@ -200,62 +198,52 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
         has_dependencies = len(os.listdir(absolute_path(".python_dependencies"))) > 2
         if has_dependencies:
-            has_local = Pipeline.local_available()
-
-            if has_local:
-                if not _template_model_download_progress(context, layout):
-                    conflicting_packages = ["wandb", "k_diffusion"]
-                    conflicting_package_specs = {}
+            if not _template_model_download_progress(context, layout):
+                conflicting_packages = ["wandb", "k_diffusion"]
+                conflicting_package_specs = {}
+                for package in conflicting_packages:
+                    spec = importlib.util.find_spec(package)
+                    if spec is not None:
+                        conflicting_package_specs[package] = spec
+                if len(conflicting_package_specs) > 0:
+                    conflicts_box = layout.box()
+                    conflicts_box.label(text="WARNING", icon="ERROR")
+                    conflicts_box.label(text=f"The following packages conflict with Dream Textures: {', '.join(conflicting_packages)}")
+                    conflicts_box.label(text=f"You may need to run Blender as an administrator to remove these packages")
+                    conflicts_box.operator(UninstallDependencies.bl_idname, text="Uninstall Conflicting Packages", icon="CANCEL").conflicts = ' '.join(conflicting_packages)
+                    conflicts_box.label(text=f"If the button above fails, you can remove the following folders manually:")
                     for package in conflicting_packages:
-                        spec = importlib.util.find_spec(package)
-                        if spec is not None:
-                            conflicting_package_specs[package] = spec
-                    if len(conflicting_package_specs) > 0:
-                        conflicts_box = layout.box()
-                        conflicts_box.label(text="WARNING", icon="ERROR")
-                        conflicts_box.label(text=f"The following packages conflict with Dream Textures: {', '.join(conflicting_packages)}")
-                        conflicts_box.label(text=f"You may need to run Blender as an administrator to remove these packages")
-                        conflicts_box.operator(UninstallDependencies.bl_idname, text="Uninstall Conflicting Packages", icon="CANCEL").conflicts = ' '.join(conflicting_packages)
-                        conflicts_box.label(text=f"If the button above fails, you can remove the following folders manually:")
-                        for package in conflicting_packages:
-                            if package not in conflicting_package_specs:
-                                continue
-                            location = conflicting_package_specs[package].submodule_search_locations[0]
-                            conflicts_box.operator(OpenURL.bl_idname, text=f"Open '{location}'").url = f"file://{location}"
+                        if package not in conflicting_package_specs:
+                            continue
+                        location = conflicting_package_specs[package].submodule_search_locations[0]
+                        conflicts_box.operator(OpenURL.bl_idname, text=f"Open '{location}'").url = f"file://{location}"
 
-                    if not weights_installed:
-                        default_weights_box = layout.box()
-                        default_weights_box.label(text="You need to download at least one model.")
-                        install_model = default_weights_box.operator(InstallModel.bl_idname, text="Download Stable Diffusion v2.1 (Recommended)", icon="IMPORT")
-                        install_model.model = "stabilityai/stable-diffusion-2-1"
-                        install_model.prefer_fp16_revision = self.prefer_fp16_revision
+                if not weights_installed:
+                    default_weights_box = layout.box()
+                    default_weights_box.label(text="You need to download at least one model.")
+                    install_model = default_weights_box.operator(InstallModel.bl_idname, text="Download Stable Diffusion v2.1 (Recommended)", icon="IMPORT")
+                    install_model.model = "stabilityai/stable-diffusion-2-1"
+                    install_model.prefer_fp16_revision = self.prefer_fp16_revision
 
-                    search_box = layout.box()
-                    search_box.label(text="Find Models", icon="SETTINGS")
-                    search_box.label(text="Search Hugging Face Hub for more compatible models.")
+                search_box = layout.box()
+                search_box.label(text="Find Models", icon="SETTINGS")
+                search_box.label(text="Search Hugging Face Hub for more compatible models.")
 
-                    search_box.prop(self, "model_query", text="", icon="VIEWZOOM")
-                    
-                    if len(self.model_results) > 0:
-                        search_box.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_model_results", self, "model_results", self, "active_model_result")
+                search_box.prop(self, "model_query", text="", icon="VIEWZOOM")
+                
+                if len(self.model_results) > 0:
+                    search_box.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_model_results", self, "model_results", self, "active_model_result")
 
-                    search_box.label(text="Some models require authentication. Provide a token to download gated models.")
+                search_box.label(text="Some models require authentication. Provide a token to download gated models.")
 
-                    auth_row = search_box.row()
-                    auth_row.prop(self, "hf_token", text="Token")
-                    auth_row.operator(OpenURL.bl_idname, text="Get Your Token", icon="KEYINGSET").url = "https://huggingface.co/settings/tokens"
-                    
-                    search_box.prop(self, "prefer_fp16_revision")
+                auth_row = search_box.row()
+                auth_row.prop(self, "hf_token", text="Token")
+                auth_row.operator(OpenURL.bl_idname, text="Get Your Token", icon="KEYINGSET").url = "https://huggingface.co/settings/tokens"
+                
+                search_box.prop(self, "prefer_fp16_revision")
 
-                layout.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_installed_models", self, "installed_models", self, "active_installed_model")
-                layout.operator(ImportWeights.bl_idname, icon='IMPORT')
-            
-            dream_studio_box = layout.box()
-            dream_studio_box.label(text=f"DreamStudio{' (Optional)' if has_local else ''}", icon="HIDE_OFF")
-            dream_studio_box.label(text=f"Link to your DreamStudio account to run in the cloud{' instead of locally.' if has_local else '.'}")
-            key_row = dream_studio_box.row()
-            key_row.prop(self, "dream_studio_key", text="Key")
-            key_row.operator(OpenURL.bl_idname, text="Find Your Key", icon="KEYINGSET").url = "https://beta.dreamstudio.ai/membership?tab=apiKeys"
+            layout.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_installed_models", self, "installed_models", self, "active_installed_model")
+            layout.operator(ImportWeights.bl_idname, icon='IMPORT')
 
             if weights_installed or len(self.dream_studio_key) > 0:
                 complete_box = layout.box()

@@ -8,7 +8,7 @@ import mathutils
 import numpy as np
 
 from .view_history import ImportPromptFile
-from ..property_groups.dream_prompt import pipeline_options
+from ..property_groups.dream_prompt import backend_options
 from .open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 
 from ..ui.panels.dream_texture import advanced_panel, create_panel, prompt_panel, size_panel
@@ -17,7 +17,7 @@ from .notify_result import NotifyResult
 from ..preferences import StableDiffusionPreferences
 
 from ..generator_process import Generator
-from ..generator_process.models import Pipeline, FixItError
+from ..generator_process.models import FixItError
 from ..generator_process.actions.huggingface_hub import ModelType
 import tempfile
 
@@ -96,9 +96,8 @@ def dream_texture_projection_panels():
             elif new_version_available():
                 layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
 
-            layout.prop(context.scene.dream_textures_project_prompt, "pipeline")
-            if Pipeline[context.scene.dream_textures_project_prompt.pipeline].model():
-                layout.prop(context.scene.dream_textures_project_prompt, 'model')
+            layout.prop(context.scene.dream_textures_project_prompt, "backend")
+            layout.prop(context.scene.dream_textures_project_prompt, 'model')
 
     yield DREAM_PT_dream_panel_projection
 

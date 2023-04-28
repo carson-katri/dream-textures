@@ -17,6 +17,7 @@ from ...property_groups.dream_prompt import DreamPrompt, backend_options
 from ...generator_process.actions.prompt_to_image import Optimizations
 from ...generator_process.actions.detect_seamless import SeamlessAxes
 from ...generator_process.models import FixItError
+from ... import api
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -287,19 +288,8 @@ def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
             layout.use_property_split = True
             prompt = get_prompt(context)
 
-            inferred_device = Optimizations.infer_device()
-            if prompt.optimizations_cpu_only:
-                inferred_device = "cpu"
-            def optimization(prop):
-                if Optimizations.device_supports(prop, inferred_device):
-                    layout.prop(prompt, f"optimizations_{prop}")
-
-            optimization("cudnn_benchmark")
-            optimization("tf32")
-            optimization("half_precision")
-            optimization("channels_last_memory_format")
-            optimization("batch_size")
-            optimization("cfg_end")
+            backend: api.Backend = prompt.get_backend()
+            backend.draw_speed_optimizations(layout, context)
     yield SpeedOptimizationPanel
 
     class MemoryOptimizationPanel(sub_panel):
@@ -314,26 +304,8 @@ def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
             layout.use_property_split = True
             prompt = get_prompt(context)
 
-            inferred_device = Optimizations.infer_device()
-            if prompt.optimizations_cpu_only:
-                inferred_device = "cpu"
-            def optimization(prop):
-                if Optimizations.device_supports(prop, inferred_device):
-                    layout.prop(prompt, f"optimizations_{prop}")
-
-            optimization("attention_slicing")
-            slice_size_row = layout.row()
-            slice_size_row.prop(prompt, "optimizations_attention_slice_size_src")
-            if prompt.optimizations_attention_slice_size_src == 'manual':
-                slice_size_row.prop(prompt, "optimizations_attention_slice_size", text="Size")
-            optimization("sdp_attention")
-            optimization("cpu_offload")
-            optimization("cpu_only")
-            optimization("vae_slicing")
-            optimization("vae_tiling")
-            if prompt.optimizations_vae_tiling == "manual":
-                optimization("vae_tile_size")
-                optimization("vae_tile_blend")
+            backend: api.Backend = prompt.get_backend()
+            backend.draw_memory_optimizations(layout, context)
     yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):

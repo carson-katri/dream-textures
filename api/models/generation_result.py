@@ -1,6 +1,5 @@
-import numpy as np
 from dataclasses import dataclass
-from typing import List
+from numpy.typing import NDArray
 
 @dataclass
 class GenerationResult:
@@ -15,7 +14,7 @@ class GenerationResult:
     )
     ```
     """
-    image: np.ndarray
+    image: NDArray
     """The generated image as a Numpy array.
     The shape should be `(height, width, channels)`, where `channels` is 3 or 4.
     """

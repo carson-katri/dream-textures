@@ -16,7 +16,13 @@ import numpy as np
 
 from functools import reduce
 
-scheduler_options = [(scheduler.value, scheduler.value, '') for scheduler in Scheduler]
+from .. import api
+
+def scheduler_options(self, context):
+    return [
+        (scheduler, scheduler, '')
+        for scheduler in self.get_backend().list_schedulers(context)
+    ]
 
 step_preview_mode_options = [(mode.value, mode.value, '') for mode in StepPreviewMode]
 
@@ -69,35 +75,15 @@ def modify_action_source_type(self, context):
     ]
 
 def model_options(self, context):
-    def model_case(model, i):
-        return (
-            model.model_base,
-            model.model_base.replace('models--', '').replace('--', '/'),
-            ModelType[model.model_type].name,
-            i
-        )
-    models = {}
-    for i, model in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models):
-        if model.model_type in {ModelType.CONTROL_NET.name, ModelType.UNKNOWN.name}:
-            continue
-        if model.model_type not in models:
-            models[model.model_type] = [model_case(model, i)]
-        else:
-            models[model.model_type].append(model_case(model, i))
-    return reduce(
-        lambda a, b: a + [None] + sorted(b, key=lambda m: m[0]),
-        [
-            models[group]
-            for group in sorted(models.keys())
-        ],
-        []
-    )
+    return [
+        None if model is None else (model.id, model.name, model.description)
+        for model in self.get_backend().list_models(context)
+    ]
 
 def backend_options(self, context):
-    from .. import api
     return [
-        (f"{backend.__module__}.{backend.__name__}", backend.name if hasattr(backend, "name") else backend.__name__, backend.description if hasattr(backend, "description") else "")
-        for backend in api.Backend.__subclasses__()
+        (backend._id(), backend.name if hasattr(backend, "name") else backend.__name__, backend.description if hasattr(backend, "description") else "")
+        for backend in api.Backend._list_backends()
     ]
 
 def seed_clamp(self, ctx):
@@ -160,58 +146,6 @@ attributes = {
     # Resulting image
     "hash": StringProperty(name="Image Hash"),
 }
-
-default_optimizations = Optimizations()
-def optimization(optim, property=None, **kwargs):
-    if "name" not in kwargs:
-        kwargs["name"] = optim.replace('_', ' ').title()
-    if "default" not in kwargs:
-        kwargs["default"] = getattr(default_optimizations, optim)
-    if property is None:
-        match kwargs["default"]:
-            case bool():
-                property = BoolProperty
-            case int():
-                property = IntProperty
-            case float():
-                property = FloatProperty
-            case _:
-                raise TypeError(f"{optim} cannot infer optimization property from {type(kwargs['default'])}")
-    attributes[f"optimizations_{optim}"] = property(**kwargs)
-
-optimization("attention_slicing", description="Computes attention in several steps. Saves some memory in exchange for a small speed decrease")
-optimization("attention_slice_size_src", property=EnumProperty, items=(
-    ("auto", "Automatic", "Computes attention in two steps", 1),
-    ("manual", "Manual", "Computes attention in `attention_head_dim // size` steps. A smaller `size` saves more memory.\n"
-                         "`attention_head_dim` must be a multiple of `size`, otherwise the image won't generate properly.\n"
-                         "`attention_head_dim` can be found within the model snapshot's unet/config.json file", 2),
-), default=1, name="Attention Slice Size")
-optimization("attention_slice_size", default=1, min=1)
-optimization("cudnn_benchmark", name="cuDNN Benchmark", description="Allows cuDNN to benchmark multiple convolution algorithms and select the fastest")
-optimization("tf32", name="TF32", description="Utilizes tensor cores on Ampere (RTX 30xx) or newer GPUs for matrix multiplications.\nHas no effect if half precision is enabled")
-optimization("half_precision", description="Reduces memory usage and increases speed in exchange for a slight loss in image quality.\nHas no effect if CPU only is enabled or using a GTX 16xx GPU")
-optimization("cpu_offload", property=EnumProperty, items=(
-    ("off", "Off", "", 0),
-    ("model", "Model", "Some memory savings with minimal speed penalty", 1),
-    ("submodule", "Submodule", "Better memory savings with large speed penalty", 2)
-), default=0, name="CPU Offload", description="Dynamically moves models in and out of device memory for reduced memory usage with reduced speed")
-optimization("channels_last_memory_format", description="An alternative way of ordering NCHW tensors that may be faster or slower depending on the device")
-optimization("sdp_attention", name="SDP Attention",
-             description="Scaled dot product attention requires less memory and often comes with a good speed increase.\n"
-                         "Prompt recall may not produce the exact same image, but usually only minor noise differences.\n"
-                         "Overrides attention slicing")
-optimization("batch_size", default=1, min=1, description="Improves speed when using iterations or upscaling in exchange for higher memory usage.\nHighly recommended to use with VAE slicing enabled")
-optimization("vae_slicing", name="VAE Slicing", description="Reduces memory usage of batched VAE decoding. Has no effect if batch size is 1.\nMay have a small performance improvement with large batches")
-optimization("vae_tiling", property=EnumProperty, items=(
-    ("off", "Off", "", 0),
-    ("half", "Half", "Uses tiles of half the selected model's default size. Likely to cause noticeably inaccurate colors", 1),
-    ("full", "Full", "Uses tiles of the selected model's default size, intended for use where image size is manually set higher. May cause slightly inaccurate colors", 2),
-    ("manual", "Manual", "", 3)
-), default=0, name="VAE Tiling", description="Decodes generated images in tiled regions to reduce memory usage in exchange for longer decode time and less accurate colors.\nCan allow for generating larger images that would otherwise run out of memory on the final step")
-optimization("vae_tile_size", min=1, name="VAE Tile Size", description="Width and height measurement of tiles. Smaller sizes are more likely to cause inaccurate colors and other undesired artifacts")
-optimization("vae_tile_blend", min=0, name="VAE Tile Blend", description="Minimum amount of how much each edge of a tile will intersect its adjacent tile")
-optimization("cfg_end", name="CFG End", min=0, max=1, description="The percentage of steps to complete before disabling classifier-free guidance")
-optimization("cpu_only", name="CPU Only", description="Disables GPU acceleration and is extremely slow")
 
 def map_structure_token_items(value):
     return (value[0], value[1], '')
@@ -305,9 +239,13 @@ def generate_args(self):
     del args['control_nets']
     return args
 
+def get_backend(self) -> api.Backend:
+    return getattr(self, api.Backend._lookup(self.backend)._attribute())
+
 DreamPrompt.generate_prompt = generate_prompt
 DreamPrompt.get_prompt_subject = get_prompt_subject
 DreamPrompt.get_seed = get_seed
 DreamPrompt.get_optimizations = get_optimizations
 DreamPrompt.generate_args = generate_args
 DreamPrompt.validate = validate
+DreamPrompt.get_backend = get_backend

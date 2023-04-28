@@ -1,6 +1,6 @@
 import numpy as np
 from .prompt_to_image import Optimizations, Scheduler, StepPreviewMode, _configure_model_padding
-from .detect_seamless import SeamlessAxes
+from ...api.models.seamless_axes import SeamlessAxes
 import random
 from dataclasses import dataclass
 from numpy.typing import NDArray

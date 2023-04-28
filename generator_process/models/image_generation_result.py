@@ -2,6 +2,8 @@ from typing import List
 import math
 from dataclasses import dataclass
 from numpy.typing import NDArray
+import numpy as np
+from ...api.models.step_preview_mode import StepPreviewMode
 
 @dataclass
 class ImageGenerationResult:

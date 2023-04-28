@@ -36,6 +36,11 @@ try:
         def register(cls):
             from ...property_groups.dream_prompt import DreamPrompt
             setattr(DreamPrompt, cls._attribute(), bpy.props.PointerProperty(type=cls))
+        
+        @classmethod
+        def unregister(cls):
+            from ...property_groups.dream_prompt import DreamPrompt
+            delattr(DreamPrompt, cls._attribute())
 
         @classmethod
         def _id(cls) -> str:

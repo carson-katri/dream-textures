@@ -13,10 +13,10 @@ from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGen
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
-from ...property_groups.dream_prompt import DreamPrompt, pipeline_options
+from ...property_groups.dream_prompt import DreamPrompt, backend_options
 from ...generator_process.actions.prompt_to_image import Optimizations
 from ...generator_process.actions.detect_seamless import SeamlessAxes
-from ...generator_process.models import Pipeline, FixItError
+from ...generator_process.models import FixItError
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -50,9 +50,8 @@ def dream_texture_panels():
                 elif new_version_available():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
 
-                layout.prop(context.scene.dream_textures_prompt, "pipeline")
-                if Pipeline[context.scene.dream_textures_prompt.pipeline].model():
-                    layout.prop(context.scene.dream_textures_prompt, 'model')
+                layout.prop(context.scene.dream_textures_prompt, "backend")
+                layout.prop(context.scene.dream_textures_prompt, 'model')
 
         DreamTexturePanel.__name__ = f"DREAM_PT_dream_panel_{space_type}"
         yield DreamTexturePanel
@@ -120,12 +119,12 @@ def prompt_panel(sub_panel, space_type, get_prompt, get_seamless_result=None):
                     segment_row.prop(prompt, enum_prop, icon_only=is_custom)
             if prompt.prompt_structure == file_batch_structure.id:
                 layout.template_ID(context.scene, "dream_textures_prompt_file", open="text.open")
-            if Pipeline[prompt.pipeline].seamless():
-                layout.prop(prompt, "seamless_axes")
-                if prompt.seamless_axes == SeamlessAxes.AUTO and get_seamless_result is not None:
-                    auto_row = self.layout.row()
-                    auto_row.enabled = False
-                    auto_row.prop(get_seamless_result(context, prompt), "result")
+            
+            layout.prop(prompt, "seamless_axes")
+            if prompt.seamless_axes == SeamlessAxes.AUTO and get_seamless_result is not None:
+                auto_row = self.layout.row()
+                auto_row.enabled = False
+                auto_row.prop(get_seamless_result(context, prompt), "result")
 
     yield PromptPanel
 
@@ -137,7 +136,7 @@ def prompt_panel(sub_panel, space_type, get_prompt, get_seamless_result=None):
 
         @classmethod
         def poll(cls, context):
-            return get_prompt(context).prompt_structure != file_batch_structure.id and Pipeline[get_prompt(context).pipeline].negative_prompts()
+            return get_prompt(context).prompt_structure != file_batch_structure.id
 
         def draw_header(self, context):
             layout = self.layout
@@ -222,8 +221,7 @@ def init_image_panels(sub_panel, space_type, get_prompt):
             elif prompt.init_img_action == 'modify':
                 layout.prop(prompt, "fit")
             layout.prop(prompt, "strength")
-            if Pipeline[prompt.pipeline].color_correction():
-                layout.prop(prompt, "use_init_img_color")
+            layout.prop(prompt, "use_init_img_color")
             if prompt.init_img_action == 'modify':
                 layout.prop(prompt, "modify_action_source_type")
                 if prompt.modify_action_source_type == 'depth_map':

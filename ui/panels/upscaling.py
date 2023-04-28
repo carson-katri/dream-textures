@@ -4,7 +4,6 @@ from ...prompt_engineering import *
 from ...operators.upscale import Upscale, get_source_image
 from ...operators.dream_texture import CancelGenerator, ReleaseGenerator
 from ...generator_process.actions.detect_seamless import SeamlessAxes
-from ...generator_process.actions.prompt_to_image import Pipeline
 from .dream_texture import create_panel, advanced_panel
 from ..space_types import SPACE_TYPES
 
@@ -21,8 +20,6 @@ def upscaling_panels():
 
             @classmethod
             def poll(cls, context):
-                if not Pipeline[context.scene.dream_textures_prompt.pipeline].upscaling():
-                    return False
                 if cls.bl_space_type == 'NODE_EDITOR':
                     return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
                 else:
@@ -68,8 +65,6 @@ def upscaling_panels():
 
             @classmethod
             def poll(cls, context):
-                if not Pipeline[context.scene.dream_textures_prompt.pipeline].upscaling():
-                    return False
                 if cls.bl_space_type == 'NODE_EDITOR':
                     return context.area.ui_type == "ShaderNodeTree" or context.area.ui_type == "CompositorNodeTree"
                 else:

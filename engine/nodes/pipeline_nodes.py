@@ -97,7 +97,7 @@ class NodeStableDiffusion(DreamTexturesNode):
     def draw_buttons(self, context, layout):
         layout.prop(self, "task")
         prompt = self.prompt
-        layout.prop(prompt, "pipeline", text="")
+        layout.prop(prompt, "backend", text="")
         layout.prop(prompt, "model", text="")
         layout.prop(prompt, "scheduler", text="")
         layout.prop(prompt, "seamless_axes", text="")
@@ -120,7 +120,6 @@ class NodeStableDiffusion(DreamTexturesNode):
             if not isinstance(controlnets, list):
                 controlnets = [controlnets]
             future = Generator.shared().control_net(
-                pipeline=args['pipeline'],
                 model=args['model'],
                 scheduler=args['scheduler'],
                 optimizations=shared_args['optimizations'],
@@ -153,7 +152,6 @@ class NodeStableDiffusion(DreamTexturesNode):
             match self.task:
                 case 'prompt_to_image':
                     future = Generator.shared().prompt_to_image(
-                        pipeline=args['pipeline'],
                         model=args['model'],
                         scheduler=args['scheduler'],
                         optimizations=shared_args['optimizations'],
@@ -171,7 +169,6 @@ class NodeStableDiffusion(DreamTexturesNode):
                     )
                 case 'image_to_image':
                     future = Generator.shared().image_to_image(
-                        pipeline=args['pipeline'],
                         model=args['model'],
                         scheduler=args['scheduler'],
                         optimizations=shared_args['optimizations'],
@@ -194,7 +191,6 @@ class NodeStableDiffusion(DreamTexturesNode):
                     )
                 case 'depth_to_image':
                     future = Generator.shared().depth_to_image(
-                        pipeline=args['pipeline'],
                         model=args['model'],
                         scheduler=args['scheduler'],
                         optimizations=shared_args['optimizations'],

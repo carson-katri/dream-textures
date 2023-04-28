@@ -5,7 +5,7 @@ import sys
 from typing import _AnnotatedAlias
 
 from ..generator_process.actions.detect_seamless import SeamlessAxes
-from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode, Pipeline
+from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode
 from ..generator_process.actions.huggingface_hub import ModelType
 from ..prompt_engineering import *
 from ..preferences import StableDiffusionPreferences
@@ -39,7 +39,7 @@ init_image_actions = [
 ]
 
 def init_image_actions_filtered(self, context):
-    available = Pipeline[self.pipeline].init_img_actions()
+    available = ['modify', 'inpaint', 'outpaint']
     return list(filter(lambda x: x[0] in available, init_image_actions))
 
 inpaint_mask_sources = [
@@ -48,7 +48,7 @@ inpaint_mask_sources = [
 ]
 
 def inpaint_mask_sources_filtered(self, context):
-    available = Pipeline[self.pipeline].inpaint_mask_sources()
+    available = ['alpha', 'prompt']
     return list(filter(lambda x: x[0] in available, inpaint_mask_sources))
 
 seamless_axes = [
@@ -69,48 +69,35 @@ def modify_action_source_type(self, context):
     ]
 
 def model_options(self, context):
-    match Pipeline[self.pipeline]:
-        case Pipeline.STABLE_DIFFUSION:
-            def model_case(model, i):
-                return (
-                    model.model_base,
-                    model.model_base.replace('models--', '').replace('--', '/'),
-                    ModelType[model.model_type].name,
-                    i
-                )
-            models = {}
-            for i, model in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models):
-                if model.model_type in {ModelType.CONTROL_NET.name, ModelType.UNKNOWN.name}:
-                    continue
-                if model.model_type not in models:
-                    models[model.model_type] = [model_case(model, i)]
-                else:
-                    models[model.model_type].append(model_case(model, i))
-            return reduce(
-                lambda a, b: a + [None] + sorted(b, key=lambda m: m[0]),
-                [
-                    models[group]
-                    for group in sorted(models.keys())
-                ],
-                []
-            )
-        case Pipeline.STABILITY_SDK:
-            return [
-                ("stable-diffusion-v1", "Stable Diffusion v1.4", ModelType.PROMPT_TO_IMAGE.name),
-                ("stable-diffusion-v1-5", "Stable Diffusion v1.5", ModelType.PROMPT_TO_IMAGE.name),
-                ("stable-diffusion-512-v2-0", "Stable Diffusion v2.0", ModelType.PROMPT_TO_IMAGE.name),
-                ("stable-diffusion-768-v2-0", "Stable Diffusion v2.0-768", ModelType.PROMPT_TO_IMAGE.name),
-                ("stable-diffusion-512-v2-1", "Stable Diffusion v2.1", ModelType.PROMPT_TO_IMAGE.name),
-                ("stable-diffusion-768-v2-1", "Stable Diffusion v2.1-768", ModelType.PROMPT_TO_IMAGE.name),
-                None,
-                ("stable-inpainting-v1-0", "Stable Inpainting v1.0", ModelType.INPAINTING.name),
-                ("stable-inpainting-512-v2-0", "Stable Inpainting v2.0", ModelType.INPAINTING.name),
-            ]
+    def model_case(model, i):
+        return (
+            model.model_base,
+            model.model_base.replace('models--', '').replace('--', '/'),
+            ModelType[model.model_type].name,
+            i
+        )
+    models = {}
+    for i, model in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models):
+        if model.model_type in {ModelType.CONTROL_NET.name, ModelType.UNKNOWN.name}:
+            continue
+        if model.model_type not in models:
+            models[model.model_type] = [model_case(model, i)]
+        else:
+            models[model.model_type].append(model_case(model, i))
+    return reduce(
+        lambda a, b: a + [None] + sorted(b, key=lambda m: m[0]),
+        [
+            models[group]
+            for group in sorted(models.keys())
+        ],
+        []
+    )
 
-def pipeline_options(self, context):
+def backend_options(self, context):
+    from .. import api
     return [
-        (Pipeline.STABLE_DIFFUSION.name, 'Stable Diffusion', 'Stable Diffusion on your own hardware', 1),
-        (Pipeline.STABILITY_SDK.name, 'DreamStudio', 'Cloud compute via DreamStudio', 2),
+        (f"{backend.__module__}.{backend.__name__}", backend.name if hasattr(backend, "name") else backend.__name__, backend.description if hasattr(backend, "description") else "")
+        for backend in api.Backend.__subclasses__()
     ]
 
 def seed_clamp(self, ctx):
@@ -123,7 +110,7 @@ def seed_clamp(self, ctx):
         pass # will get hashed once generated
 
 attributes = {
-    "pipeline": EnumProperty(name="Pipeline", items=pipeline_options, default=1 if Pipeline.local_available() else 2, description="Specify which model and target should be used."),
+    "backend": EnumProperty(name="Backend", items=backend_options, default=1, description="Specify which generation backend to use"),
     "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference"),
     
     "control_nets": CollectionProperty(type=ControlNet),
@@ -299,7 +286,6 @@ def generate_args(self):
     args['optimizations'] = self.get_optimizations()
     args['scheduler'] = Scheduler(args['scheduler'])
     args['step_preview_mode'] = StepPreviewMode(args['step_preview_mode'])
-    args['pipeline'] = Pipeline[args['pipeline']]
     args['outpaint_origin'] = (args['outpaint_origin'][0], args['outpaint_origin'][1])
     args['key'] = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key
     args['seamless_axes'] = SeamlessAxes(args['seamless_axes'])

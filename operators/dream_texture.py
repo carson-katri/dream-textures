@@ -9,7 +9,7 @@ from ..preferences import StableDiffusionPreferences
 from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..generator_process import Generator
-from ..generator_process.actions.prompt_to_image import ImageGenerationResult, Pipeline
+from ..generator_process.actions.prompt_to_image import ImageGenerationResult
 from ..generator_process.actions.huggingface_hub import ModelType
 import time
 

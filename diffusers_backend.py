@@ -99,7 +99,7 @@ class DiffusersBackend(Backend):
     def optimizations(self) -> Optimizations:
         optimizations = Optimizations()
         for prop in dir(self):
-            if hasattr(optimizations, prop):
+            if hasattr(optimizations, prop) and not prop.startswith('__'):
                 setattr(optimizations, prop, getattr(self, prop))
         if self.attention_slice_size_src == 'auto':
             optimizations.attention_slice_size = 'auto'
@@ -126,10 +126,6 @@ class DiffusersBackend(Backend):
         future: Future
         match task:
             case PromptToImage():
-                print(common_kwargs)
-                import pickle
-                del common_kwargs['optimizations'].__annotations__
-                print(pickle.dumps(common_kwargs))
                 future = gen.prompt_to_image(**common_kwargs)
             case ImageToImage(image=image, strength=strength, fit=fit):
                 future = gen.image_to_image(image=image, fit=fit, strength=strength, **common_kwargs)

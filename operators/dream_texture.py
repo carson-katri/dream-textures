@@ -102,7 +102,7 @@ class DreamTexture(bpy.types.Operator):
                 image = step_image.tile_images()
                 last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", image.shape[1], image.shape[0], image.ravel(), last_data_block)
                 for area in screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
+                    if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                         area.spaces.active.image = last_data_block
 
         iteration = 0
@@ -134,7 +134,7 @@ class DreamTexture(bpy.types.Operator):
                     texture_node.location = node_anchor + node_size * ((iteration % iteration_square), -(iteration // iteration_square))
                     nodes.active = texture_node
                 for area in screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
+                    if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                         area.spaces.active.image = image
                 scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
                 # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history

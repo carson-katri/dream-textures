@@ -90,7 +90,7 @@ class Upscale(bpy.types.Operator):
             scene.dream_textures_progress = tile.tile
             last_data_block = bpy_image(f"Tile {tile.tile}/{tile.total}", tile.image.shape[1], tile.image.shape[0], tile.image.ravel(), last_data_block)
             for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
+                if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                     area.spaces.active.image = last_data_block
 
         def image_done(future):
@@ -103,7 +103,7 @@ class Upscale(bpy.types.Operator):
                 return
             image = bpy_image(f"{input_image.name} (Upscaled)", tile.image.shape[1], tile.image.shape[0], tile.image.ravel(), last_data_block)
             for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
+                if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                     area.spaces.active.image = image
             if active_node is not None:
                 active_node.image = image

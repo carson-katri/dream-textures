@@ -2,6 +2,7 @@ import bpy
 import hashlib
 import numpy as np
 import math
+from typing import Literal
 
 from .notify_result import NotifyResult
 from ..preferences import StableDiffusionPreferences
@@ -25,6 +26,23 @@ def bpy_image(name, width, height, pixels, existing_image):
     image.pack()
     image.update()
     return image
+
+def get_source_image(context, source: Literal['file', 'open_editor']):
+    match source:
+        case 'file':
+            return context.scene.init_img
+        case 'open_editor':
+            if context.area.type == 'IMAGE_EDITOR':
+                return context.area.spaces.active.image
+            else:
+                init_image = None
+                for area in context.screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        if area.spaces.active.image is not None:
+                            init_image = area.spaces.active.image
+                return init_image
+        case _:
+            raise ValueError(f"unsupported source {repr(source)}")
 
 class DreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture"
@@ -65,14 +83,7 @@ class DreamTexture(bpy.types.Operator):
 
         init_image = None
         if generated_args['use_init_img']:
-            match generated_args['init_img_src']:
-                case 'file':
-                    init_image = scene.init_img
-                case 'open_editor':
-                    for area in screen.areas:
-                        if area.type == 'IMAGE_EDITOR':
-                            if area.spaces.active.image is not None:
-                                init_image = area.spaces.active.image
+            get_source_image(context, generated_args['init_img_src'])
         if init_image is not None:
             init_image = np.flipud(
                 (np.array(init_image.pixels) * 255)

@@ -9,7 +9,7 @@ from ...absolute_path import CLIPSEG_WEIGHTS_PATH
 from ..presets import DREAM_PT_AdvancedPresets
 from ...pil_to_image import *
 from ...prompt_engineering import *
-from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGenerator
+from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGenerator, get_source_image
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
@@ -63,14 +63,7 @@ def dream_texture_panels():
         def get_seamless_result(context, prompt):
             init_image = None
             if prompt.use_init_img and prompt.init_img_action in ['modify', 'inpaint']:
-                match prompt.init_img_src:
-                    case 'file':
-                        init_image = context.scene.init_img
-                    case 'open_editor':
-                        for area in context.screen.areas:
-                            if area.type == 'IMAGE_EDITOR':
-                                if area.spaces.active.image is not None:
-                                    init_image = area.spaces.active.image
+                init_image = get_source_image(context, prompt.init_img_src)
             context.scene.seamless_result.check(init_image)
             return context.scene.seamless_result
 

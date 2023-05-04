@@ -119,11 +119,12 @@ class DreamTexture(bpy.types.Operator):
         iteration = 0
         iteration_limit = len(file_batch_lines) if is_file_batch else generated_args['iterations']
         iteration_square = math.ceil(math.sqrt(iteration_limit))
-        node_pad = np.array((10, 10))
-        node_size = np.array((250, 287)) + node_pad
+        node_pad = np.array((20, 20))
+        node_size = np.array((240, 277)) + node_pad
         if node_tree is not None:
+            # keep image nodes grid centered but don't go beyond top and left sides of nodes editor
             node_anchor = node_tree_center + node_size * 0.5 * (-iteration_square, (iteration_limit-1) // iteration_square + 1)
-            node_anchor = np.array((np.maximum(node_tree_top_left[0], node_anchor[0]), np.minimum(node_tree_top_left[1], node_anchor[1]))) + np.array((node_pad[0] * 0.5, node_pad[1] * -0.5))
+            node_anchor = np.array((np.maximum(node_tree_top_left[0], node_anchor[0]), np.minimum(node_tree_top_left[1], node_anchor[1]))) + node_pad * (0.5, -0.5)
         def done_callback(future):
             nonlocal last_data_block
             nonlocal iteration

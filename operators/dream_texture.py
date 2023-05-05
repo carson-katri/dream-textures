@@ -102,13 +102,12 @@ class DreamTexture(bpy.types.Operator):
         def step_callback(progress: List[api.GenerationResult]):
             nonlocal last_data_block
             scene.dream_textures_last_execution_time = f"{time.time() - execution_start:.2f} seconds"
-            scene.dream_textures_progress = progress.step
+            scene.dream_textures_progress = progress[-1].progress
             for area in context.screen.areas:
                 for region in area.regions:
                     if region.type == "UI":
                         region.tag_redraw()
-            image = 
-            last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", image.shape[1], image.shape[0], image.ravel(), last_data_block)
+            last_data_block = bpy_image(f"Step {progress[-1].progress}/{progress[-1].total}", image.shape[1], image.shape[0], image.ravel(), last_data_block)
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                     area.spaces.active.image = last_data_block
@@ -131,8 +130,11 @@ class DreamTexture(bpy.types.Operator):
             else:
                 nonlocal last_data_block
                 nonlocal iteration
-                
                 for result in results:
+                    if result.image is None or result.seed is None:
+                        continue
+                    
+                    # Create a trimmed image name
                     prompt_string = context.scene.dream_textures_prompt.prompt_structure_token_subject
                     seed_str_length = len(str(result.seed))
                     trim_aware_name = (prompt_string[:54 - seed_str_length] + '..') if len(prompt_string) > 54 else prompt_string

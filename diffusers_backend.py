@@ -158,13 +158,13 @@ class DiffusersBackend(Backend):
                 raise NotImplementedError()
         def on_step(_, step_image: ImageGenerationResult):
             step_callback([
-                GenerationResult(image=step_image.images[i], seed=step_image.seeds[i], step=step_image.step)
+                GenerationResult(progress=step_image.step, total=steps, image=step_image.images[i], seed=step_image.seeds[i])
                 for i in range(len(step_image.images))
             ])
         def on_done(future: Future):
             result: ImageGenerationResult = future.result(last_only=True)
             callback([
-                GenerationResult(image=result.images[i], seed=result.seeds[i], step=result.step)
+                GenerationResult(progress=result.step, total=steps, image=result.images[i], seed=result.seeds[i])
                 for i in range(len(result.images))
             ])
         def on_exception(_, exception):

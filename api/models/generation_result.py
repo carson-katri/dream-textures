@@ -11,19 +11,41 @@ class GenerationResult:
 
     ```python
     result = GenerationResult(
+        progress=3,
+        total=5,
         image=np.zeros((512, 512, 3)),
         seed=42
     )
     ```
+
+    Alternatively, create a result with just a `title` and progress values.
+
+    ```python
+    result = GenerationResult(
+        progress=3,
+        total=5,
+        title="Loading model"
+    )
+    ```
     """
-    image: NDArray
-    """The generated image as a Numpy array.
-    The shape should be `(height, width, channels)`, where `channels` is 3 or 4.
-    """
+
+    progress: int
+    """The amount out of `total` that has been completed"""
+
+    total: int
+    """The number of steps to complete"""
+
     seed: int
     """The seed used to generate the image."""
-    step: int
-    """The step of generation"""
+
+    title: str | None = None
+    """The name of the currently executing task"""
+    
+    image: NDArray | None = None
+    """The generated image as a Numpy array.
+
+    The shape should be `(height, width, channels)`, where `channels` is 3 or 4.
+    """
 
     @staticmethod
     def tile_images(results: list['GenerationResult']):

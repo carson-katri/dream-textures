@@ -74,12 +74,14 @@ class DreamTexture(bpy.types.Operator):
         execution_start = time.time()
         def step_callback(progress: api.GenerationResult):
             nonlocal last_data_block
-            scene.dream_textures_last_execution_time = f"{time.time() - execution_start:.2f} seconds"
-            scene.dream_textures_progress = scene.dream_textures_progress + 1
-            last_data_block = bpy_image(f"Step {scene.dream_textures_progress}/{prompt.steps}", progress.image.shape[1], progress.image.shape[0], progress.image.ravel(), last_data_block)
-            for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    area.spaces.active.image = last_data_block
+            scene.dream_textures_last_execution_time = progress.title or f"{time.time() - execution_start:.2f} seconds"
+            bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", min=0, max=progress.total, update=step_progress_update)
+            scene.dream_textures_progress = progress.progress
+            if progress.image is not None:
+                last_data_block = bpy_image(f"Step {scene.dream_textures_progress}/{prompt.steps}", progress.image.shape[1], progress.image.shape[0], progress.image.ravel(), last_data_block)
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        area.spaces.active.image = last_data_block
 
         def callback(result: List[api.GenerationResult] | Exception):
             if isinstance(result, Exception):
@@ -90,6 +92,9 @@ class DreamTexture(bpy.types.Operator):
             else:
                 nonlocal last_data_block
                 for i, generation in enumerate(result):
+                    if generation.image is None or generation.seed is None:
+                        continue
+                    
                     # Create a trimmed image name
                     prompt_string = context.scene.dream_textures_prompt.prompt_structure_token_subject
                     seed_str_length = len(str(generation.seed))

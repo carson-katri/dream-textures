@@ -1,0 +1,3 @@
+coremltools
+git+https://github.com/apple/ml-stable-diffusion@main#egg=python_coreml_stable_diffusion
+scipy

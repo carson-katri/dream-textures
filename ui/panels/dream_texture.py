@@ -358,6 +358,8 @@ def actions_panel(sub_panel, space_type, get_prompt):
             
             row = layout.row()
             row.scale_y = 1.5
+            if CancelGenerator.poll(context):
+                row.operator(CancelGenerator.bl_idname, icon="SNAP_FACE", text="")
             if context.scene.dream_textures_progress <= 0:
                 if context.scene.dream_textures_info != "":
                     row.label(text=context.scene.dream_textures_info, icon="INFO")
@@ -368,8 +370,6 @@ def actions_panel(sub_panel, space_type, get_prompt):
                 disabled_row.use_property_split = True
                 disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
                 disabled_row.enabled = False
-            if CancelGenerator.poll(context):
-                row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
             row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
 
             if context.scene.dream_textures_last_execution_time != "":

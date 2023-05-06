@@ -55,7 +55,7 @@ else:
 
         def generate(self, task: Task, model: Model, prompt: Prompt, size: Tuple[int, int] | None, seed: int, steps: int, guidance_scale: float, scheduler: str, seamless_axes: SeamlessAxes, step_preview_mode: StepPreviewMode, iterations: int, step_callback: StepCallback, callback: Callback):
             gen: CoreMLActor = CoreMLActor.shared()
-            gen.generate(
+            future = gen.generate(
                 model=model.id.replace('models--', '').replace('--', '/'),
                 prompt=prompt.positive,
                 negative_prompt=prompt.negative,
@@ -71,7 +71,16 @@ else:
                 controlnet=None,
                 controlnet_inputs=[]
             )
-            raise NotImplementedError()
+            def on_step(_, result):
+                step_callback(result)
+            def on_done(future):
+                result = future.result(last_only=True)
+                callback([result])
+            def on_exception(_, exception):
+                callback(exception)
+            future.add_response_callback(on_step)
+            future.add_exception_callback(on_exception)
+            future.add_done_callback(on_done)
 
     def register():
         bpy.utils.register_class(CoreMLBackend)

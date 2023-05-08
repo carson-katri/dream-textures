@@ -80,6 +80,11 @@ def model_options(self, context):
         for model in self.get_backend().list_models(context)
     ]
 
+def _model_update(self, context):
+    options = [m for m in model_options(self, context) if m is not None]
+    if self.model == '' and len(options) > 0:
+        self.model = options[0]
+
 def backend_options(self, context):
     return [
         (backend._id(), backend.name if hasattr(backend, "name") else backend.__name__, backend.description if hasattr(backend, "description") else "")
@@ -97,7 +102,7 @@ def seed_clamp(self, ctx):
 
 attributes = {
     "backend": EnumProperty(name="Backend", items=backend_options, default=1, description="Specify which generation backend to use"),
-    "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference"),
+    "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference", update=_model_update),
     
     "control_nets": CollectionProperty(type=ControlNet),
     "active_control_net": IntProperty(name="Active ControlNet"),
@@ -211,7 +216,7 @@ def get_optimizations(self: DreamPrompt):
         optimizations.attention_slice_size = 'auto'
     return optimizations
 
-def generate_args(self, context, iteration=0):
+def generate_args(self, context, iteration=0) -> api.GenerationArguments:
     is_file_batch = self.prompt_structure == file_batch_structure.id
     file_batch_lines = []
     file_batch_lines_negative = []
@@ -255,7 +260,7 @@ def generate_args(self, context, iteration=0):
                         task = api.DepthToImage(
                             depth=np.array(context.scene.init_depth.pixels)
                                 .astype(np.float32)
-                                .reshape((scene.init_depth.size[1], scene.init_depth.size[0], scene.init_depth.channels)),
+                                .reshape((context.scene.init_depth.size[1], context.scene.init_depth.size[0], context.scene.init_depth.channels)),
                             image=init_image,
                             strength=self.strength
                         )
@@ -280,22 +285,22 @@ def generate_args(self, context, iteration=0):
                     origin=(self.outpaint_origin[0], self.outpaint_origin[1])
                 )
 
-    args = {
-        'task': task,
-        'model': next(model for model in self.get_backend().list_models(context) if model is not None and model.id == self.model),
-        'prompt': api.Prompt(
+    return api.GenerationArguments(
+        task=task,
+        model=next(model for model in self.get_backend().list_models(context) if model is not None and model.id == self.model),
+        prompt=api.Prompt(
             file_batch_lines if is_file_batch else self.generate_prompt(),
             file_batch_lines_negative if is_file_batch else (self.negative_prompt if self.use_negative_prompt else None)
         ),
-        'size': (self.width, self.height) if self.use_size else None,
-        'seed': self.get_seed(),
-        'steps': self.steps,
-        'guidance_scale': self.cfg_scale,
-        'scheduler': self.scheduler,
-        'seamless_axes': SeamlessAxes(self.seamless_axes),
-        'step_preview_mode': StepPreviewMode(self.step_preview_mode),
-        'iterations': self.iterations
-    }
+        size=(self.width, self.height) if self.use_size else None,
+        seed=self.get_seed(),
+        steps=self.steps,
+        guidance_scale=self.cfg_scale,
+        scheduler=self.scheduler,
+        seamless_axes=SeamlessAxes(self.seamless_axes),
+        step_preview_mode=StepPreviewMode(self.step_preview_mode),
+        iterations=self.iterations
+    )
     # args['control'] = [
     #     np.flipud(
     #         np.array(net.control_image.pixels)
@@ -304,7 +309,6 @@ def generate_args(self, context, iteration=0):
     #     for net in args['control_nets']
     #     if net.control_image is not None
     # ]
-    return args
 
 def get_backend(self) -> api.Backend:
     return getattr(self, api.Backend._lookup(self.backend)._attribute())

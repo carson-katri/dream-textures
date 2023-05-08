@@ -1,16 +1,19 @@
+import bpy
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty
-from typing import List, Tuple
+from typing import List
 
 from .api import Backend, StepCallback, Callback
-from .api.models import Model, Task, Prompt, SeamlessAxes, GenerationResult, StepPreviewMode
+from .api.models import Model, GenerationArguments, GenerationResult
 from .api.models.task import PromptToImage, ImageToImage, Inpaint, DepthToImage, Outpaint
+from .api.models.fix_it_error import FixItError
 
 from .generator_process import Generator
 from .generator_process.actions.prompt_to_image import ImageGenerationResult
 from .generator_process.future import Future
 from .generator_process.models import Optimizations, Scheduler
 from .generator_process.actions.huggingface_hub import ModelType
-from .preferences import StableDiffusionPreferences
+
+from .preferences import StableDiffusionPreferences, _template_model_download_progress, InstallModel
 
 from functools import reduce
 
@@ -105,26 +108,26 @@ class DiffusersBackend(Backend):
             optimizations.attention_slice_size = 'auto'
         return optimizations
 
-    def generate(self, task: Task, model: Model, prompt: Prompt, size: Tuple[int, int] | None, seed: int, steps: int, guidance_scale: float, scheduler: str, seamless_axes: SeamlessAxes, step_preview_mode: StepPreviewMode, iterations: int, step_callback: StepCallback, callback: Callback):
+    def generate(self, arguments: GenerationArguments, step_callback: StepCallback, callback: Callback):
         gen = Generator.shared()
         common_kwargs = {
-            'model': model.id,
-            'scheduler': Scheduler(scheduler),
+            'model': arguments.model.id,
+            'scheduler': Scheduler(arguments.scheduler),
             'optimizations': self.optimizations(),
-            'prompt': prompt.positive,
-            'steps': steps,
-            'width': size[0] if size is not None else None,
-            'height': size[1] if size is not None else None,
-            'seed': seed,
-            'cfg_scale': guidance_scale,
-            'use_negative_prompt': prompt.negative is not None,
-            'negative_prompt': prompt.negative or "",
-            'seamless_axes': seamless_axes,
-            'iterations': iterations,
-            'step_preview_mode': step_preview_mode,
+            'prompt': arguments.prompt.positive,
+            'steps': arguments.steps,
+            'width': arguments.size[0] if arguments.size is not None else None,
+            'height': arguments.size[1] if arguments.size is not None else None,
+            'seed': arguments.seed,
+            'cfg_scale': arguments.guidance_scale,
+            'use_negative_prompt': arguments.prompt.negative is not None,
+            'negative_prompt': arguments.prompt.negative or "",
+            'seamless_axes': arguments.seamless_axes,
+            'iterations': arguments.iterations,
+            'step_preview_mode': arguments.step_preview_mode,
         }
         future: Future
-        match task:
+        match arguments.task:
             case PromptToImage():
                 future = gen.prompt_to_image(**common_kwargs)
             case ImageToImage(image=image, strength=strength, fit=fit):
@@ -157,11 +160,11 @@ class DiffusersBackend(Backend):
             case _:
                 raise NotImplementedError()
         def on_step(_, step_image: ImageGenerationResult):
-            step_callback(GenerationResult(progress=step_image.step, total=steps, image=step_image.images[-1], seed=step_image.seeds[-1]))
+            step_callback(GenerationResult(progress=step_image.step, total=arguments.steps, image=step_image.images[-1], seed=step_image.seeds[-1]))
         def on_done(future: Future):
             result: ImageGenerationResult = future.result(last_only=True)
             callback([
-                GenerationResult(progress=result.step, total=steps, image=result.images[i], seed=result.seeds[i])
+                GenerationResult(progress=result.step, total=arguments.steps, image=result.images[i], seed=result.seeds[i])
                 for i in range(len(result.images))
             ])
         def on_exception(_, exception):
@@ -169,6 +172,34 @@ class DiffusersBackend(Backend):
         future.add_response_callback(on_step)
         future.add_exception_callback(on_exception)
         future.add_done_callback(on_done)
+
+    def validate(self, arguments: GenerationArguments):
+        installed_models = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
+        model = next((m for m in installed_models if m.model_base == arguments.model.id), None)
+        if model is None:
+            raise FixItError("No model selected.", FixItError.ChangeProperty("model"))
+        else:
+            if not ModelType[model.model_type].matches_task(arguments.task):
+                class DownloadModel(FixItError.Solution):
+                    def _draw(self, dream_prompt, context, layout):
+                        if not _template_model_download_progress(context, layout):
+                            target_model_type = ModelType.from_task(arguments.task)
+                            if target_model_type is not None:
+                                install_model = layout.operator(InstallModel.bl_idname, text=f"Download {target_model_type.recommended_model()} (Recommended)", icon="IMPORT")
+                                install_model.model = target_model_type.recommended_model()
+                                install_model.prefer_fp16_revision = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.prefer_fp16_revision
+                model_task_description = f"""Incorrect model type selected for {type(arguments.task).name().replace('_', ' ').lower()} tasks.
+The selected model is for {model.model_type.replace('_', ' ').lower()}."""
+                if not any(ModelType[m.model_type].matches_task(arguments.task) for m in installed_models):
+                    raise FixItError(
+                        message=model_task_description + "\nYou do not have any compatible models downloaded:",
+                        solution=DownloadModel()
+                    )
+                else:
+                    raise FixItError(
+                        message=model_task_description + "\nSelect a different model below.",
+                        solution=FixItError.ChangeProperty("model")
+                    )
 
     def draw_speed_optimizations(self, layout, context):
         inferred_device = Optimizations.infer_device()

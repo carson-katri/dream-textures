@@ -31,11 +31,17 @@ class Task:
             ...
     ```
     """
-    pass
+
+    @classmethod
+    def name(cls) -> str:
+        "unknown"
+    """A human readable name for this task."""
 
 @dataclass
 class PromptToImage(Task):
-    pass
+    @classmethod
+    def name(cls):
+        return "prompt to image"
 
 @dataclass
 class ImageToImage(Task):
@@ -43,18 +49,23 @@ class ImageToImage(Task):
     strength: float
     fit: bool
 
+    @classmethod
+    def name(cls):
+        return "image to image"
+
 @dataclass
-class Inpaint(Task):
+class Inpaint(ImageToImage):
     class MaskSource(IntEnum):
         ALPHA = 0
         PROMPT = 1
 
-    image: NDArray
-    strength: float
-    fit: bool
     mask_source: MaskSource
     mask_prompt: str
     confidence: float
+
+    @classmethod
+    def name(cls):
+        return "inpainting"
 
 @dataclass
 class DepthToImage(Task):
@@ -62,7 +73,15 @@ class DepthToImage(Task):
     image: NDArray | None
     strength: float
 
+    @classmethod
+    def name(cls):
+        return "depth to image"
+
 @dataclass
 class Outpaint(Task):
     image: NDArray
     origin: Tuple[int, int]
+
+    @classmethod
+    def name(cls):
+        return "outpainting"

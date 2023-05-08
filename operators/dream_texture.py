@@ -51,7 +51,9 @@ class DreamTexture(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         try:
-            context.scene.dream_textures_prompt.validate(context)
+            prompt = context.scene.dream_textures_prompt
+            backend: api.Backend = prompt.get_backend()
+            backend.validate(prompt.generate_args(context))
         except:
             return False
         return Generator.shared().can_use()

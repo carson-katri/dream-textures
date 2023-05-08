@@ -1,12 +1,9 @@
 try:
     import bpy
     from typing import Callable, List, Tuple
+    from ..models.generation_arguments import GenerationArguments
     from ..models.generation_result import GenerationResult
-    from ..models.task import Task
     from ..models.model import Model
-    from ..models.prompt import Prompt
-    from ..models.seamless_axes import SeamlessAxes
-    from ..models.step_preview_mode import StepPreviewMode
 
     StepCallback = Callable[[List[GenerationResult]], None]
     Callback = Callable[[List[GenerationResult] | Exception], None]
@@ -20,11 +17,7 @@ try:
         def list_models(self) -> List[Model]
         def generate(
             self,
-            task: Task,
-            model: Model,
-            prompt: Prompt,
-            size: Tuple[int, int] | None,
-            seamless_axes: SeamlessAxes,
+            arguments: GenerationArguments,
 
             step_callback: StepCallback,
             callback: Callback
@@ -91,22 +84,38 @@ try:
 
         def generate(
             self,
-            task: Task,
-            model: Model,
-            prompt: Prompt,
-            size: Tuple[int, int] | None,
-            seed: int,
-            steps: int,
-            guidance_scale: float,
-            scheduler: str,
-            seamless_axes: SeamlessAxes,
-            step_preview_mode: StepPreviewMode,
-            iterations: int,
-
+            arguments: GenerationArguments,
             step_callback: StepCallback,
             callback: Callback
         ):
             """A request to generate an image."""
+            ...
+        
+        def validate(
+            self,
+            arguments: GenerationArguments
+        ):
+            """Validates the given arguments in the UI without generating.
+            
+            This validation should occur as quickly as possible.
+            
+            To report problems with the inputs, raise a `ValueError`.
+            Use the `FixItError` to provide a solution to the problem as well.
+            
+            ```python
+            if arguments.steps % 2 == 0:
+                throw FixItError(
+                    "The number of steps is even",
+                    solution=FixItError.UpdateGenerationArgumentsSolution(
+                        title="Add 1 more step",
+                        arguments=dataclasses.replace(
+                            arguments,
+                            steps=arguments.steps + 1
+                        )
+                    )
+                )
+            ```
+            """
             ...
 except:
     pass

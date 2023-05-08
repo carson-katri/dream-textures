@@ -16,7 +16,7 @@ from ..space_types import SPACE_TYPES
 from ...property_groups.dream_prompt import DreamPrompt, backend_options
 from ...generator_process.actions.prompt_to_image import Optimizations
 from ...generator_process.actions.detect_seamless import SeamlessAxes
-from ...generator_process.models import FixItError
+from ...api.models import FixItError
 from ... import api
 
 def dream_texture_panels():
@@ -350,13 +350,14 @@ def actions_panel(sub_panel, space_type, get_prompt):
 
             # Validation
             try:
-                prompt.validate(context)
+                backend: api.Backend = prompt.get_backend()
+                backend.validate(prompt.generate_args(context))
             except FixItError as e:
                 error_box = layout.box()
                 error_box.use_property_split = False
                 for i, line in enumerate(e.args[0].split('\n')):
                     error_box.label(text=line, icon="ERROR" if i == 0 else "NONE")
-                e.draw(context, error_box)
+                e._draw(prompt, context, error_box)
             except Exception as e:
                 print(e)
     return ActionsPanel

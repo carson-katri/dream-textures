@@ -17,7 +17,7 @@ from .notify_result import NotifyResult
 from ..preferences import StableDiffusionPreferences
 
 from ..generator_process import Generator
-from ..generator_process.models import FixItError
+from ..api.models import FixItError
 from ..generator_process.actions.huggingface_hub import ModelType
 import tempfile
 
@@ -163,7 +163,7 @@ def dream_texture_projection_panels():
                     error_box.use_property_split = False
                     for i, line in enumerate(e.args[0].split('\n')):
                         error_box.label(text=line, icon="ERROR" if i == 0 else "NONE")
-                    e.draw(context, error_box)
+                    e._draw(context.scene.dream_textures_project_prompt, context, error_box)
                 except Exception as e:
                     print(e)
         return ActionsPanel

@@ -236,7 +236,7 @@ def _conv_forward_asymmetric(self, input, weight, bias):
     """
     Patch for Conv2d._conv_forward that supports asymmetric padding
     """
-    if input.device.type == "privateuseone":
+    if input.device.type == "dml":
         # DML pad() will wrongly fill the tensor in constant mode with the supplied value
         # (default 0) when padding on both ends of a dimension, can't split to two calls.
         working = nn.functional.pad(input, self._reversed_padding_repeated_twice, mode='circular')

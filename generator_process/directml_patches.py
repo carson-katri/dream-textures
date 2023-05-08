@@ -17,7 +17,7 @@ def tensor_ensure_device(self, other, *, pre_patch):
 
 
 def baddbmm(input, batch1, batch2, *, beta=1, alpha=1, out=None, pre_patch):
-    if input.device.type == "privateuseone" and beta == 0:
+    if input.device.type == "dml" and beta == 0:
         if out is not None:
             torch.bmm(batch1, batch2, out=out)
             out *= alpha
@@ -27,7 +27,7 @@ def baddbmm(input, batch1, batch2, *, beta=1, alpha=1, out=None, pre_patch):
 
 
 def pad(input, pad, mode="constant", value=None, *, pre_patch):
-    if input.device.type == "privateuseone" and mode == "constant":
+    if input.device.type == "dml" and mode == "constant":
         pad_dims = torch.tensor(pad, dtype=torch.int32).view(-1, 2).flip(0)
         both_ends = False
         for pre, post in pad_dims:
@@ -49,7 +49,7 @@ def pad(input, pad, mode="constant", value=None, *, pre_patch):
 
 
 def getitem(self, key, *, pre_patch):
-    if isinstance(key, Tensor) and "privateuseone" in [self.device.type, key.device.type] and key.numel() == 1:
+    if isinstance(key, Tensor) and "dml" in [self.device.type, key.device.type] and key.numel() == 1:
         return pre_patch(self, int(key))
     return pre_patch(self, key)
 

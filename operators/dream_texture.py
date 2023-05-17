@@ -92,13 +92,7 @@ class DreamTexture(bpy.types.Operator):
             )
 
         # Setup the progress indicator
-        def step_progress_update(self, context):
-            if hasattr(context.area, "regions"):
-                for region in context.area.regions:
-                    if region.type == "UI":
-                        region.tag_redraw()
-            return None
-        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args['steps'], update=step_progress_update)
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args['steps'])
         scene.dream_textures_info = "Starting..."
 
         last_data_block = None
@@ -109,6 +103,10 @@ class DreamTexture(bpy.types.Operator):
             if step_image.final:
                 return
             scene.dream_textures_progress = step_image.step
+            for area in context.screen.areas:
+                for region in area.regions:
+                    if region.type == "UI":
+                        region.tag_redraw()
             if len(step_image.images) > 0:
                 image = step_image.tile_images()
                 last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", image.shape[1], image.shape[0], image.ravel(), last_data_block)

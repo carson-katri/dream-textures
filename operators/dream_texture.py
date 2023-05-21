@@ -164,6 +164,8 @@ class DreamTexture(bpy.types.Operator):
                             setattr(history_entry, key, value)
                 history_entry.seed = str(seed)
                 history_entry.hash = image_hash
+                history_entry.width = result_image.shape[1]
+                history_entry.height = result_image.shape[0]
                 if is_file_batch:
                     history_entry.prompt_structure_token_subject = file_batch_lines[iteration]
                 iteration += 1

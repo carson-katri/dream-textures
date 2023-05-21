@@ -83,7 +83,7 @@ class DreamTexture(bpy.types.Operator):
 
         init_image = None
         if generated_args['use_init_img']:
-            get_source_image(context, generated_args['init_img_src'])
+            init_image = get_source_image(context, generated_args['init_img_src'])
         if init_image is not None:
             init_image = np.flipud(
                 (np.array(init_image.pixels) * 255)

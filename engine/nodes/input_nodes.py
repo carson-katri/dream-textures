@@ -67,11 +67,36 @@ class NodeImage(DreamTexturesNode):
         self.outputs.new("NodeSocketColor", "Image")
 
     def draw_buttons(self, context, layout):
-        layout.prop(self, "value", text="")
+        layout.template_ID(self, "value", open="image.open")
 
     def execute(self, context):
+        result = np.array(self.value.pixels).reshape((*self.value.size, self.value.channels))
+        context.update(result)
         return {
-            'Image': np.array(self.value.pixels).reshape((*self.value.size, self.value.channels))
+            'Image': result
+        }
+
+class NodeImageFile(DreamTexturesNode):
+    """Requires Blender 3.5+ for OpenImageIO"""
+    bl_idname = "dream_textures.node_image_file"
+    bl_label = "Image File"
+
+    def init(self, context):
+        self.inputs.new("NodeSocketString", "Path")
+
+        self.outputs.new("NodeSocketColor", "Image")
+
+    def draw_buttons(self, context, layout):
+        pass
+
+    def execute(self, context, path):
+        import OpenImageIO as oiio
+        image = oiio.ImageInput.open(path)
+        pixels = np.flipud(image.read_image('float'))
+        image.close()
+        context.update(pixels)
+        return {
+            'Image': pixels
         }
 
 class NodeRenderProperties(DreamTexturesNode):
@@ -81,6 +106,8 @@ class NodeRenderProperties(DreamTexturesNode):
     def init(self, context):
         self.outputs.new("NodeSocketInt", "Resolution X")
         self.outputs.new("NodeSocketInt", "Resolution Y")
+        self.outputs.new("NodeSocketString", "Output Filepath")
+        self.outputs.new("NodeSocketInt", "Frame")
 
     def draw_buttons(self, context, layout):
         pass
@@ -89,4 +116,6 @@ class NodeRenderProperties(DreamTexturesNode):
         return {
             'Resolution X': context.depsgraph.scene.render.resolution_x,
             'Resolution Y': context.depsgraph.scene.render.resolution_y,
+            'Output Filepath': context.depsgraph.scene.render.filepath,
+            'Frame': context.depsgraph.scene.frame_current
         }

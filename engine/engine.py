@@ -15,7 +15,7 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     bl_idname = "DREAM_TEXTURES"
     bl_label = "Dream Textures"
     bl_use_preview = False
-    # bl_use_gpu_context = True
+    bl_use_postprocess = True
 
     def __init__(self):
         pass
@@ -45,12 +45,15 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
         try:
             progress = 0
             def node_begin(node):
-                self.update_stats("Node", node.name)
+                self.update_stats("Node", node.label or node.name)
             def node_update(response):
                 if isinstance(response, np.ndarray):
-                    node_result = prepare_result(response)
-                    layer.rect = node_result.reshape(-1, node_result.shape[-1])
-                    self.update_result(result)
+                    try:
+                        node_result = prepare_result(response)
+                        layer.rect = node_result.reshape(-1, node_result.shape[-1])
+                        self.update_result(result)
+                    except:
+                        pass
             def node_end(_):
                 nonlocal progress
                 progress += 1

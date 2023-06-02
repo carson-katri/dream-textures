@@ -17,35 +17,57 @@ class DreamTexturesNodeCategory(nodeitems_utils.NodeCategory):
     def poll(cls, context):
         return context.space_data.tree_type == DreamTexturesNodeTree.__name__
 
+pipeline_items = [
+    nodeitems_utils.NodeItem(NodeStableDiffusion.bl_idname),
+    nodeitems_utils.NodeItem(NodeControlNet.bl_idname),
+]
+
+input_items = [
+    nodeitems_utils.NodeItem(NodeInteger.bl_idname),
+    nodeitems_utils.NodeItem(NodeString.bl_idname),
+    nodeitems_utils.NodeItem(NodeImage.bl_idname),
+    nodeitems_utils.NodeItem(NodeCollection.bl_idname),
+    nodeitems_utils.NodeItem(NodeRenderProperties.bl_idname),
+]
+if bpy.app.version >= (3, 5, 0):
+    input_items.append(nodeitems_utils.NodeItem(NodeImageFile.bl_idname))
+
+utility_items = [
+    nodeitems_utils.NodeItem(NodeMath.bl_idname),
+    nodeitems_utils.NodeItem(NodeRandomValue.bl_idname),
+    nodeitems_utils.NodeItem(NodeRandomSeed.bl_idname),
+    nodeitems_utils.NodeItem(NodeSeed.bl_idname),
+    nodeitems_utils.NodeItem(NodeClamp.bl_idname),
+    nodeitems_utils.NodeItem(NodeFramePath.bl_idname),
+    nodeitems_utils.NodeItem(NodeCropImage.bl_idname),
+    nodeitems_utils.NodeItem(NodeJoinImages.bl_idname),
+    nodeitems_utils.NodeItem(NodeColorCorrect.bl_idname),
+    nodeitems_utils.NodeItem(NodeSeparateColor.bl_idname),
+    nodeitems_utils.NodeItem(NodeCombineColor.bl_idname),
+    nodeitems_utils.NodeItem(NodeSwitch.bl_idname),
+    nodeitems_utils.NodeItem(NodeCompare.bl_idname),
+    nodeitems_utils.NodeItem(NodeReplaceString.bl_idname),
+]
+if bpy.app.version >= (3, 5, 0):
+    utility_items.append(nodeitems_utils.NodeItem(NodeResizeImage.bl_idname))
+
+annotations_items = [
+    nodeitems_utils.NodeItem(NodeAnnotationDepth.bl_idname),
+    nodeitems_utils.NodeItem(NodeAnnotationOpenPose.bl_idname),
+    nodeitems_utils.NodeItem(NodeAnnotationADE20K.bl_idname),
+    nodeitems_utils.NodeItem(NodeAnnotationViewport.bl_idname),
+]
+
+group_items = [
+    nodeitems_utils.NodeItem(bpy.types.NodeGroupOutput.__name__),
+]
+
 categories = [
-    DreamTexturesNodeCategory("DREAM_TEXTURES_PIPELINE", "Pipeline", items = [
-        nodeitems_utils.NodeItem(NodeStableDiffusion.bl_idname),
-        nodeitems_utils.NodeItem(NodeControlNet.bl_idname),
-    ]),
-    DreamTexturesNodeCategory("DREAM_TEXTURES_INPUT", "Input", items = [
-        nodeitems_utils.NodeItem(NodeInteger.bl_idname),
-        nodeitems_utils.NodeItem(NodeString.bl_idname),
-        nodeitems_utils.NodeItem(NodeImage.bl_idname),
-        nodeitems_utils.NodeItem(NodeCollection.bl_idname),
-        nodeitems_utils.NodeItem(NodeRenderProperties.bl_idname),
-    ]),
-    DreamTexturesNodeCategory("DREAM_TEXTURES_UTILITY", "Utilities", items = [
-        nodeitems_utils.NodeItem(NodeMath.bl_idname),
-        nodeitems_utils.NodeItem(NodeRandomValue.bl_idname),
-        nodeitems_utils.NodeItem(NodeRandomSeed.bl_idname),
-        nodeitems_utils.NodeItem(NodeSeed.bl_idname),
-        nodeitems_utils.NodeItem(NodeClamp.bl_idname),
-    ]),
-    DreamTexturesNodeCategory("DREAM_TEXTURES_ANNOTATIONS", "Annotations", items = [
-        nodeitems_utils.NodeItem(NodeAnnotationDepth.bl_idname),
-        nodeitems_utils.NodeItem(NodeAnnotationNormal.bl_idname),
-        nodeitems_utils.NodeItem(NodeAnnotationOpenPose.bl_idname),
-        nodeitems_utils.NodeItem(NodeAnnotationADE20K.bl_idname),
-        nodeitems_utils.NodeItem(NodeAnnotationViewport.bl_idname),
-    ]),
-    DreamTexturesNodeCategory("DREAM_TEXTURES_GROUP", "Group", items = [
-        nodeitems_utils.NodeItem(bpy.types.NodeGroupOutput.__name__),
-    ]),
+    DreamTexturesNodeCategory("DREAM_TEXTURES_PIPELINE", "Pipeline", items=pipeline_items),
+    DreamTexturesNodeCategory("DREAM_TEXTURES_INPUT", "Input", items=input_items),
+    DreamTexturesNodeCategory("DREAM_TEXTURES_UTILITY", "Utilities", items=utility_items),
+    DreamTexturesNodeCategory("DREAM_TEXTURES_ANNOTATIONS", "Annotations", items=annotations_items),
+    DreamTexturesNodeCategory("DREAM_TEXTURES_GROUP", "Group", items=group_items),
 ]
 
 def register():
@@ -79,6 +101,8 @@ def register():
     bpy.utils.register_class(NodeString)
     bpy.utils.register_class(NodeCollection)
     bpy.utils.register_class(NodeImage)
+    if bpy.app.version >= (3, 5, 0):
+        bpy.utils.register_class(NodeImageFile)
     bpy.utils.register_class(NodeRenderProperties)
     
     bpy.utils.register_class(NodeAnnotationDepth)
@@ -92,6 +116,17 @@ def register():
     bpy.utils.register_class(NodeRandomSeed)
     bpy.utils.register_class(NodeSeed)
     bpy.utils.register_class(NodeClamp)
+    bpy.utils.register_class(NodeFramePath)
+    bpy.utils.register_class(NodeCropImage)
+    if bpy.app.version >= (3, 5, 0):
+        bpy.utils.register_class(NodeResizeImage)
+    bpy.utils.register_class(NodeJoinImages)
+    bpy.utils.register_class(NodeColorCorrect)
+    bpy.utils.register_class(NodeSeparateColor)
+    bpy.utils.register_class(NodeCombineColor)
+    bpy.utils.register_class(NodeSwitch)
+    bpy.utils.register_class(NodeCompare)
+    bpy.utils.register_class(NodeReplaceString)
 
     nodeitems_utils.register_node_categories("DREAM_TEXTURES_CATEGORIES", categories)
 
@@ -117,6 +152,8 @@ def unregister():
     bpy.utils.unregister_class(NodeString)
     bpy.utils.unregister_class(NodeCollection)
     bpy.utils.unregister_class(NodeImage)
+    if bpy.app.version >= (3, 5, 0):
+        bpy.utils.unregister_class(NodeImageFile)
     bpy.utils.unregister_class(NodeRenderProperties)
 
     bpy.utils.unregister_class(NodeAnnotationDepth)
@@ -130,5 +167,16 @@ def unregister():
     bpy.utils.unregister_class(NodeRandomSeed)
     bpy.utils.unregister_class(NodeSeed)
     bpy.utils.unregister_class(NodeClamp)
+    bpy.utils.unregister_class(NodeFramePath)
+    bpy.utils.unregister_class(NodeCropImage)
+    if bpy.app.version >= (3, 5, 0):
+        bpy.utils.unregister_class(NodeResizeImage)
+    bpy.utils.unregister_class(NodeJoinImages)
+    bpy.utils.unregister_class(NodeColorCorrect)
+    bpy.utils.unregister_class(NodeSeparateColor)
+    bpy.utils.unregister_class(NodeCombineColor)
+    bpy.utils.unregister_class(NodeSwitch)
+    bpy.utils.unregister_class(NodeCompare)
+    bpy.utils.unregister_class(NodeReplaceString)
 
     nodeitems_utils.unregister_node_categories("DREAM_TEXTURES_CATEGORIES")

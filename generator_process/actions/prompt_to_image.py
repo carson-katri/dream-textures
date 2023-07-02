@@ -151,10 +151,10 @@ class Optimizations:
     cudnn_benchmark: Annotated[bool, "cuda"] = False
     tf32: Annotated[bool, "cuda"] = False
     amp: Annotated[bool, "cuda"] = False
-    half_precision: Annotated[bool, {"cuda", "privateuseone"}] = True
-    cpu_offload: Annotated[str, {"cuda", "privateuseone"}] = "off"
+    half_precision: Annotated[bool, {"cuda", "dml"}] = True
+    cpu_offload: Annotated[str, {"cuda", "dml"}] = "off"
     channels_last_memory_format: bool = False
-    sdp_attention: Annotated[bool, {"cpu", "cuda", "mps"}] = True
+    sdp_attention: bool = True
     batch_size: int = 1
     vae_slicing: bool = True
     vae_tiling: str = "off"
@@ -169,7 +169,7 @@ class Optimizations:
         if sys.platform == "darwin":
             return "mps"
         elif Pipeline.directml_available():
-            return "privateuseone"
+            return "dml"
         else:
             return "cuda"
 
@@ -277,7 +277,7 @@ class Optimizations:
         except: pass
         
         from .. import directml_patches
-        if device == "privateuseone":
+        if device == "dml":
             directml_patches.enable(pipeline)
         else:
             directml_patches.disable(pipeline)
@@ -380,8 +380,8 @@ def choose_device(self) -> str:
     if Pipeline.directml_available():
         import torch_directml
         if torch_directml.is_available():
-            # can be named better when torch.utils.rename_privateuse1_backend() is released
-            return "privateuseone"
+            torch.utils.rename_privateuse1_backend("dml")
+            return "dml"
     return "cpu"
 
 def approximate_decoded_latents(latents):
@@ -600,7 +600,7 @@ def prompt_to_image(
             batch_size = len(prompt) if isinstance(prompt, list) else 1
             generator = []
             for _ in range(batch_size):
-                gen = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
+                gen = torch.Generator(device="cpu" if device in ("mps", "dml") else device) # MPS and DML do not support the `Generator` API
                 generator.append(gen.manual_seed(random.randrange(0, np.iinfo(np.uint32).max) if seed is None else seed))
             if batch_size == 1:
                 # Some schedulers don't handle a list of generators: https://github.com/huggingface/diffusers/issues/1909
@@ -611,7 +611,7 @@ def prompt_to_image(
             _configure_model_padding(pipe.vae, seamless_axes)
 
             # Inference
-            with torch.inference_mode() if device not in ('mps', "privateuseone") else nullcontext():
+            with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
                 yield from pipe(
                     prompt=prompt,
                     height=height,
@@ -672,7 +672,7 @@ def _conv_forward_asymmetric(self, input, weight, bias):
     """
     Patch for Conv2d._conv_forward that supports asymmetric padding
     """
-    if input.device.type == "privateuseone":
+    if input.device.type == "dml":
         # DML pad() will wrongly fill the tensor in constant mode with the supplied value
         # (default 0) when padding on both ends of a dimension, can't split to two calls.
         working = nn.functional.pad(input, self._reversed_padding_repeated_twice, mode='circular')

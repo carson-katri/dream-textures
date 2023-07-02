@@ -55,7 +55,7 @@ def upscale(
         pipe = pipe.to(device)
     pipe = optimizations.apply(pipe, device)
 
-    generator = torch.Generator(device="cpu" if device in ("mps", "privateuseone") else device) # MPS and DML do not support the `Generator` API
+    generator = torch.Generator(device="cpu" if device in ("mps", "dml") else device) # MPS and DML do not support the `Generator` API
     if seed is None:
         seed = random.randrange(0, np.iinfo(np.uint32).max)
 

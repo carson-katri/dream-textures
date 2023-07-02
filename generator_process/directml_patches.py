@@ -6,18 +6,8 @@ from torch import Tensor
 active_dml_patches: list | None = None
 
 
-def tensor_ensure_device(self, other, *, pre_patch):
-    """Fix for operations where one tensor is DML and the other is CPU."""
-    if isinstance(other, Tensor) and self.device != other.device:
-        if self.device.type != "cpu":
-            other = other.to(self.device)
-        else:
-            self = self.to(other.device)
-    return pre_patch(self, other)
-
-
 def baddbmm(input, batch1, batch2, *, beta=1, alpha=1, out=None, pre_patch):
-    if input.device.type == "privateuseone" and beta == 0:
+    if input.device.type == "dml" and beta == 0:
         if out is not None:
             torch.bmm(batch1, batch2, out=out)
             out *= alpha
@@ -27,7 +17,7 @@ def baddbmm(input, batch1, batch2, *, beta=1, alpha=1, out=None, pre_patch):
 
 
 def pad(input, pad, mode="constant", value=None, *, pre_patch):
-    if input.device.type == "privateuseone" and mode == "constant":
+    if input.device.type == "dml" and mode == "constant":
         pad_dims = torch.tensor(pad, dtype=torch.int32).view(-1, 2).flip(0)
         both_ends = False
         for pre, post in pad_dims:
@@ -49,7 +39,7 @@ def pad(input, pad, mode="constant", value=None, *, pre_patch):
 
 
 def getitem(self, key, *, pre_patch):
-    if isinstance(key, Tensor) and "privateuseone" in [self.device.type, key.device.type] and key.numel() == 1:
+    if isinstance(key, Tensor) and "dml" in [self.device.type, key.device.type] and key.numel() == 1:
         return pre_patch(self, int(key))
     return pre_patch(self, key)
 
@@ -72,15 +62,8 @@ def enable(pipe):
 
     # Not all places where the patches have an effect are necessarily listed.
 
-    # PNDMScheduler.step()
-    dml_patch_method(Tensor, "__mul__", tensor_ensure_device)
-    # PNDMScheduler.step()
-    dml_patch_method(Tensor, "__sub__", tensor_ensure_device)
-    # DDIMScheduler.step() last timestep in image_to_image
-    dml_patch_method(Tensor, "__truediv__", tensor_ensure_device)
-
-    # CrossAttention.get_attention_scores()
-    # AttentionBlock.forward()
+    # diffusers.models.attention_processor.Attention.get_attention_scores()
+    # diffusers.models.attention.AttentionBlock.forward()
     # Diffusers implementation gives torch.empty() tensors with beta=0 to baddbmm(), which may contain NaNs.
     # DML implementation doesn't properly ignore input argument with beta=0 and causes NaN propagation.
     dml_patch(torch, "baddbmm", baddbmm)
@@ -105,7 +88,9 @@ def enable(pipe):
                 nan_check(i, v)
             for k, v in kwargs.items():
                 nan_check(k, v)
-            return original(*args, **kwargs)
+            r = original(*args, **kwargs)
+            nan_check("return", r)
+            return r
         module.forward = func.__get__(module)
 
     # only enable when testing

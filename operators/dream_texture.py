@@ -2,6 +2,7 @@ import bpy
 import hashlib
 import numpy as np
 import math
+from typing import Literal
 
 from .notify_result import NotifyResult
 from ..preferences import StableDiffusionPreferences
@@ -25,6 +26,23 @@ def bpy_image(name, width, height, pixels, existing_image):
     image.pack()
     image.update()
     return image
+
+def get_source_image(context, source: Literal['file', 'open_editor']):
+    match source:
+        case 'file':
+            return context.scene.init_img
+        case 'open_editor':
+            if context.area.type == 'IMAGE_EDITOR':
+                return context.area.spaces.active.image
+            else:
+                init_image = None
+                for area in context.screen.areas:
+                    if area.type == 'IMAGE_EDITOR':
+                        if area.spaces.active.image is not None:
+                            init_image = area.spaces.active.image
+                return init_image
+        case _:
+            raise ValueError(f"unsupported source {repr(source)}")
 
 class DreamTexture(bpy.types.Operator):
     bl_idname = "shade.dream_texture"
@@ -55,6 +73,7 @@ class DreamTexture(bpy.types.Operator):
 
         node_tree = context.material.node_tree if hasattr(context, 'material') and hasattr(context.material, 'node_tree') else None
         node_tree_center = np.array(node_tree.view_center) if node_tree is not None else None
+        node_tree_top_left = np.array(context.region.view2d.region_to_view(0, context.region.height)) if node_tree is not None else None
         screen = context.screen
         scene = context.scene
 
@@ -64,14 +83,7 @@ class DreamTexture(bpy.types.Operator):
 
         init_image = None
         if generated_args['use_init_img']:
-            match generated_args['init_img_src']:
-                case 'file':
-                    init_image = scene.init_img
-                case 'open_editor':
-                    for area in screen.areas:
-                        if area.type == 'IMAGE_EDITOR':
-                            if area.spaces.active.image is not None:
-                                init_image = area.spaces.active.image
+            init_image = get_source_image(context, generated_args['init_img_src'])
         if init_image is not None:
             init_image = np.flipud(
                 (np.array(init_image.pixels) * 255)
@@ -80,13 +92,7 @@ class DreamTexture(bpy.types.Operator):
             )
 
         # Setup the progress indicator
-        def step_progress_update(self, context):
-            if hasattr(context.area, "regions"):
-                for region in context.area.regions:
-                    if region.type == "UI":
-                        region.tag_redraw()
-            return None
-        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args['steps'], update=step_progress_update)
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args['steps'])
         scene.dream_textures_info = "Starting..."
 
         last_data_block = None
@@ -97,16 +103,26 @@ class DreamTexture(bpy.types.Operator):
             if step_image.final:
                 return
             scene.dream_textures_progress = step_image.step
+            for area in context.screen.areas:
+                for region in area.regions:
+                    if region.type == "UI":
+                        region.tag_redraw()
             if len(step_image.images) > 0:
                 image = step_image.tile_images()
                 last_data_block = bpy_image(f"Step {step_image.step}/{generated_args['steps']}", image.shape[1], image.shape[0], image.ravel(), last_data_block)
                 for area in screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
+                    if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                         area.spaces.active.image = last_data_block
 
         iteration = 0
         iteration_limit = len(file_batch_lines) if is_file_batch else generated_args['iterations']
         iteration_square = math.ceil(math.sqrt(iteration_limit))
+        node_pad = np.array((20, 20))
+        node_size = np.array((240, 277)) + node_pad
+        if node_tree is not None:
+            # keep image nodes grid centered but don't go beyond top and left sides of nodes editor
+            node_anchor = node_tree_center + node_size * 0.5 * (-iteration_square, (iteration_limit-1) // iteration_square + 1)
+            node_anchor = np.array((np.maximum(node_tree_top_left[0], node_anchor[0]), np.minimum(node_tree_top_left[1], node_anchor[1]))) + node_pad * (0.5, -0.5)
         def done_callback(future):
             nonlocal last_data_block
             nonlocal iteration
@@ -125,10 +141,10 @@ class DreamTexture(bpy.types.Operator):
                     nodes = node_tree.nodes
                     texture_node = nodes.new("ShaderNodeTexImage")
                     texture_node.image = image
-                    texture_node.location = node_tree_center + ((iteration % iteration_square) * 260, -(iteration // iteration_square) * 297)
+                    texture_node.location = node_anchor + node_size * ((iteration % iteration_square), -(iteration // iteration_square))
                     nodes.active = texture_node
                 for area in screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
+                    if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                         area.spaces.active.image = image
                 scene.dream_textures_prompt.seed = str(seed) # update property in case seed was sourced randomly or from hash
                 # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
@@ -148,6 +164,8 @@ class DreamTexture(bpy.types.Operator):
                             setattr(history_entry, key, value)
                 history_entry.seed = str(seed)
                 history_entry.hash = image_hash
+                history_entry.width = result_image.shape[1]
+                history_entry.height = result_image.shape[0]
                 if is_file_batch:
                     history_entry.prompt_structure_token_subject = file_batch_lines[iteration]
                 iteration += 1

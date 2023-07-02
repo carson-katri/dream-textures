@@ -24,6 +24,21 @@ def bpy_image(name, width, height, pixels, existing_image):
     image.update()
     return image
 
+def get_source_image(context):
+    node_tree = context.material.node_tree if hasattr(context, 'material') else None
+    active_node = next((node for node in node_tree.nodes if node.select and node.bl_idname == 'ShaderNodeTexImage'), None) if node_tree is not None else None
+    if active_node is not None and active_node.image is not None:
+        return active_node.image
+    elif context.area.type == 'IMAGE_EDITOR':
+        return context.area.spaces.active.image
+    else:
+        input_image = None
+        for area in context.screen.areas:
+            if area.type == 'IMAGE_EDITOR':
+                if area.spaces.active.image is not None:
+                    input_image = area.spaces.active.image
+        return input_image
+
 class Upscale(bpy.types.Operator):
     bl_idname = "shade.dream_textures_upscale"
     bl_label = "Upscale"
@@ -49,14 +64,7 @@ class Upscale(bpy.types.Operator):
 
         bpy.types.Scene.dream_textures_info = bpy.props.StringProperty(name="Info", update=step_progress_update)
 
-        input_image = None
-        if active_node is not None and active_node.image is not None:
-            input_image = active_node.image
-        else:
-            for area in context.screen.areas:
-                if area.type == 'IMAGE_EDITOR':
-                    if area.spaces.active.image is not None:
-                        input_image = area.spaces.active.image
+        input_image = get_source_image(context)
         if input_image is None:
             self.report({"ERROR"}, "No open image in the Image Editor space, or selected Image Texture node.")
             return {"FINISHED"}
@@ -90,7 +98,7 @@ class Upscale(bpy.types.Operator):
             scene.dream_textures_progress = tile.tile
             last_data_block = bpy_image(f"Tile {tile.tile}/{tile.total}", tile.image.shape[1], tile.image.shape[0], tile.image.ravel(), last_data_block)
             for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
+                if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                     area.spaces.active.image = last_data_block
 
         def image_done(future):
@@ -103,7 +111,7 @@ class Upscale(bpy.types.Operator):
                 return
             image = bpy_image(f"{input_image.name} (Upscaled)", tile.image.shape[1], tile.image.shape[0], tile.image.ravel(), last_data_block)
             for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR':
+                if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                     area.spaces.active.image = image
             if active_node is not None:
                 active_node.image = image

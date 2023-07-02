@@ -1,7 +1,7 @@
 from bpy.types import Panel
 from ...pil_to_image import *
 from ...prompt_engineering import *
-from ...operators.upscale import Upscale
+from ...operators.upscale import Upscale, get_source_image
 from ...operators.dream_texture import CancelGenerator, ReleaseGenerator
 from ...generator_process.actions.detect_seamless import SeamlessAxes
 from ...generator_process.actions.prompt_to_image import Pipeline
@@ -44,14 +44,7 @@ def upscaling_panels():
                 if prompt.seamless_axes == SeamlessAxes.AUTO:
                     node_tree = context.material.node_tree if hasattr(context, 'material') else None
                     active_node = next((node for node in node_tree.nodes if node.select and node.bl_idname == 'ShaderNodeTexImage'), None) if node_tree is not None else None
-                    init_image = None
-                    if active_node is not None and active_node.image is not None:
-                        init_image = active_node.image
-                    else:
-                        for area in context.screen.areas:
-                            if area.type == 'IMAGE_EDITOR':
-                                if area.spaces.active.image is not None:
-                                    init_image = area.spaces.active.image
+                    init_image = get_source_image(context)
                     context.scene.dream_textures_upscale_seamless_result.check(init_image)
                     auto_row = layout.row()
                     auto_row.enabled = False
@@ -87,10 +80,7 @@ def upscaling_panels():
                 layout.use_property_split = True
                 layout.use_property_decorate = False
                 
-                image = None
-                for area in context.screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
-                        image = area.spaces.active.image
+                image = get_source_image(context)
                 row = layout.row()
                 row.scale_y = 1.5
                 if context.scene.dream_textures_progress <= 0:

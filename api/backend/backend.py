@@ -81,6 +81,13 @@ try:
         def draw_extra(self, layout, context):
             """Draw additional UI in the panel"""
             ...
+        
+        def get_batch_size(self, context) -> int:
+            """Return the selected batch size for the backend (if applicable).
+            
+            A default implementation is provided that returns `1`.
+            """
+            return 1
 
         def generate(
             self,

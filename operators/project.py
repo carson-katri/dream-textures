@@ -418,7 +418,7 @@ class ProjectDreamTexture(bpy.types.Operator):
         
         context.scene.dream_textures_info = "Starting..."
         if context.scene.dream_textures_project_use_control_net:
-            generated_args = context.scene.dream_textures_project_prompt.generate_args()
+            generated_args = context.scene.dream_textures_project_prompt.generate_args(context)
             del generated_args['control']
             future = gen.control_net(
                 control=[np.flipud(depth)], # the depth control needs to be flipped.
@@ -430,7 +430,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             future = gen.depth_to_image(
                 depth=depth,
                 image=init_img_path,
-                **context.scene.dream_textures_project_prompt.generate_args()
+                **context.scene.dream_textures_project_prompt.generate_args(context)
             )
         gen._active_generation_future = future
         future.call_done_on_exception = False

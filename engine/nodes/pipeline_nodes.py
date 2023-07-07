@@ -108,9 +108,9 @@ class NodeStableDiffusion(DreamTexturesNode):
         self.prompt.steps = steps
         self.prompt.seed = str(seed)
         self.prompt.cfg_scale = cfg_scale
-        args = self.prompt.generate_args()
+        args = self.prompt.generate_args(context)
 
-        shared_args = context.depsgraph.scene.dream_textures_engine_prompt.generate_args()
+        shared_args = context.depsgraph.scene.dream_textures_engine_prompt.generate_args(context)
 
         # the source image is a default color, ignore it.
         if np.array(source_image).shape == (4,):

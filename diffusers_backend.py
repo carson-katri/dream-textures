@@ -99,6 +99,9 @@ class DiffusersBackend(Backend):
     def list_schedulers(self, context) -> List[str]:
         return [scheduler.value for scheduler in Scheduler]
 
+    def get_batch_size(self, context) -> int:
+        return self.batch_size
+
     def optimizations(self) -> Optimizations:
         optimizations = Optimizations()
         for prop in dir(self):

@@ -81,22 +81,12 @@ class DreamTexture(bpy.types.Operator):
         screen = context.screen
         scene = context.scene
 
-        generated_args = scene.dream_textures_prompt.generate_args()
+        generated_args = scene.dream_textures_prompt.generate_args(context)
         context.scene.seamless_result.update_args(generated_args)
         context.scene.seamless_result.update_args(history_template, as_id=True)
 
-        init_image = None
-        if generated_args['use_init_img']:
-            init_image = get_source_image(context, generated_args['init_img_src'])
-        if init_image is not None:
-            init_image = np.flipud(
-                (np.array(init_image.pixels) * 255)
-                    .astype(np.uint8)
-                    .reshape((init_image.size[1], init_image.size[0], init_image.channels))
-            )
-
         # Setup the progress indicator
-        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args['steps'])
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args.steps)
         scene.dream_textures_info = "Starting..."
 
         last_data_block = None
@@ -109,13 +99,14 @@ class DreamTexture(bpy.types.Operator):
                 for region in area.regions:
                     if region.type == "UI":
                         region.tag_redraw()
+            image = api.GenerationResult.tile_images(progress)
             last_data_block = bpy_image(f"Step {progress[-1].progress}/{progress[-1].total}", image.shape[1], image.shape[0], image.ravel(), last_data_block)
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                     area.spaces.active.image = last_data_block
 
         iteration = 0
-        iteration_limit = len(file_batch_lines) if is_file_batch else generated_args['iterations']
+        iteration_limit = len(file_batch_lines) if is_file_batch else generated_args.iterations
         iteration_square = math.ceil(math.sqrt(iteration_limit))
         node_pad = np.array((20, 20))
         node_size = np.array((240, 277)) + node_pad
@@ -177,9 +168,12 @@ class DreamTexture(bpy.types.Operator):
                     iteration += 1
                 if iteration < iteration_limit:
                     generate_next()
+                else:
+                    scene.dream_textures_info = ""
+                    scene.dream_textures_progress = 0
         
         def generate_next():
-            backend.generate(**prompt.generate_args(context, iteration=iteration), step_callback=step_callback, callback=callback)
+            backend.generate(prompt.generate_args(context, iteration=iteration), step_callback=step_callback, callback=callback)
         
         generate_next()
 

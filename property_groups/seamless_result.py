@@ -4,7 +4,7 @@ import numpy as np
 from ..generator_process.actions.detect_seamless import SeamlessAxes
 from ..generator_process import Generator
 from ..preferences import StableDiffusionPreferences
-
+from ..api.models import GenerationArguments
 
 def update(self, context):
     if hasattr(context.area, "regions"):
@@ -52,9 +52,16 @@ class SeamlessResult(bpy.types.PropertyGroup):
             self.result = future.result().text
         Generator.shared().detect_seamless(pixels).add_done_callback(result)
 
-    def update_args(self, args: dict[str, any], as_id=False):
-        if args['seamless_axes'] == SeamlessAxes.AUTO and self.result != 'Processing':
-            if as_id:
-                args['seamless_axes'] = SeamlessAxes(self.result).id
-            else:
-                args['seamless_axes'] = SeamlessAxes(self.result)
+    def update_args(self, args, as_id=False):
+        if isinstance(args, GenerationArguments):
+            if args.seamless_axes == SeamlessAxes.AUTO and self.result != 'Processing':
+                if as_id:
+                    args.seamless_axes = SeamlessAxes(self.result).id
+                else:
+                    args.seamless_axes = SeamlessAxes(self.result)
+        else:
+            if args['seamless_axes'] == SeamlessAxes.AUTO and self.result != 'Processing':
+                if as_id:
+                    args['seamless_axes'] = SeamlessAxes(self.result).id
+                else:
+                    args['seamless_axes'] = SeamlessAxes(self.result)

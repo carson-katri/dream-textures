@@ -206,16 +206,6 @@ def get_seed(self):
             h = ~h
         return (h & 0xFFFFFFFF) ^ (h >> 32) # 64 bit hash down to 32 bits
 
-def get_optimizations(self: DreamPrompt):
-    optimizations = Optimizations()
-    for prop in dir(self):
-        split_name = prop.replace('optimizations_', '')
-        if prop.startswith('optimizations_') and hasattr(optimizations, split_name):
-            setattr(optimizations, split_name, getattr(self, prop))
-    if self.optimizations_attention_slice_size_src == 'auto':
-        optimizations.attention_slice_size = 'auto'
-    return optimizations
-
 def generate_args(self, context, iteration=0) -> api.GenerationArguments:
     is_file_batch = self.prompt_structure == file_batch_structure.id
     file_batch_lines = []
@@ -223,10 +213,11 @@ def generate_args(self, context, iteration=0) -> api.GenerationArguments:
     if is_file_batch:
         file_batch_lines = [line.body for line in context.scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
         file_batch_lines_negative = [""] * len(file_batch_lines)
-
-    optim: Optimizations = self.get_optimizations()
+    
+    backend: api.Backend = self.get_backend()
+    batch_size = backend.get_batch_size(context)
     iteration_limit = len(file_batch_lines) if is_file_batch else self.iterations
-    batch_size = min(optim.batch_size, iteration_limit-iteration)
+    batch_size = min(batch_size, iteration_limit-iteration)
 
     task: api.Task = api.PromptToImage()
     if self.use_init_img:
@@ -320,7 +311,6 @@ def get_backend(self) -> api.Backend:
 DreamPrompt.generate_prompt = generate_prompt
 DreamPrompt.get_prompt_subject = get_prompt_subject
 DreamPrompt.get_seed = get_seed
-DreamPrompt.get_optimizations = get_optimizations
 DreamPrompt.generate_args = generate_args
 DreamPrompt.validate = validate
 DreamPrompt.get_backend = get_backend

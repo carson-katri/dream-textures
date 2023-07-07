@@ -74,7 +74,7 @@ class Upscale(bpy.types.Operator):
                 .reshape((input_image.size[1], input_image.size[0], input_image.channels))
         )
 
-        generated_args = context.scene.dream_textures_upscale_prompt.generate_args()
+        generated_args = context.scene.dream_textures_upscale_prompt.generate_args(context)
         context.scene.dream_textures_upscale_seamless_result.update_args(generated_args)
 
         # Setup the progress indicator

@@ -48,7 +48,7 @@ class GenerationResult:
     """
 
     @staticmethod
-    def tile_images(results: list['GenerationResult']):
+    def tile_images(results: list['GenerationResult']) -> NDArray:
         images = [result.image for result in results]
         if len(images) == 0:
             return None

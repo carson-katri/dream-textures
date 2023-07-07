@@ -192,7 +192,7 @@ def depth_to_image(
             width = width or self.unet.config.sample_size * self.vae_scale_factor
 
             # 1. Check inputs
-            self.check_inputs(prompt, height, width, callback_steps)
+            self.check_inputs(prompt, height, width, strength, callback_steps)
 
             # 2. Define call parameters
             batch_size = 1 if isinstance(prompt, str) else len(prompt)
@@ -245,7 +245,7 @@ def depth_to_image(
                     device,
                     generator,
                     latents,
-                )
+                )[0]
 
             # 7. Prepare mask latent variables
             depth = self.prepare_depth_latents(

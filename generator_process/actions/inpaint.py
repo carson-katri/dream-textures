@@ -77,7 +77,7 @@ def inpaint(
             width = width or self.unet.config.sample_size * self.vae_scale_factor
 
             # 1. Check inputs
-            self.check_inputs(prompt, height, width, callback_steps)
+            self.check_inputs(prompt, height, width, strength, callback_steps)
 
             # 2. Define call parameters
             batch_size = 1 if isinstance(prompt, str) else len(prompt)
@@ -93,7 +93,7 @@ def inpaint(
             )
 
             # 4. Preprocess mask and image
-            mask, masked_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint.prepare_mask_and_masked_image(image, mask_image)
+            mask, masked_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint.prepare_mask_and_masked_image(image, mask_image, height, width)
 
             # 5. set timesteps
             self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -110,7 +110,7 @@ def inpaint(
                 device,
                 generator,
                 latents,
-            )
+            )[0]
 
             # 7. Prepare mask latent variables
             mask, masked_image_latents = self.prepare_mask_latents(

@@ -133,8 +133,6 @@ class DiffusersBackend(Backend):
         match arguments.task:
             case PromptToImage():
                 future = gen.prompt_to_image(**common_kwargs)
-            case ImageToImage(image=image, strength=strength, fit=fit):
-                future = gen.image_to_image(image=image, fit=fit, strength=strength, **common_kwargs)
             case Inpaint(image=image, fit=fit, strength=strength, mask_source=mask_source, mask_prompt=mask_prompt, confidence=confidence):
                 future = gen.inpaint(
                     image=image,
@@ -145,6 +143,8 @@ class DiffusersBackend(Backend):
                     text_mask_confidence=confidence,
                     **common_kwargs
                 )
+            case ImageToImage(image=image, strength=strength, fit=fit):
+                future = gen.image_to_image(image=image, fit=fit, strength=strength, **common_kwargs)
             case DepthToImage(depth=depth, image=image, strength=strength):
                 future = gen.depth_to_image(
                     depth=depth,

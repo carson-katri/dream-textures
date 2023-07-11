@@ -9,6 +9,7 @@ from ...api.models.step_preview_mode import StepPreviewMode
 from ..models.scheduler import Scheduler
 from ..models.optimizations import Optimizations
 from ..models.image_generation_result import ImageGenerationResult
+from ..future import Future
 
 class CachedPipeline:
     """A pipeline that has been cached for subsequent runs."""
@@ -54,11 +55,11 @@ def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler,
             del cached_pipe
             gc.collect()
 
-        revision = "fp16" if optimizations.can_use_half(device) else None
-        snapshot_folder = model_snapshot_folder(model, revision)
+        variant = "fp16" if optimizations.can_use_half(device) else None
+        snapshot_folder = model_snapshot_folder(model, variant)
         pipe = generator_pipeline.from_pretrained(
             snapshot_folder,
-            revision=revision,
+            variant="fp16",
             torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
             **kwargs
         )
@@ -125,6 +126,17 @@ def model_snapshot_folder(model, preferred_revision: str | None = None):
 
     return snapshot_folder
 
+def use_sdxl(model, optimizations, device):
+    import json
+    snapshot_folder = model_snapshot_folder(model, "fp16" if optimizations.can_use_half(device) else None)
+    if snapshot_folder is None:
+        return False
+    model_index = os.path.join(snapshot_folder, "model_index.json")
+    if not os.path.exists(model_index):
+        return False
+    with open(model_index) as f:
+        return json.load(f)["_class_name"] == "StableDiffusionXLPipeline"
+
 def prompt_to_image(
     self,
     
@@ -154,127 +166,29 @@ def prompt_to_image(
     key: str | None = None,
 
     **kwargs
-) -> Generator[ImageGenerationResult, None, None]:
+) -> Generator[Future, None, None]:
+    future = Future()
+    yield future
+
     import diffusers
     import torch
     from PIL import Image, ImageOps
 
-    # Mostly copied from `diffusers.StableDiffusionPipeline`, with slight modifications to yield the latents at each step.
-    class GeneratorPipeline(diffusers.StableDiffusionPipeline):
-        @torch.no_grad()
-        def __call__(
-            self,
-            prompt: Union[str, List[str]],
-            height: Optional[int] = None,
-            width: Optional[int] = None,
-            num_inference_steps: int = 50,
-            guidance_scale: float = 7.5,
-            negative_prompt: Optional[Union[str, List[str]]] = None,
-            num_images_per_prompt: Optional[int] = 1,
-            eta: float = 0.0,
-            generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
-            latents: Optional[torch.FloatTensor] = None,
-            output_type: Optional[str] = "pil",
-            return_dict: bool = True,
-            callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
-            callback_steps: Optional[int] = 1,
-            **kwargs,
-        ):
-            # 0. Default height and width to unet
-            height = height or self.unet.config.sample_size * self.vae_scale_factor
-            width = width or self.unet.config.sample_size * self.vae_scale_factor
-
-            # 1. Check inputs. Raise error if not correct
-            self.check_inputs(prompt, height, width, callback_steps)
-
-            # 2. Define call parameters
-            batch_size = 1 if isinstance(prompt, str) else len(prompt)
-            device = self._execution_device
-            # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
-            # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
-            # corresponds to doing no classifier free guidance.
-            do_classifier_free_guidance = guidance_scale > 1.0
-
-            # 3. Encode input prompt
-            text_embeddings = self._encode_prompt(
-                prompt, device, num_images_per_prompt, do_classifier_free_guidance, negative_prompt
-            )
-
-            # 4. Prepare timesteps
-            self.scheduler.set_timesteps(num_inference_steps, device=device)
-            timesteps = self.scheduler.timesteps
-
-            # 5. Prepare latent variables
-            num_channels_latents = self.unet.in_channels
-            latents = self.prepare_latents(
-                batch_size * num_images_per_prompt,
-                num_channels_latents,
-                height,
-                width,
-                text_embeddings.dtype,
-                device,
-                generator,
-                latents,
-            )
-
-            # 6. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
-            extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
-            # 7. Denoising loop
-            for i, t in enumerate(self.progress_bar(timesteps)):
-                # NOTE: Modified to support disabling CFG
-                if do_classifier_free_guidance and (i / len(timesteps)) >= kwargs['cfg_end']:
-                    do_classifier_free_guidance = False
-                    text_embeddings = text_embeddings[text_embeddings.size(0) // 2:]
-
-                # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-                # predict the noise residual
-                noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
-
-                # perform guidance
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
-
-                # NOTE: Modified to yield the latents instead of calling a callback.
-                yield ImageGenerationResult.step_preview(self, kwargs['step_preview_mode'], width, height, latents, generator, i)
-
-            # 8. Post-processing
-            image = self.decode_latents(latents)
-
-            # TODO: Add UI to enable this.
-            # 9. Run safety checker
-            # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
-
-            # Offload last model to CPU
-            if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
-                self.final_offload_hook.offload()
-
-            # NOTE: Modified to yield the decoded image as a numpy array.
-            yield ImageGenerationResult(
-                [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                    for i, image in enumerate(self.numpy_to_pil(image))],
-                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-                num_inference_steps,
-                True
-            )
-    
     if optimizations.cpu_only:
         device = "cpu"
     else:
         device = self.choose_device()
 
-    # StableDiffusionPipeline w/ caching
-    pipe = load_pipe(self, "prompt", GeneratorPipeline, model, optimizations, scheduler, device)
+    # Stable Diffusion pipeline w/ caching
+    if use_sdxl(model, optimizations, device):
+        pipe = load_pipe(self, "prompt", diffusers.StableDiffusionXLPipeline, model, optimizations, scheduler, device)
+    else:
+        pipe = load_pipe(self, "prompt", diffusers.StableDiffusionPipeline, model, optimizations, scheduler, device)
+    height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
+    width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
 
     # Optimizations
-    pipe = optimizations.apply(pipe, device)
+    pipe: diffusers.StableDiffusionPipeline = optimizations.apply(pipe, device)
 
     # RNG
     batch_size = len(prompt) if isinstance(prompt, list) else 1
@@ -292,7 +206,9 @@ def prompt_to_image(
 
     # Inference
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
-        yield from pipe(
+        def callback(step, timestep, latents):
+            future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
+        result = pipe(
             prompt=prompt,
             height=height,
             width=width,
@@ -305,11 +221,19 @@ def prompt_to_image(
             latents=None,
             output_type="pil",
             return_dict=True,
-            callback=None,
+            callback=callback,
             callback_steps=1,
-            step_preview_mode=step_preview_mode,
-            cfg_end=optimizations.cfg_end
+            #cfg_end=optimizations.cfg_end
         )
+        future.add_response(ImageGenerationResult(
+            [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                for image in result.images],
+            [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
+            steps,
+            True
+        ))
+    
+    future.set_done()
 
 def _conv_forward_asymmetric(self, input, weight, bias):
     import torch.nn as nn

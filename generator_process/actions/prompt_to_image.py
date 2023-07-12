@@ -1,6 +1,7 @@
 from typing import Union, Generator, Callable, List, Optional, Any
 import os
 from contextlib import nullcontext
+import gc
 
 import numpy as np
 import random
@@ -165,6 +166,8 @@ def prompt_to_image(
     # Stability SDK
     key: str | None = None,
 
+    sdxl_refiner_model: str | None = None,
+
     **kwargs
 ) -> Generator[Future, None, None]:
     future = Future()
@@ -180,7 +183,8 @@ def prompt_to_image(
         device = self.choose_device()
 
     # Stable Diffusion pipeline w/ caching
-    if use_sdxl(model, optimizations, device):
+    is_sdxl = use_sdxl(model, optimizations, device)
+    if is_sdxl:
         pipe = load_pipe(self, "prompt", diffusers.StableDiffusionXLPipeline, model, optimizations, scheduler, device)
     else:
         pipe = load_pipe(self, "prompt", diffusers.StableDiffusionPipeline, model, optimizations, scheduler, device)
@@ -188,7 +192,7 @@ def prompt_to_image(
     width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
 
     # Optimizations
-    pipe: diffusers.StableDiffusionPipeline = optimizations.apply(pipe, device)
+    pipe = optimizations.apply(pipe, device)
 
     # RNG
     batch_size = len(prompt) if isinstance(prompt, list) else 1
@@ -206,6 +210,7 @@ def prompt_to_image(
 
     # Inference
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
+        output_type = "latent" if is_sdxl and sdxl_refiner_model is not None else "pil"
         def callback(step, timestep, latents):
             future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
         result = pipe(
@@ -219,12 +224,28 @@ def prompt_to_image(
             eta=0.0,
             generator=generator,
             latents=None,
-            output_type="pil",
+            output_type=output_type,
             return_dict=True,
             callback=callback,
             callback_steps=1,
             #cfg_end=optimizations.cfg_end
         )
+        if is_sdxl and sdxl_refiner_model is not None:
+            pipe = None
+            gc.collect()
+            if device == "cuda":
+                torch.cuda.empty_cache()
+            pipe = load_pipe(self, "prompt", diffusers.StableDiffusionXLImg2ImgPipeline, sdxl_refiner_model, optimizations, scheduler, device)
+            pipe = optimizations.apply(pipe, device)
+            result = pipe(
+                prompt=prompt,
+                negative_prompt=[""],
+                callback=callback,
+                callback_steps=1,
+                num_inference_steps=steps,
+                image=result.images
+            )
+        
         future.add_response(ImageGenerationResult(
             [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
                 for image in result.images],

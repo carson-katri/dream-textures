@@ -262,14 +262,18 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             layout = self.layout
             layout.use_property_split = True
             
-            layout.prop(get_prompt(context), "random_seed")
-            if not get_prompt(context).random_seed:
-                layout.prop(get_prompt(context), "seed")
+            prompt = get_prompt(context)
+            layout.prop(prompt, "random_seed")
+            if not prompt.random_seed:
+                layout.prop(prompt, "seed")
             # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
-            layout.prop(get_prompt(context), "steps")
-            layout.prop(get_prompt(context), "cfg_scale")
-            layout.prop(get_prompt(context), "scheduler")
-            layout.prop(get_prompt(context), "step_preview_mode")
+            layout.prop(prompt, "steps")
+            layout.prop(prompt, "cfg_scale")
+            layout.prop(prompt, "scheduler")
+            layout.prop(prompt, "step_preview_mode")
+
+            backend: api.Backend = prompt.get_backend()
+            backend.draw_advanced(layout, context)
 
     yield AdvancedPanel
 

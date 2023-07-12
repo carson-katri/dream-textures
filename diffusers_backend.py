@@ -17,6 +17,12 @@ from .preferences import StableDiffusionPreferences, _template_model_download_pr
 
 from functools import reduce
 
+def _convert_models(models):
+    return [
+        None if model is None else (model.id, model.name, model.description)
+        for model in models
+    ]
+
 class DiffusersBackend(Backend):
     name = "HuggingFace Diffusers"
     description = "Local image generation inside of Blender"
@@ -71,6 +77,9 @@ class DiffusersBackend(Backend):
     vae_tile_blend: IntProperty(name="VAE Tile Blend", min=0, default=64, description="Minimum amount of how much each edge of a tile will intersect its adjacent tile")
     cfg_end: FloatProperty(name="CFG End", min=0, max=1, default=1, description="The percentage of steps to complete before disabling classifier-free guidance")
     cpu_only: BoolProperty(name="CPU Only", default=False, description="Disables GPU acceleration and is extremely slow")
+
+    use_sdxl_refiner: BoolProperty(name="Use SDXL Refiner", default=False, description="Provide a refiner model to run automatically after the initial generation")
+    sdxl_refiner_model: EnumProperty(name="SDXL Refiner Model", items=lambda self, context: _convert_models(self.list_models(context)), description="Specify which model to use as a refiner")
 
     def list_models(self, context):
         def model_case(model, i):
@@ -128,6 +137,8 @@ class DiffusersBackend(Backend):
             'seamless_axes': arguments.seamless_axes,
             'iterations': arguments.iterations,
             'step_preview_mode': arguments.step_preview_mode,
+            
+            'sdxl_refiner_model': (self.sdxl_refiner_model if self.use_sdxl_refiner else None)
         }
         future: Future
         match arguments.task:
@@ -248,6 +259,12 @@ The selected model is for {model.model_type.replace('_', ' ').lower()}."""
                         message=model_task_description + "\nSelect a different model below.",
                         solution=FixItError.ChangeProperty("model")
                     )
+
+    def draw_advanced(self, layout, context):
+        layout.prop(self, "use_sdxl_refiner")
+        col = layout.column()
+        col.enabled = self.use_sdxl_refiner
+        col.prop(self, "sdxl_refiner_model")
 
     def draw_speed_optimizations(self, layout, context):
         inferred_device = Optimizations.infer_device()

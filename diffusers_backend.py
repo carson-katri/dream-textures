@@ -132,19 +132,61 @@ class DiffusersBackend(Backend):
         future: Future
         match arguments.task:
             case PromptToImage():
-                future = gen.prompt_to_image(**common_kwargs)
+                if len(arguments.control_nets) > 0:
+                    future = gen.control_net(
+                        **common_kwargs,
+                        control_net=[c.model for c in arguments.control_nets],
+                        control=[c.image for c in arguments.control_nets],
+                        controlnet_conditioning_scale=[c.strength for c in arguments.control_nets],
+                        image=None,
+                        inpaint=False,
+                        inpaint_mask_src='alpha',
+                        text_mask='',
+                        text_mask_confidence=1,
+                        strength=1
+                    )
+                else:
+                    future = gen.prompt_to_image(**common_kwargs)
             case Inpaint(image=image, fit=fit, strength=strength, mask_source=mask_source, mask_prompt=mask_prompt, confidence=confidence):
-                future = gen.inpaint(
-                    image=image,
-                    fit=fit,
-                    strength=strength,
-                    inpaint_mask_src='alpha' if mask_source == Inpaint.MaskSource.ALPHA else 'prompt',
-                    text_mask=mask_prompt,
-                    text_mask_confidence=confidence,
-                    **common_kwargs
-                )
+                if len(arguments.control_nets) > 0:
+                    future = gen.control_net(
+                        **common_kwargs,
+                        control_net=[c.model for c in arguments.control_nets],
+                        control=[c.image for c in arguments.control_nets],
+                        controlnet_conditioning_scale=[c.strength for c in arguments.control_nets],
+                        image=image,
+                        inpaint=True,
+                        inpaint_mask_src='alpha' if mask_source == Inpaint.MaskSource.ALPHA else 'prompt',
+                        text_mask=mask_prompt,
+                        text_mask_confidence=confidence,
+                        strength=strength
+                    )
+                else:
+                    future = gen.inpaint(
+                        image=image,
+                        fit=fit,
+                        strength=strength,
+                        inpaint_mask_src='alpha' if mask_source == Inpaint.MaskSource.ALPHA else 'prompt',
+                        text_mask=mask_prompt,
+                        text_mask_confidence=confidence,
+                        **common_kwargs
+                    )
             case ImageToImage(image=image, strength=strength, fit=fit):
-                future = gen.image_to_image(image=image, fit=fit, strength=strength, **common_kwargs)
+                if len(arguments.control_nets) > 0:
+                    future = gen.control_net(
+                        **common_kwargs,
+                        control_net=[c.model for c in arguments.control_nets],
+                        control=[c.image for c in arguments.control_nets],
+                        controlnet_conditioning_scale=[c.strength for c in arguments.control_nets],
+                        image=image,
+                        inpaint=False,
+                        inpaint_mask_src='alpha',
+                        text_mask='',
+                        text_mask_confidence=1,
+                        strength=strength
+                    )
+                else:
+                    future = gen.image_to_image(image=image, fit=fit, strength=strength, **common_kwargs)
             case DepthToImage(depth=depth, image=image, strength=strength):
                 future = gen.depth_to_image(
                     depth=depth,

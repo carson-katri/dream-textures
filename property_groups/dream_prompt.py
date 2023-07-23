@@ -294,16 +294,20 @@ def generate_args(self, context, iteration=0) -> api.GenerationArguments:
         scheduler=self.scheduler,
         seamless_axes=SeamlessAxes(self.seamless_axes),
         step_preview_mode=StepPreviewMode(self.step_preview_mode),
-        iterations=self.iterations
+        iterations=self.iterations,
+        control_nets=[
+            api.models.control_net.ControlNet(
+                net.control_net,
+                np.flipud(
+                    np.array(net.control_image.pixels)
+                        .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
+                ),
+                net.conditioning_scale
+            )
+            for net in self.control_nets
+            if net.control_image is not None
+        ]
     )
-    # args['control'] = [
-    #     np.flipud(
-    #         np.array(net.control_image.pixels)
-    #             .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
-    #     )
-    #     for net in args['control_nets']
-    #     if net.control_image is not None
-    # ]
 
 def get_backend(self) -> api.Backend:
     return getattr(self, api.Backend._lookup(self.backend)._attribute())

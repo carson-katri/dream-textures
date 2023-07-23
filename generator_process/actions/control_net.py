@@ -46,7 +46,8 @@ def control_net(
     **kwargs
 ) -> Generator[NDArray, None, None]:
     import diffusers
-    from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_controlnet import MultiControlNetModel, ControlNetModel
+    from diffusers.models.controlnet import ControlNetModel
+    from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
     from diffusers.utils import deprecate, randn_tensor
     import torch
     import PIL.Image
@@ -199,20 +200,17 @@ def control_net(
 
             **kwargs
         ):
-            # 0. Default height and width to unet
-            height, width = self._default_height_width(height, width, image)
-
             # 1. Check inputs. Raise error if not correct
             self.check_inputs(
                 prompt,
                 image,
-                height,
-                width,
                 callback_steps,
                 negative_prompt,
                 prompt_embeds,
                 negative_prompt_embeds,
-                controlnet_conditioning_scale
+                controlnet_conditioning_scale,
+                [0.0 for _ in image],
+                [1.0 for _ in image]
             )
 
             # 2. Define call parameters
@@ -256,6 +254,7 @@ def control_net(
                     do_classifier_free_guidance=do_classifier_free_guidance,
                     guess_mode=False
                 )
+                height, width = image.shape[-2:]
             elif isinstance(self.controlnet, MultiControlNetModel):
                 images = []
 
@@ -275,6 +274,7 @@ def control_net(
                     images.append(image_)
 
                 image = images
+                height, width = image[0].shape[-2:]
             else:
                 assert False
 
@@ -293,7 +293,7 @@ def control_net(
             # NOTE: Modified to support initial image
             if mask is not None:
                 num_channels_latents = self.vae.config.latent_channels
-                mask, masked_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint.prepare_mask_and_masked_image(init_image, mask)
+                mask, masked_image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_inpaint.prepare_mask_and_masked_image(init_image, mask, height, width)
                 mask, masked_image_latents = self.prepare_mask_latents(
                     mask,
                     masked_image,

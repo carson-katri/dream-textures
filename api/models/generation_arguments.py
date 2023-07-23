@@ -5,6 +5,7 @@ from ..models.model import Model
 from ..models.prompt import Prompt
 from ..models.seamless_axes import SeamlessAxes
 from ..models.step_preview_mode import StepPreviewMode
+from ..models.control_net import ControlNet
 
 @dataclass
 class GenerationArguments:
@@ -71,6 +72,8 @@ class GenerationArguments:
     
     The value sent to `callback` should contain the same number of `GenerationResult` instances in a list.
     """
+
+    control_nets: List[ControlNet]
 
     @staticmethod
     def _map_property_name(name: str) -> str | List[str] | None:

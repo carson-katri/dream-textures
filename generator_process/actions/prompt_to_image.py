@@ -12,132 +12,6 @@ from ..models.optimizations import Optimizations
 from ..models.image_generation_result import ImageGenerationResult
 from ..future import Future
 
-class CachedPipeline:
-    """A pipeline that has been cached for subsequent runs."""
-
-    pipeline: Any
-    """The diffusers pipeline to re-use"""
-
-    invalidation_properties: tuple
-    """Values that, when changed, will invalid this cached pipeline"""
-
-    snapshot_folder: str
-    """The snapshot folder containing the model"""
-
-    def __init__(self, pipeline: Any, invalidation_properties: tuple, snapshot_folder: str):
-        self.pipeline = pipeline
-        self.invalidation_properties = invalidation_properties
-        self.snapshot_folder = snapshot_folder
-
-    def is_valid(self, properties: tuple):
-        return properties == self.invalidation_properties
-
-def load_pipe(self, action, generator_pipeline, model, optimizations, scheduler, device, **kwargs):
-    """
-    Use a cached pipeline, or create the pipeline class and cache it.
-    
-    The cached pipeline will be invalidated if the model or use_cpu_offload options change.
-    """
-    import torch
-    import gc
-
-    invalidation_properties = (
-        action, model, device,
-        optimizations.can_use_cpu_offload(device),
-        optimizations.can_use("half_precision", device),
-    )
-    cached_pipe: CachedPipeline = self._cached_pipe if hasattr(self, "_cached_pipe") else None
-    if cached_pipe is not None and cached_pipe.is_valid(invalidation_properties):
-        pipe = cached_pipe.pipeline
-    else:
-        # Release the cached pipe before loading the new one.
-        if cached_pipe is not None:
-            del self._cached_pipe
-            del cached_pipe
-            gc.collect()
-
-        variant = "fp16" if optimizations.can_use_half(device) else None
-        snapshot_folder = model_snapshot_folder(model, variant)
-        pipe = generator_pipeline.from_pretrained(
-            snapshot_folder,
-            variant="fp16",
-            torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32,
-            **kwargs
-        )
-        if optimizations.can_use_cpu_offload(device) == "off":
-            pipe = pipe.to(device)
-        setattr(self, "_cached_pipe", CachedPipeline(pipe, invalidation_properties, snapshot_folder))
-        cached_pipe = self._cached_pipe
-    if scheduler is not None:
-        if 'scheduler' in os.listdir(cached_pipe.snapshot_folder):
-            pipe.scheduler = scheduler.create(pipe, {
-                'model_path': cached_pipe.snapshot_folder,
-                'subfolder': 'scheduler',
-            })
-        else:
-            pipe.scheduler = scheduler.create(pipe, None)
-    return pipe
-
-def choose_device(self) -> str:
-    """
-    Automatically select which PyTorch device to use.
-    """
-    import torch
-    if torch.cuda.is_available():
-        return "cuda"
-    elif torch.backends.mps.is_available():
-        return "mps"
-    if Pipeline.directml_available():
-        import torch_directml
-        if torch_directml.is_available():
-            torch.utils.rename_privateuse1_backend("dml")
-            return "dml"
-    return "cpu"
-
-def model_snapshot_folder(model, preferred_revision: str | None = None):
-    """ Try to find the preferred revision, but fallback to another revision if necessary. """
-    import diffusers
-    storage_folder = os.path.join(diffusers.utils.DIFFUSERS_CACHE, model)
-    if not os.path.exists(os.path.join(storage_folder, "refs")):
-        storage_folder = os.path.join(diffusers.utils.hub_utils.old_diffusers_cache, model)
-    if os.path.exists(os.path.join(storage_folder, 'model_index.json')): # converted model
-        snapshot_folder = storage_folder
-    else: # hub model
-        revisions = {}
-        for revision in os.listdir(os.path.join(storage_folder, "refs")):
-            ref_path = os.path.join(storage_folder, "refs", revision)
-            with open(ref_path) as f:
-                commit_hash = f.read()
-
-            snapshot_folder = os.path.join(storage_folder, "snapshots", commit_hash)
-            if len(os.listdir(snapshot_folder)) > 1:
-                revisions[revision] = snapshot_folder
-
-        if len(revisions) == 0:
-            return None
-        elif preferred_revision in revisions:
-            revision = preferred_revision
-        elif preferred_revision in [None, "fp16"] and "main" in revisions:
-            revision = "main"
-        elif preferred_revision in [None, "main"] and "fp16" in revisions:
-            revision = "fp16"
-        else:
-            revision = next(iter(revisions.keys()))
-        snapshot_folder = revisions[revision]
-
-    return snapshot_folder
-
-def use_sdxl(model, optimizations, device):
-    import json
-    snapshot_folder = model_snapshot_folder(model, "fp16" if optimizations.can_use_half(device) else None)
-    if snapshot_folder is None:
-        return False
-    model_index = os.path.join(snapshot_folder, "model_index.json")
-    if not os.path.exists(model_index):
-        return False
-    with open(model_index) as f:
-        return json.load(f)["_class_name"] == "StableDiffusionXLPipeline"
-
 def prompt_to_image(
     self,
     
@@ -177,17 +51,10 @@ def prompt_to_image(
     import torch
     from PIL import Image, ImageOps
 
-    if optimizations.cpu_only:
-        device = "cpu"
-    else:
-        device = self.choose_device()
+    device = self.choose_device(optimizations)
 
     # Stable Diffusion pipeline w/ caching
-    is_sdxl = use_sdxl(model, optimizations, device)
-    if is_sdxl:
-        pipe = load_pipe(self, "prompt", diffusers.StableDiffusionXLPipeline, model, optimizations, scheduler, device)
-    else:
-        pipe = load_pipe(self, "prompt", diffusers.StableDiffusionPipeline, model, optimizations, scheduler, device)
+    pipe = self.load_model(diffusers.AutoPipelineForText2Image, model)
     height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
     width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
 
@@ -210,6 +77,7 @@ def prompt_to_image(
 
     # Inference
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
+        is_sdxl = pipe.__class__ == diffusers.StableDiffusionXLPipeline.__class__
         output_type = "latent" if is_sdxl and sdxl_refiner_model is not None else "pil"
         def callback(step, timestep, latents):
             future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))

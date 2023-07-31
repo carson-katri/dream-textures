@@ -5,7 +5,9 @@ class Generator(Actor):
     The actor used for all background processes.
     """
 
-    from .actions.prompt_to_image import prompt_to_image, choose_device
+    from .actions.choose_device import choose_device
+    from .actions.load_model import load_model
+    from .actions.prompt_to_image import prompt_to_image
     from .actions.image_to_image import image_to_image
     from .actions.inpaint import inpaint
     from .actions.outpaint import outpaint

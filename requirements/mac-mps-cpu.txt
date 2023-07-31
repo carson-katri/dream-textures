@@ -1,7 +1,7 @@
-diffusers==0.18.1
+diffusers==0.19.3
 invisible-watermark
 transformers
-accelerate==0.14.0
+accelerate
 huggingface_hub
 
 torch>=2.0

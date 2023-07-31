@@ -1,4 +1,4 @@
-diffusers==0.18.1
+diffusers==0.19.3
 invisible-watermark
 transformers
 accelerate

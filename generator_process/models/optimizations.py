@@ -65,6 +65,8 @@ class Optimizations:
         """
         import torch
 
+        pipeline = pipeline.to(device)
+
         torch.backends.cudnn.benchmark = self.can_use("cudnn_benchmark", device)
         torch.backends.cuda.matmul.allow_tf32 = self.can_use("tf32", device)
 

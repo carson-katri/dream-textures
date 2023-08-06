@@ -104,6 +104,17 @@ class DiffusersBackend(Backend):
             ],
             []
         )
+    
+    def list_controlnet_models(self, context):
+        return [
+            Model(
+                name=model.model_base.replace('models--', '').replace('--', '/'),
+                description="ControlNet",
+                id=model.model_base.replace('models--', '').replace('--', '/')
+            )
+            for model in context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
+            if model.model_type == ModelType.CONTROL_NET.name
+        ]
 
     def list_schedulers(self, context) -> List[str]:
         return [scheduler.value for scheduler in Scheduler]

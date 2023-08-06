@@ -103,7 +103,7 @@ def prompt_to_image(
             gc.collect()
             if device == "cuda":
                 torch.cuda.empty_cache()
-            pipe = load_pipe(self, "prompt", diffusers.StableDiffusionXLImg2ImgPipeline, sdxl_refiner_model, optimizations, scheduler, device)
+            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, sdxl_refiner_model)
             pipe = optimizations.apply(pipe, device)
             result = pipe(
                 prompt=prompt,

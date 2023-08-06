@@ -57,10 +57,7 @@ def control_net(
     import PIL.Image
     import PIL.ImageOps
     
-    if optimizations.cpu_only:
-        device = "cpu"
-    else:
-        device = self.choose_device(optimizations)
+    device = self.choose_device(optimizations)
 
     # Load the ControlNet model
     controlnet_models = MultiControlNetModel([

@@ -189,10 +189,7 @@ def inpaint(
                 True
             )
     
-    if optimizations.cpu_only:
-        device = "cpu"
-    else:
-        device = self.choose_device()
+    device = self.choose_device(optimizations)
 
     # StableDiffusionPipeline w/ caching
     pipe = load_pipe(self, "inpaint", GeneratorPipeline, model, optimizations, scheduler, device)

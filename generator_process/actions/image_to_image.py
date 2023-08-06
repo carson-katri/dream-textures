@@ -49,16 +49,10 @@ def image_to_image(
     from PIL import Image, ImageOps
     import PIL.Image
     
-    if optimizations.cpu_only:
-        device = "cpu"
-    else:
-        device = self.choose_device()
+    device = self.choose_device(optimizations)
 
     # Stable Diffusion pipeline w/ caching
-    if use_sdxl(model, optimizations, device):
-        pipe = load_pipe(self, "modify", diffusers.StableDiffusionXLImg2ImgPipeline, model, optimizations, scheduler, device)
-    else:
-        pipe = load_pipe(self, "modify", diffusers.StableDiffusionImg2ImgPipeline, model, optimizations, scheduler, device)
+    pipe = self.load_model(diffusers.AutoPipelineForImage2Image, model)
 
     # Optimizations
     pipe = optimizations.apply(pipe, device)
@@ -96,20 +90,13 @@ def image_to_image(
             future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
         result = pipe(
             prompt=prompt,
+            negative_prompt=negative_prompt if use_negative_prompt else None,
             image=[init_image] * batch_size,
             strength=strength,
             num_inference_steps=steps,
             guidance_scale=cfg_scale,
-            negative_prompt=negative_prompt if use_negative_prompt else None,
-            num_images_per_prompt=1,
-            eta=0.0,
             generator=generator,
-            output_type="pil",
-            return_dict=True,
-            callback=callback,
-            callback_steps=1,
-            step_preview_mode=step_preview_mode,
-            #cfg_end=optimizations.cfg_end
+            callback=callback
         )
         future.add_response(ImageGenerationResult(
             [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.

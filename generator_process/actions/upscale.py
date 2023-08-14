@@ -38,10 +38,7 @@ def upscale(
     import torch
     import diffusers
 
-    if optimizations.cpu_only:
-        device = "cpu"
-    else:
-        device = self.choose_device()
+    device = self.choose_device(optimizations)
 
     pipe = diffusers.StableDiffusionUpscalePipeline.from_pretrained(
         "stabilityai/stable-diffusion-x4-upscaler",

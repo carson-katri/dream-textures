@@ -17,6 +17,12 @@ from .preferences import StableDiffusionPreferences, _template_model_download_pr
 
 from functools import reduce
 
+def _convert_models(models):
+    return [
+        None if model is None else (model.id, model.name, model.description)
+        for model in models
+    ]
+
 class DiffusersBackend(Backend):
     name = "HuggingFace Diffusers"
     description = "Local image generation inside of Blender"
@@ -72,12 +78,15 @@ class DiffusersBackend(Backend):
     cfg_end: FloatProperty(name="CFG End", min=0, max=1, default=1, description="The percentage of steps to complete before disabling classifier-free guidance")
     cpu_only: BoolProperty(name="CPU Only", default=False, description="Disables GPU acceleration and is extremely slow")
 
+    use_sdxl_refiner: BoolProperty(name="Use SDXL Refiner", default=False, description="Provide a refiner model to run automatically after the initial generation")
+    sdxl_refiner_model: EnumProperty(name="SDXL Refiner Model", items=lambda self, context: _convert_models(self.list_models(context)), description="Specify which model to use as a refiner")
+
     def list_models(self, context):
         def model_case(model, i):
             return Model(
                 name=model.model_base.replace('models--', '').replace('--', '/'),
                 description=ModelType[model.model_type].name,
-                id=model.model_base
+                id=model.model_base.replace('models--', '').replace('--', '/')
             )
         models = {}
         for i, model in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models):
@@ -95,6 +104,17 @@ class DiffusersBackend(Backend):
             ],
             []
         )
+    
+    def list_controlnet_models(self, context):
+        return [
+            Model(
+                name=model.model_base.replace('models--', '').replace('--', '/'),
+                description="ControlNet",
+                id=model.model_base.replace('models--', '').replace('--', '/')
+            )
+            for model in context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
+            if model.model_type == ModelType.CONTROL_NET.name
+        ]
 
     def list_schedulers(self, context) -> List[str]:
         return [scheduler.value for scheduler in Scheduler]
@@ -128,6 +148,8 @@ class DiffusersBackend(Backend):
             'seamless_axes': arguments.seamless_axes,
             'iterations': arguments.iterations,
             'step_preview_mode': arguments.step_preview_mode,
+            
+            'sdxl_refiner_model': (self.sdxl_refiner_model if self.use_sdxl_refiner else None)
         }
         future: Future
         match arguments.task:
@@ -222,32 +244,39 @@ class DiffusersBackend(Backend):
         future.add_done_callback(on_done)
 
     def validate(self, arguments: GenerationArguments):
-        installed_models = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
-        model = next((m for m in installed_models if m.model_base == arguments.model.id), None)
-        if model is None:
-            raise FixItError("No model selected.", FixItError.ChangeProperty("model"))
-        else:
-            if not ModelType[model.model_type].matches_task(arguments.task):
-                class DownloadModel(FixItError.Solution):
-                    def _draw(self, dream_prompt, context, layout):
-                        if not _template_model_download_progress(context, layout):
-                            target_model_type = ModelType.from_task(arguments.task)
-                            if target_model_type is not None:
-                                install_model = layout.operator(InstallModel.bl_idname, text=f"Download {target_model_type.recommended_model()} (Recommended)", icon="IMPORT")
-                                install_model.model = target_model_type.recommended_model()
-                                install_model.prefer_fp16_revision = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.prefer_fp16_revision
-                model_task_description = f"""Incorrect model type selected for {type(arguments.task).name().replace('_', ' ').lower()} tasks.
-The selected model is for {model.model_type.replace('_', ' ').lower()}."""
-                if not any(ModelType[m.model_type].matches_task(arguments.task) for m in installed_models):
-                    raise FixItError(
-                        message=model_task_description + "\nYou do not have any compatible models downloaded:",
-                        solution=DownloadModel()
-                    )
-                else:
-                    raise FixItError(
-                        message=model_task_description + "\nSelect a different model below.",
-                        solution=FixItError.ChangeProperty("model")
-                    )
+        return
+#         installed_models = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
+#         model = next((m for m in installed_models if m.model_base == arguments.model.id), None)
+#         if model is None:
+#             raise FixItError("No model selected.", FixItError.ChangeProperty("model"))
+#         else:
+#             if not ModelType[model.model_type].matches_task(arguments.task):
+#                 class DownloadModel(FixItError.Solution):
+#                     def _draw(self, dream_prompt, context, layout):
+#                         if not _template_model_download_progress(context, layout):
+#                             target_model_type = ModelType.from_task(arguments.task)
+#                             if target_model_type is not None:
+#                                 install_model = layout.operator(InstallModel.bl_idname, text=f"Download {target_model_type.recommended_model()} (Recommended)", icon="IMPORT")
+#                                 install_model.model = target_model_type.recommended_model()
+#                                 install_model.prefer_fp16_revision = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.prefer_fp16_revision
+#                 model_task_description = f"""Incorrect model type selected for {type(arguments.task).name().replace('_', ' ').lower()} tasks.
+# The selected model is for {model.model_type.replace('_', ' ').lower()}."""
+#                 if not any(ModelType[m.model_type].matches_task(arguments.task) for m in installed_models):
+#                     raise FixItError(
+#                         message=model_task_description + "\nYou do not have any compatible models downloaded:",
+#                         solution=DownloadModel()
+#                     )
+#                 else:
+#                     raise FixItError(
+#                         message=model_task_description + "\nSelect a different model below.",
+#                         solution=FixItError.ChangeProperty("model")
+#                     )
+
+    def draw_advanced(self, layout, context):
+        layout.prop(self, "use_sdxl_refiner")
+        col = layout.column()
+        col.enabled = self.use_sdxl_refiner
+        col.prop(self, "sdxl_refiner_model")
 
     def draw_speed_optimizations(self, layout, context):
         inferred_device = Optimizations.infer_device()

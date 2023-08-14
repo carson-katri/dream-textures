@@ -5,9 +5,9 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding, model_snapshot_folder, load_pipe
+from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
-
+from ..future import Future
 
 def depth_to_image(
     self,
@@ -37,13 +37,16 @@ def depth_to_image(
     step_preview_mode: StepPreviewMode,
 
     **kwargs
-) -> Generator[NDArray, None, None]:
+) -> Generator[Future, None, None]:
+    future = Future()
+    yield future
+
     import diffusers
     import torch
     import PIL.Image
     import PIL.ImageOps
-
-    class GeneratorPipeline(diffusers.StableDiffusionInpaintPipeline):
+    
+    class DreamTexturesDepth2ImgPipeline(diffusers.StableDiffusionInpaintPipeline):
         def prepare_depth(self, depth, image, dtype, device):
             device = torch.device('cpu' if device.type == 'mps' else device.type)
             if depth is None:
@@ -273,11 +276,6 @@ def depth_to_image(
             num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
             with self.progress_bar(total=num_inference_steps) as progress_bar:
                 for i, t in enumerate(timesteps):
-                    # NOTE: Modified to support disabling CFG
-                    if do_classifier_free_guidance and (i / len(timesteps)) >= kwargs['cfg_end']:
-                        do_classifier_free_guidance = False
-                        text_embeddings = text_embeddings[text_embeddings.size(0) // 2:]
-                        depth = depth[depth.size(0) // 2:]
                     # expand the latents if we are doing classifier free guidance
                     latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
 
@@ -296,38 +294,40 @@ def depth_to_image(
                     # compute the previous noisy sample x_t -> x_t-1
                     latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs).prev_sample
 
+                    # call the callback, if provided
                     if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
                         progress_bar.update()
-                    # NOTE: Modified to yield the latents instead of calling a callback.
-                    yield ImageGenerationResult.step_preview(self, kwargs['step_preview_mode'], width, height, latents, generator, i)
+                        if callback is not None and i % callback_steps == 0:
+                            callback(i, t, latents)
 
-            # 11. Post-processing
-            image = self.decode_latents(latents)
+            if not output_type == "latent":
+                condition_kwargs = {}
+                image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False, **condition_kwargs)[0]
+                image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
+            else:
+                image = latents
+                has_nsfw_concept = None
 
-            # TODO: Add UI to enable this.
-            # 12. Run safety checker
-            # image, has_nsfw_concept = self.run_safety_checker(image, device, text_embeddings.dtype)
+            if has_nsfw_concept is None:
+                do_denormalize = [True] * image.shape[0]
+            else:
+                do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
+
+            image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
 
             # Offload last model to CPU
             if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
                 self.final_offload_hook.offload()
 
-            # NOTE: Modified to yield the decoded image as a numpy array.
-            yield ImageGenerationResult(
-                [np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                    for i, image in enumerate(self.numpy_to_pil(image))],
-                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-                num_inference_steps,
-                True
-            )
+            if not return_dict:
+                return (image, has_nsfw_concept)
+
+            return diffusers.pipelines.stable_diffusion.StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)
     
-    if optimizations.cpu_only:
-        device = "cpu"
-    else:
-        device = self.choose_device()
+    device = self.choose_device(optimizations)
 
     # StableDiffusionPipeline w/ caching
-    pipe = load_pipe(self, "depth", GeneratorPipeline, model, optimizations, scheduler, device)
+    pipe = self.load_model(DreamTexturesDepth2ImgPipeline, model)
 
     # Optimizations
     pipe = optimizations.apply(pipe, device)
@@ -368,8 +368,11 @@ def depth_to_image(
 
     # Inference
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
-        yield from pipe(
+        def callback(step, timestep, latents):
+            future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
+        result = pipe(
             prompt=prompt,
+            negative_prompt=negative_prompt if use_negative_prompt else None,
             depth_image=depth_image,
             image=init_image,
             strength=strength,
@@ -377,15 +380,16 @@ def depth_to_image(
             height=rounded_size[1],
             num_inference_steps=steps,
             guidance_scale=cfg_scale,
-            negative_prompt=negative_prompt if use_negative_prompt else None,
-            num_images_per_prompt=1,
-            eta=0.0,
             generator=generator,
-            latents=None,
-            output_type="pil",
-            return_dict=True,
-            callback=None,
-            callback_steps=1,
-            step_preview_mode=step_preview_mode,
-            cfg_end=optimizations.cfg_end
+            callback=callback
         )
+        
+        future.add_response(ImageGenerationResult(
+            [np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                for image in result.images],
+            [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
+            steps,
+            True
+        ))
+    
+    future.set_done()

@@ -54,9 +54,16 @@ try:
         def list_models(self, context) -> List[Model]:
             """Provide a list of available models.
             
-            The `id` of the model will be provided 
+            The `id` of the model will be provided.
             """
             ...
+        
+        def list_controlnet_models(self, context) -> List[Model]:
+            """Provide a list of available ControlNet models.
+
+            The `id` of the model will be provided.
+            """
+            return []
         
         def list_schedulers(self, context) -> List[str]:
             """Provide a list of available schedulers."""

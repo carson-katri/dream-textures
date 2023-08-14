@@ -120,6 +120,9 @@ class NodeStableDiffusion(DreamTexturesNode):
                 case 'inpaint':
                     return api.Inpaint(source_image, noise_strength, fit=False, mask_source=api.Inpaint.MaskSource.ALPHA, mask_prompt="", confidence=0)
         
+        def map_controlnet(c):
+            return api.models.control_net.ControlNet(c.model, c.control(context.depsgraph), c.conditioning_scale)
+
         args = api.GenerationArguments(
             get_task(),
             model=next(model for model in self.prompt.get_backend().list_models(context) if model is not None and model.id == self.prompt.model),
@@ -135,7 +138,7 @@ class NodeStableDiffusion(DreamTexturesNode):
             seamless_axes=SeamlessAxes(self.prompt.seamless_axes),
             step_preview_mode=api.models.StepPreviewMode.FAST,
             iterations=1,
-            control_nets=[api.models.control_net.ControlNet(c.model, c.control(context), c.conditioning_scale) for c in controlnets] if controlnets is not None else []
+            control_nets=[map_controlnet(c) for c in controlnets] if isinstance(controlnets, list) else ([map_controlnet(controlnets)] if controlnets is not None else [])
         )
 
         # the source image is a default color, ignore it.

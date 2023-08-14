@@ -1,4 +1,4 @@
-import graphlib
+import bpy
 # from dream_textures.engine import node_executor
 # node_executor.execute(bpy.data.node_groups["NodeTree"], bpy.context.evaluated_depsgraph_get())
 
@@ -10,6 +10,7 @@ class NodeExecutionContext:
         self.end = end
         self.test_break = test_break
         self.cache = {}
+        self.preferences = bpy.context.preferences
     
     def _evaluate_input(self, input):
         if input.is_linked:

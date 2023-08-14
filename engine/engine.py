@@ -8,6 +8,8 @@ from ..ui.panels.dream_texture import optimization_panels
 from .node_tree import DreamTexturesNodeTree
 from ..engine import node_executor
 from .annotations import depth
+from ..property_groups.dream_prompt import backend_options
+from .nodes.pipeline_nodes import NodeStableDiffusion
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -96,11 +98,21 @@ def draw_device(self, context):
 
     if context.engine == DreamTexturesRenderEngine.bl_idname:
         layout.template_ID(scene.dream_textures_render_engine, "node_tree", text="Node Tree", new=NewEngineNodeTree.bl_idname)
+        layout.prop(scene.dream_textures_render_engine, "backend")
 
 def _poll_node_tree(self, value):
     return value.bl_idname == "DreamTexturesNodeTree"
+
+def _update_engine_backend(self, context):
+    if self.node_tree is not None:
+        for node in self.node_tree.nodes:
+            if node.bl_idname == NodeStableDiffusion.bl_idname:
+                node.prompt.backend = self.backend
+    context.scene.dream_textures_engine_prompt.backend = self.backend
+
 class DreamTexturesRenderEngineProperties(bpy.types.PropertyGroup):
     node_tree: bpy.props.PointerProperty(type=DreamTexturesNodeTree, name="Node Tree", poll=_poll_node_tree)
+    backend: bpy.props.EnumProperty(name="Backend", items=backend_options, default=1, description="The backend to use for all pipeline nodes", update=_update_engine_backend)
 
 def engine_panels():
     bpy.types.RENDER_PT_output.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)

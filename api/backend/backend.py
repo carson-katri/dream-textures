@@ -45,7 +45,10 @@ try:
         
         @classmethod
         def _lookup(cls, id):
-            return next(backend for backend in cls._list_backends() if backend._id() == id)
+            return next(
+                (backend for backend in cls._list_backends() if backend._id() == id),
+                next(iter(cls._list_backends()), None)
+            )
         
         @classmethod
         def _list_backends(cls):

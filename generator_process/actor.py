@@ -14,6 +14,12 @@ def _load_dependencies():
     site.addsitedir(absolute_path(".python_dependencies"))
     deps = sys.path.pop(-1)
     sys.path.insert(0, deps)
+    if sys.platform == 'win32':
+        # fix for ImportError: DLL load failed while importing cv2: The specified module could not be found.
+        # cv2 needs python3.dll, which is stored in Blender's root directory instead of its python directory.
+        python3_path = os.path.abspath(os.path.join(sys.executable, "..\\..\\..\\..\\python3.dll"))
+        if os.path.exists(python3_path):
+            os.add_dll_directory(os.path.dirname(python3_path))
 if current_process().name == "__actor__":
     _load_dependencies()
 

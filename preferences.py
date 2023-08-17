@@ -86,7 +86,8 @@ class PREFERENCES_UL_ModelList(bpy.types.UIList):
             split.label(text=item.model_type.replace('_', ' ').title())
         install_model = layout.operator(InstallModel.bl_idname, text="", icon="FILE_FOLDER" if is_installed else "IMPORT")
         install_model.model = item.model
-        install_model.prefer_fp16_revision = data.prefer_fp16_revision
+        install_model.prefer_fp16_variant = data.prefer_fp16_variant
+        install_model.resume_download = data.resume_download
 
 @staticmethod
 def set_model_list(model_list: str, models: list):
@@ -119,7 +120,8 @@ class InstallModel(bpy.types.Operator):
     bl_options = {"REGISTER", "INTERNAL"}
 
     model: StringProperty(name="Model ID")
-    prefer_fp16_revision: bpy.props.BoolProperty(name="", default=True)
+    prefer_fp16_variant: bpy.props.BoolProperty(name="", default=True)
+    resume_download: bpy.props.BoolProperty(name="", default=True)
 
     def execute(self, context):
         if os.path.exists(self.model):
@@ -127,7 +129,12 @@ class InstallModel(bpy.types.Operator):
         else:
             global is_downloading
             is_downloading = True
-            f = Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token, "fp16" if self.prefer_fp16_revision else None)
+            f = Generator.shared().hf_snapshot_download(
+                self.model,
+                bpy.context.preferences.addons[__package__].preferences.hf_token,
+                "fp16" if self.prefer_fp16_variant else None,
+                self.resume_download
+            )
             def on_progress(_, response: DownloadStatus):
                 bpy.context.preferences.addons[__package__].preferences.download_file = response.file
                 bpy.context.preferences.addons[__package__].preferences.download_progress = int((response.index / response.total) * 100)
@@ -174,7 +181,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     model_results: CollectionProperty(type=Model)
     active_model_result: bpy.props.IntProperty(name="Active Model", default=0)
     hf_token: StringProperty(name="HuggingFace Token")
-    prefer_fp16_revision: bpy.props.BoolProperty(name="Prefer Half Precision Weights", description="Download fp16 weights if available for smaller file size. If you run with 'Half Precision' disabled, you should not use this setting", default=True)
+    prefer_fp16_variant: bpy.props.BoolProperty(name="Prefer Half Precision Weights", description="Download fp16 weights if available for smaller file size. If you run with 'Half Precision' disabled, you should not use this setting", default=True)
+    resume_download: bpy.props.BoolProperty(name="Resume Incomplete Download", description="Continue an in-progress download in case if Blender was closed or connection was interrupted, otherwise incomplete files will be entirely redownloaded", default=True)
 
     installed_models: CollectionProperty(type=Model)
     active_installed_model: bpy.props.IntProperty(name="Active Model", default=0)
@@ -223,7 +231,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                     default_weights_box.label(text="You need to download at least one model.")
                     install_model = default_weights_box.operator(InstallModel.bl_idname, text="Download Stable Diffusion v2.1 (Recommended)", icon="IMPORT")
                     install_model.model = "stabilityai/stable-diffusion-2-1"
-                    install_model.prefer_fp16_revision = self.prefer_fp16_revision
+                    install_model.prefer_fp16_variant = self.prefer_fp16_variant
+                    install_model.resume_download = self.resume_download
 
                 search_box = layout.box()
                 search_box.label(text="Find Models", icon="SETTINGS")
@@ -240,7 +249,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                 auth_row.prop(self, "hf_token", text="Token")
                 auth_row.operator(OpenURL.bl_idname, text="Get Your Token", icon="KEYINGSET").url = "https://huggingface.co/settings/tokens"
                 
-                search_box.prop(self, "prefer_fp16_revision")
+                search_box.prop(self, "prefer_fp16_variant")
+                search_box.prop(self, "resume_download")
 
             layout.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_installed_models", self, "installed_models", self, "active_installed_model")
             layout.operator(ImportWeights.bl_idname, icon='IMPORT')

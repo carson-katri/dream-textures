@@ -194,65 +194,50 @@ def hf_snapshot_download(
     self,
     model: str,
     token: str,
-    revision: str | None = None
+    variant: str | None = None,
+    resume_download=True
 ):
     from huggingface_hub import utils
 
     future = Future()
     yield future
+    progresses = set()
 
     class future_tqdm(utils.tqdm):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            future.add_response(DownloadStatus(self.desc, 0, self.total))
+            self.progress()
 
         def update(self, n=1):
-            future.add_response(DownloadStatus(self.desc, self.last_print_n + n, self.total))
-            return super().update(n=n)
+            ret = super().update(n=n)
+            self.progress()
+            return ret
+
+        def progress(self):
+            nonlocal progresses
+            progresses.add(self)
+            ratio = self.n / self.total
+            count = 0
+            for tqdm in progresses:
+                r = tqdm.n / tqdm.total
+                if r == 1:
+                    continue
+                count += 1
+                if tqdm != self and ratio < r:
+                    # only show download status of most complete file
+                    return
+            future.add_response(DownloadStatus(f"{count} file{'' if count == 1 else 's'}: {self.desc}", self.n, self.total))
     
     from huggingface_hub import file_download
     file_download.tqdm = future_tqdm
-    from huggingface_hub import _snapshot_download
     
     from diffusers import StableDiffusionPipeline
-    from diffusers.utils import DIFFUSERS_CACHE, WEIGHTS_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME
-    from diffusers.schedulers.scheduling_utils import SCHEDULER_CONFIG_NAME
-    
-    try:
-        config_dict = StableDiffusionPipeline.load_config(
-            model,
-            cache_dir=DIFFUSERS_CACHE,
-            resume_download=True,
-            force_download=False,
-            use_auth_token=token
-        )
-        folder_names = [k for k in config_dict.keys() if not k.startswith("_")]
-        allow_patterns = [os.path.join(k, "*") for k in folder_names]
-        allow_patterns += [WEIGHTS_NAME, SCHEDULER_CONFIG_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME, StableDiffusionPipeline.config_name]
-    except:
-        allow_patterns = None
-    
-    # make sure we don't download flax, safetensors, or ckpt weights.
-    ignore_patterns = ["*.msgpack", "*.safetensors", "*.ckpt"]
 
-    try:
-        _snapshot_download.snapshot_download(
-            model,
-            cache_dir=DIFFUSERS_CACHE,
-            token=token,
-            revision=revision,
-            resume_download=True,
-            allow_patterns=allow_patterns,
-            ignore_patterns=ignore_patterns
-        )
-    except utils._errors.RevisionNotFoundError:
-        _snapshot_download.snapshot_download(
-            model,
-            cache_dir=DIFFUSERS_CACHE,
-            token=token,
-            resume_download=True,
-            allow_patterns=allow_patterns,
-            ignore_patterns=ignore_patterns
-        )
+    StableDiffusionPipeline.download(
+        model,
+        use_auth_token=token,
+        variant=variant,
+        resume_download=resume_download,
+    )
 
     future.set_done()

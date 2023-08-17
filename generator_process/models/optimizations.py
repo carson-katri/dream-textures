@@ -65,14 +65,15 @@ class Optimizations:
         """
         import torch
 
-        pipeline = pipeline.to(device)
+        if self.can_use_cpu_offload(device) == "off":
+            pipeline = pipeline.to(device)
 
         torch.backends.cudnn.benchmark = self.can_use("cudnn_benchmark", device)
         torch.backends.cuda.matmul.allow_tf32 = self.can_use("tf32", device)
 
         try:
             if self.can_use("sdp_attention", device):
-                from diffusers.models.cross_attention import AttnProcessor2_0
+                from diffusers.models.attention_processor import AttnProcessor2_0
                 pipeline.unet.set_attn_processor(AttnProcessor2_0())
             elif self.can_use("attention_slicing", device):
                 pipeline.enable_attention_slicing(self.attention_slice_size)
@@ -88,7 +89,13 @@ class Optimizations:
                 from accelerate import cpu_offload_with_hook
 
                 hook = None
-                models = [pipeline.text_encoder, pipeline.unet, pipeline.vae]
+                models = []
+                # text_encoder can be None in SDXL Pipeline but not text_encoder_2
+                if pipeline.text_encoder is not None:
+                    models.append(pipeline.text_encoder)
+                if hasattr(pipeline, "text_encoder_2"):
+                    models.append(pipeline.text_encoder_2)
+                models.extend([pipeline.unet, pipeline.vae])
                 if hasattr(pipeline, "controlnet"):
                     models.append(pipeline.controlnet)
                 for cpu_offloaded_model in models:
@@ -104,7 +111,13 @@ class Optimizations:
                 # adapted from diffusers.StableDiffusionPipeline.enable_sequential_cpu_offload() to allow DirectML device and unimplemented pipelines
                 from accelerate import cpu_offload
 
-                models = [pipeline.text_encoder, pipeline.unet, pipeline.vae]
+                models = []
+                # text_encoder can be None in SDXL Pipeline but not text_encoder_2
+                if pipeline.text_encoder is not None:
+                    models.append(pipeline.text_encoder)
+                if hasattr(pipeline, "text_encoder_2"):
+                    models.append(pipeline.text_encoder_2)
+                models.extend([pipeline.unet, pipeline.vae])
                 if hasattr(pipeline, "controlnet"):
                     models.append(pipeline.controlnet)
                 for cpu_offloaded_model in models:

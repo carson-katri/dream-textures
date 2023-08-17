@@ -54,7 +54,7 @@ def prompt_to_image(
     device = self.choose_device(optimizations)
 
     # Stable Diffusion pipeline w/ caching
-    pipe = self.load_model(diffusers.AutoPipelineForText2Image, model)
+    pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations.can_use_half(device))
     height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
     width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
 

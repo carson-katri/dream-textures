@@ -77,7 +77,7 @@ def prompt_to_image(
 
     # Inference
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
-        is_sdxl = pipe.__class__ == diffusers.StableDiffusionXLPipeline.__class__
+        is_sdxl = isinstance(pipe, diffusers.StableDiffusionXLPipeline)
         output_type = "latent" if is_sdxl and sdxl_refiner_model is not None else "pil"
         def callback(step, timestep, latents):
             future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
@@ -103,7 +103,7 @@ def prompt_to_image(
             gc.collect()
             if device == "cuda":
                 torch.cuda.empty_cache()
-            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, sdxl_refiner_model)
+            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, sdxl_refiner_model, optimizations.can_use_half(device))
             pipe = optimizations.apply(pipe, device)
             result = pipe(
                 prompt=prompt,

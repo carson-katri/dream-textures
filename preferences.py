@@ -34,7 +34,7 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
     bl_label = "Import Checkpoint File"
     filename_ext = ".ckpt"
     filter_glob: bpy.props.StringProperty(
-        default="*.ckpt",
+        default="*.ckpt;*.safetensors",
         options={'HIDDEN'},
         maxlen=255,
     )
@@ -45,7 +45,7 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
 
     def execute(self, context):
         _, extension = os.path.splitext(self.filepath)
-        if extension != '.ckpt':
+        if extension not in ['.ckpt', '.safetensors']:
             self.report({"ERROR"}, "Select a valid stable diffusion '.ckpt' file.")
             return {"FINISHED"}
         try:

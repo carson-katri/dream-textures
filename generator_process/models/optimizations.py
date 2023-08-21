@@ -1,8 +1,19 @@
+from enum import Enum
 from typing import Annotated, Union, _AnnotatedAlias
 import functools
 import os
 import sys
 from dataclasses import dataclass
+
+
+class CPUOffload(Enum):
+    OFF = "off"
+    MODEL = "model"
+    SUBMODULE = "submodule"
+
+    def __bool__(self):
+        return self != CPUOffload.OFF
+
 
 @dataclass(eq=True)
 class Optimizations:
@@ -12,7 +23,7 @@ class Optimizations:
     tf32: Annotated[bool, "cuda"] = False
     amp: Annotated[bool, "cuda"] = False
     half_precision: Annotated[bool, {"cuda", "privateuseone"}] = True
-    cpu_offload: Annotated[str, {"cuda", "privateuseone"}] = "off"
+    cpu_offload: Annotated[str, {"cuda", "privateuseone"}] = CPUOffload.OFF
     channels_last_memory_format: bool = False
     sdp_attention: Annotated[bool, {"cpu", "cuda", "mps"}] = True
     batch_size: int = 1
@@ -54,8 +65,8 @@ class Optimizations:
             return not ("GTX 1650" in name or "GTX 1660" in name)
         return self.can_use("half_precision", device)
 
-    def can_use_cpu_offload(self, device):
-        return self.cpu_offload if self.device_supports("cpu_offload", device) else "off"
+    def cpu_offloading(self, device):
+        return self.cpu_offload if self.device_supports("cpu_offload", device) else CPUOffload.OFF
     
     def apply(self, pipeline, device):
         """
@@ -65,7 +76,7 @@ class Optimizations:
         """
         import torch
 
-        if self.can_use_cpu_offload(device) == "off":
+        if not self.cpu_offloading(device):
             pipeline = pipeline.to(device)
 
         torch.backends.cudnn.benchmark = self.can_use("cudnn_benchmark", device)
@@ -84,7 +95,7 @@ class Optimizations:
         try:
             if pipeline.device != pipeline._execution_device:
                 pass # pipeline is already offloaded, offloading again can cause `pipeline._execution_device` to be incorrect
-            elif self.can_use_cpu_offload(device) == "model":
+            elif self.cpu_offloading(device) == CPUOffload.MODEL:
                 # adapted from diffusers.StableDiffusionPipeline.enable_model_cpu_offload() to allow DirectML device and unimplemented pipelines
                 from accelerate import cpu_offload_with_hook
 
@@ -101,13 +112,12 @@ class Optimizations:
                 for cpu_offloaded_model in models:
                     _, hook = cpu_offload_with_hook(cpu_offloaded_model, device, prev_module_hook=hook)
 
-                # FIXME: due to the safety checker not running it prevents the VAE from being offloaded, uncomment when safety checker is enabled
-                # if pipeline.safety_checker is not None:
-                #     _, hook = cpu_offload_with_hook(pipeline.safety_checker, device, prev_module_hook=hook)
+                if getattr(pipeline, "safety_checker", None) is not None:
+                    _, hook = cpu_offload_with_hook(pipeline.safety_checker, device, prev_module_hook=hook)
 
                 # We'll offload the last model manually.
                 pipeline.final_offload_hook = hook
-            elif self.can_use_cpu_offload(device) == "submodule":
+            elif self.cpu_offloading(device) == CPUOffload.SUBMODULE:
                 # adapted from diffusers.StableDiffusionPipeline.enable_sequential_cpu_offload() to allow DirectML device and unimplemented pipelines
                 from accelerate import cpu_offload
 
@@ -123,8 +133,8 @@ class Optimizations:
                 for cpu_offloaded_model in models:
                     cpu_offload(cpu_offloaded_model, device)
 
-                if pipeline.safety_checker is not None:
-                    cpu_offload(pipeline.safety_checker.vision_model, device, offload_buffers=True)
+                if getattr(pipeline, "safety_checker", None) is not None:
+                    cpu_offload(pipeline.safety_checker, device, offload_buffers=True)
         except: pass
         
         try:

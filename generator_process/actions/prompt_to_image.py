@@ -54,7 +54,7 @@ def prompt_to_image(
     device = self.choose_device(optimizations)
 
     # Stable Diffusion pipeline w/ caching
-    pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations.can_use_half(device))
+    pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations)
     height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
     width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
 
@@ -103,7 +103,7 @@ def prompt_to_image(
             gc.collect()
             if device == "cuda":
                 torch.cuda.empty_cache()
-            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, sdxl_refiner_model, optimizations.can_use_half(device))
+            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, sdxl_refiner_model, optimizations)
             pipe = optimizations.apply(pipe, device)
             result = pipe(
                 prompt=prompt,

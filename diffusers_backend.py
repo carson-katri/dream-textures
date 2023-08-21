@@ -10,7 +10,7 @@ from .api.models.fix_it_error import FixItError
 from .generator_process import Generator
 from .generator_process.actions.prompt_to_image import ImageGenerationResult
 from .generator_process.future import Future
-from .generator_process.models import Optimizations, Scheduler
+from .generator_process.models import CPUOffload, Optimizations, Scheduler
 from .generator_process.actions.huggingface_hub import ModelType
 
 from .preferences import StableDiffusionPreferences, _template_model_download_progress, InstallModel
@@ -129,6 +129,7 @@ class DiffusersBackend(Backend):
                 setattr(optimizations, prop, getattr(self, prop))
         if self.attention_slice_size_src == 'auto':
             optimizations.attention_slice_size = 'auto'
+        optimizations.cpu_offload = CPUOffload(optimizations.cpu_offload)
         return optimizations
 
     def generate(self, arguments: GenerationArguments, step_callback: StepCallback, callback: Callback):

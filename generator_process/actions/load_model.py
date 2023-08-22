@@ -4,9 +4,21 @@ import os
 logger = logging.getLogger(__name__)
 
 
-def revision_paths(repo_id):
+def revision_paths(model, config="model_index.json"):
     from diffusers.utils import DIFFUSERS_CACHE
-    model_path = os.path.join(DIFFUSERS_CACHE, "--".join(["models", *repo_id.split("/")]))
+
+    is_repo = "/" in model
+    if os.path.exists(os.path.join(model, config)):
+        is_repo = False
+    elif not is_repo and os.path.exists(os.path.join(DIFFUSERS_CACHE, model, config)):
+        model = os.path.join(DIFFUSERS_CACHE, model)
+    elif not is_repo:
+        raise ValueError(f"{model} is not a valid repo, imported checkpoint, or path")
+
+    if not is_repo:
+        return {"main": model}
+
+    model_path = os.path.join(DIFFUSERS_CACHE, "--".join(["models", *model.split("/")]))
     refs_path = os.path.join(model_path, "refs")
     revisions = {}
     if not os.path.isdir(refs_path):
@@ -22,7 +34,6 @@ def revision_paths(repo_id):
 
 def load_model(self, model_class, model, optimizations, **kwargs):
     import torch
-    from diffusers.utils import DIFFUSERS_CACHE
 
     device = self.choose_device(optimizations)
     half_precision = optimizations.can_use_half(device)
@@ -30,19 +41,7 @@ def load_model(self, model_class, model, optimizations, **kwargs):
 
     if not hasattr(self, "_pipe") or self._pipe is None or self._pipe[0] != invalidation_properties:
         dtype = torch.float16 if half_precision else torch.float32
-        model_path = model
-        is_repo = "/" in model_path
-        if os.path.exists(os.path.join(model, "model_index.json")):
-            is_repo = False
-        elif not is_repo and os.path.exists(os.path.join(DIFFUSERS_CACHE, model, "model_index.json")):
-            model_path = os.path.join(DIFFUSERS_CACHE, model)
-        elif not is_repo:
-            raise ValueError(f"{model} is not a valid repo, imported checkpoint, or path")
-
-        if is_repo:
-            revisions = revision_paths(model)
-        else:
-            revisions = {"main": model_path}
+        revisions = revision_paths(model)
 
         strategies = []
         if "main" in revisions:

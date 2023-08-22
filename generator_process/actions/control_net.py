@@ -3,10 +3,45 @@ from contextlib import nullcontext
 
 from numpy.typing import NDArray
 import numpy as np
+import logging
+import os
 import random
 from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
+from .load_model import revision_paths
+
+
+logger = logging.getLogger(__name__)
+
+
+def load_controlnet_model(model, half_precision):
+    from diffusers import ControlNetModel
+    import torch
+
+    revisions = revision_paths(model, "config.json")
+
+    fp16_weights = ["diffusion_pytorch_model.fp16.safetensors", "diffusion_pytorch_model.fp16.bin"]
+    fp32_weights = ["diffusion_pytorch_model.safetensors", "diffusion_pytorch_model.bin"]
+    if half_precision:
+        weights_names = fp16_weights + fp32_weights
+    else:
+        weights_names = fp32_weights + fp16_weights
+
+    # controlnet models shouldn't have a fp16 revision to worry about
+    weights = next((name for name in weights_names if os.path.isfile(os.path.join(revisions["main"], name))), None)
+    if weights is None:
+        raise FileNotFoundError(f"Can't find appropriate weights in {model}")
+    half_weights = ".fp16" in weights
+    if not half_precision and half_weights:
+        logger.warning(f"Can't load fp32 weights for model {model}, attempting to load fp16 instead")
+
+    return ControlNetModel.from_pretrained(
+        revisions["main"],
+        torch_dtype=torch.float16 if half_precision else torch.float32,
+        variant="fp16" if half_weights else None
+    )
+
 
 def control_net(
     self,
@@ -50,7 +85,6 @@ def control_net(
     yield future
 
     import diffusers
-    from diffusers.models.controlnet import ControlNetModel
     from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
     from diffusers.utils import deprecate, randn_tensor
     import torch
@@ -61,7 +95,7 @@ def control_net(
 
     # Load the ControlNet model
     controlnet_models = MultiControlNetModel([
-        ControlNetModel.from_pretrained(name) for name in control_net
+        load_controlnet_model(name, optimizations.can_use_half(device)) for name in control_net
     ])
 
     # StableDiffusionPipeline w/ caching

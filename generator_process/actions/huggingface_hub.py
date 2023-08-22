@@ -228,16 +228,42 @@ def hf_snapshot_download(
                     return
             future.add_response(DownloadStatus(f"{count} file{'' if count == 1 else 's'}: {self.desc}", self.n, self.total))
     
-    from huggingface_hub import file_download
+    from huggingface_hub import file_download, snapshot_download, repo_info
     file_download.tqdm = future_tqdm
     
     from diffusers import StableDiffusionPipeline
 
-    StableDiffusionPipeline.download(
-        model,
-        use_auth_token=token,
-        variant=variant,
-        resume_download=resume_download,
-    )
+    info = repo_info(model, token=token)
+    files = [file.rfilename for file in info.siblings]
+
+    if "model_index.json" in files:
+        StableDiffusionPipeline.download(
+            model,
+            use_auth_token=token,
+            variant=variant,
+            resume_download=resume_download,
+        )
+    elif "config.json" in files:
+        # individual model, such as controlnet or vae
+
+        fp16_weights = ["diffusion_pytorch_model.fp16.safetensors", "diffusion_pytorch_model.fp16.bin"]
+        fp32_weights = ["diffusion_pytorch_model.safetensors", "diffusion_pytorch_model.bin"]
+        if variant == "fp16":
+            weights_names = fp16_weights + fp32_weights
+        else:
+            weights_names = fp32_weights + fp16_weights
+
+        weights = next((name for name in weights_names if name in files), None)
+        if weights is None:
+            raise FileNotFoundError(f"Can't find appropriate weights in {model}")
+
+        snapshot_download(
+            model,
+            token=token,
+            resume_download=resume_download,
+            allow_patterns=["config.json", weights]
+        )
+    else:
+        raise ValueError(f"{model} doesn't appear to be a pipeline or model")
 
     future.set_done()

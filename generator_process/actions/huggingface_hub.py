@@ -16,6 +16,7 @@ import json
 import enum
 from ..future import Future
 from ...api.models.task import *
+from .convert_original_stable_diffusion_to_diffusers import ModelConfig
 
 class ModelType(enum.IntEnum):
     """
@@ -28,6 +29,7 @@ class ModelType(enum.IntEnum):
     INPAINTING = 9
 
     CONTROL_NET = -1
+    UNSPECIFIED_CHECKPOINT = -2
 
     @classmethod
     def _missing_(cls, _):
@@ -55,6 +57,8 @@ class ModelType(enum.IntEnum):
         
         If not an error should be shown to the user to select a different model.
         """
+        if self == ModelType.UNSPECIFIED_CHECKPOINT:
+            return True
         match task:
             case PromptToImage():
                 return self == ModelType.PROMPT_TO_IMAGE
@@ -84,6 +88,18 @@ class ModelType(enum.IntEnum):
                 return ModelType.PROMPT_TO_IMAGE
             case _:
                 return None
+
+    @staticmethod
+    def from_config(config: ModelConfig):
+        match config:
+            case ModelConfig.AUTO_DETECT:
+                return ModelType.UNSPECIFIED_CHECKPOINT
+            case ModelConfig.STABLE_DIFFUSION_2_DEPTH:
+                return ModelType.DEPTH
+            case ModelConfig.STABLE_DIFFUSION_2_INPAINTING:
+                return ModelType.INPAINTING
+            case _:
+                return ModelType.PROMPT_TO_IMAGE
 
 @dataclass
 class Model:
@@ -182,7 +198,28 @@ def hf_list_installed_models(self) -> list[Model]:
     for model in list_dir(old_diffusers_cache):
         if os.path.basename(model.id) not in model_ids:
             new_cache_list.append(model)
+
+    checkpoints = {}
+    for path, config in checkpoint_links.items():
+        if not os.path.exists(path):
+            continue
+        if os.path.isfile(path):
+            checkpoints[os.path.basename(path)] = (path, config)
+            continue
+        for name in os.listdir(path):
+            if os.path.splitext(name)[1] not in [".ckpt", ".safetensors"]:
+                continue
+            if name in checkpoints:
+                continue
+            checkpoints[name] = (os.path.join(path, name), config)
+    for path, config in checkpoints.values():
+        new_cache_list.append(Model(path, "", [], -1, -1, ModelType.from_config(config)))
     return new_cache_list
+
+checkpoint_links = {}
+def set_checkpoint_links(self, links):
+    checkpoint_links.clear()
+    checkpoint_links.update(links)
 
 @dataclass
 class DownloadStatus:

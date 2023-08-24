@@ -89,7 +89,6 @@ class PREFERENCES_UL_ModelList(bpy.types.UIList):
         install_model.prefer_fp16_variant = data.prefer_fp16_variant
         install_model.resume_download = data.resume_download
 
-@staticmethod
 def set_model_list(model_list: str, models: list):
     getattr(bpy.context.preferences.addons[__package__].preferences, model_list).clear()
     for model in models:
@@ -125,7 +124,10 @@ class InstallModel(bpy.types.Operator):
 
     def execute(self, context):
         if os.path.exists(self.model):
-            webbrowser.open(f"file://{self.model}")
+            if os.path.isfile(self.model):
+                webbrowser.open(f"file://{os.path.dirname(self.model)}")
+            else:
+                webbrowser.open(f"file://{self.model}")
         else:
             global is_downloading
             is_downloading = True
@@ -172,6 +174,95 @@ def _template_model_download_progress(context, layout):
         progress_col.enabled = False
     return is_downloading
 
+class Checkpoint(bpy.types.PropertyGroup):
+    bl_label = "Model"
+    bl_idname = "dream_textures.checkpoint"
+
+    path: bpy.props.StringProperty(name="Checkpoint")
+    model_config: bpy.props.EnumProperty(
+        name="Model Config",
+        items=_model_config_options
+    )
+
+class LinkCheckpoint(bpy.types.Operator, ImportHelper):
+    bl_idname = "dream_textures.link_checkpoint"
+    bl_label = "Link Checkpoint File or Folder"
+    filename_ext = ".ckpt"
+    files: CollectionProperty(
+        type=bpy.types.OperatorFileListElement,
+        options={'HIDDEN', 'SKIP_SAVE'}
+    )
+    filter_glob: bpy.props.StringProperty(
+        default="*.ckpt;*.safetensors",
+        options={'HIDDEN'},
+        maxlen=255,
+    )
+    model_config: bpy.props.EnumProperty(
+        name="Model Config",
+        items=_model_config_options
+    )
+
+    def invoke(self, context, _event):
+        if os.path.isfile(self.filepath):
+            # Reset to a directory, otherwise the filename remains populated and can cause issues to select a directory if gone unnoticed.
+            self.filepath = os.path.dirname(self.filepath) + os.path.sep
+        return super().invoke(context, _event)
+
+    def execute(self, context):
+        pref = context.preferences.addons[__package__].preferences
+        for file in self.files:
+            path = self.filepath
+            if file.name != "":
+                path = os.path.join(os.path.dirname(path), file.name)
+
+            if not os.path.exists(path):
+                self.report({"ERROR"}, f"{path} does not exist")
+                continue
+            if os.path.isfile(path) and os.path.splitext(path)[1] not in ['.ckpt', '.safetensors']:
+                self.report({"ERROR"}, f"{os.path.basename(path)} is not a checkpoint")
+                continue
+
+            link = next((link for link in pref.linked_checkpoints if link.path == path), None)
+            if link is None:
+                link = pref.linked_checkpoints.add()
+                link.path = path
+            link.model_config = self.model_config
+
+        set_checkpoint_links()
+        set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+
+        return {"FINISHED"}
+
+class UnlinkCheckpoint(bpy.types.Operator):
+    bl_idname = "dream_textures.unlink_checkpoint"
+    bl_label = "Unlink Checkpoint File"
+
+    path: bpy.props.StringProperty()
+    def execute(self, context):
+        pref = context.preferences.addons[__package__].preferences
+        index = next((i for i, link in enumerate(pref.linked_checkpoints) if link.path == self.path), -1)
+        if index != -1:
+            pref.linked_checkpoints.remove(index)
+
+        set_checkpoint_links()
+        set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+
+        return {"FINISHED"}
+
+class PREFERENCES_UL_CheckpointList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        split = layout.split(factor=0.75)
+        split.label(text=item.path)
+        split.label(text=ModelConfig[item.model_config].value)
+        install_model = layout.operator(InstallModel.bl_idname, text="", icon="FILE_FOLDER")
+        install_model.model = item.path
+        unlink = layout.operator(UnlinkCheckpoint.bl_idname, text="", icon="TRASH")
+        unlink.path = item.path
+
+def set_checkpoint_links():
+    pref = bpy.context.preferences.addons[__package__].preferences
+    Generator.shared().set_checkpoint_links({link.path: ModelConfig[link.model_config] for link in pref.linked_checkpoints})
+
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
@@ -187,6 +278,9 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     installed_models: CollectionProperty(type=Model)
     active_installed_model: bpy.props.IntProperty(name="Active Model", default=0)
 
+    linked_checkpoints: CollectionProperty(type=Checkpoint)
+    active_linked_checkpoint: bpy.props.IntProperty(name="Active Checkpoint", default=0)
+
     download_file: bpy.props.StringProperty(name="")
     download_progress: bpy.props.IntProperty(name="", min=0, max=100, subtype="PERCENTAGE", update=_update_ui)
 
@@ -194,6 +288,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     def register():
         def on_done(future):
             set_model_list('installed_models', future.result())
+        set_checkpoint_links()
         Generator.shared().hf_list_installed_models().add_done_callback(on_done)
 
     def draw(self, context):
@@ -254,6 +349,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
             layout.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_installed_models", self, "installed_models", self, "active_installed_model")
             layout.operator(ImportWeights.bl_idname, icon='IMPORT')
+            layout.template_list(PREFERENCES_UL_CheckpointList.__name__, "dream_textures_linked_checkpoints", self, "linked_checkpoints", self, "active_linked_checkpoint")
+            layout.operator(LinkCheckpoint.bl_idname, icon='FOLDER_REDIRECT')
 
             if weights_installed or len(self.dream_studio_key) > 0:
                 complete_box = layout.box()

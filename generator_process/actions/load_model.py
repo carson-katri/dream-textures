@@ -1,5 +1,7 @@
 import logging
 import os
+from .huggingface_hub import checkpoint_links
+from .convert_original_stable_diffusion_to_diffusers import ModelConfig
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +36,52 @@ def revision_paths(model, config="model_index.json"):
 
 def load_model(self, model_class, model, optimizations, **kwargs):
     import torch
+    from diffusers.pipelines.stable_diffusion.convert_from_ckpt import download_from_original_stable_diffusion_ckpt
 
     device = self.choose_device(optimizations)
     half_precision = optimizations.can_use_half(device)
     invalidation_properties = (model, device, half_precision, optimizations.cpu_offloading(device))
+    reload_pipeline = not hasattr(self, "_pipe") or self._pipe is None or self._pipe[0] != invalidation_properties
+    basename = os.path.basename(model)
+    filename, extension = os.path.splitext(basename)
+    dtype = torch.float16 if half_precision else torch.float32
 
-    if not hasattr(self, "_pipe") or self._pipe is None or self._pipe[0] != invalidation_properties:
-        dtype = torch.float16 if half_precision else torch.float32
+    if reload_pipeline and extension in [".ckpt", ".safetensors"]:
+        path = model
+        config = ModelConfig.AUTO_DETECT
+        if not os.path.exists(model):
+            path = None
+            for p, c in checkpoint_links.items():
+                if os.path.isfile(p) and os.path.basename(p) == basename:
+                    path = p
+                    config = c
+                    break
+                elif os.path.isdir(p) and basename in os.listdir(p):
+                    path = os.path.join(p, basename)
+                    config = c
+                    # only break for a direct checkpoint link to allow overriding config in a directory link
+            if path is None:
+                raise FileNotFoundError(f"Can't locate {model}")
+
+        if hasattr(model_class, "from_single_file"):
+            self._pipe = (invalidation_properties, model_class.from_single_file(
+                path,
+                torch_dtype=dtype,
+                original_config_file=config.original_config
+            ))
+        elif hasattr(model_class, "from_pipe"):
+            # auto pipelines won't support from_single_file() https://github.com/huggingface/diffusers/issues/4367
+            pipe = download_from_original_stable_diffusion_ckpt(
+                path,
+                from_safetensors=extension == ".safetensors",
+                original_config_file=config.original_config,
+                pipeline_class=config.pipeline
+            )
+            pipe.to(torch_dtype=dtype)
+            self._pipe = (invalidation_properties, model_class.from_pipe(pipe))
+        else:
+            raise NotImplementedError(f"Can't load {model} for {model_class}, does not have from_single_file() or from_pipe()")
+    elif reload_pipeline:
         revisions = revision_paths(model)
 
         strategies = []

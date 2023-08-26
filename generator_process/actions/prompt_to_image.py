@@ -7,15 +7,14 @@ import numpy as np
 import random
 from ...api.models.seamless_axes import SeamlessAxes
 from ...api.models.step_preview_mode import StepPreviewMode
-from ..models.scheduler import Scheduler
-from ..models.optimizations import Optimizations
+from ..models import Checkpoint, Optimizations, Scheduler
 from ..models.image_generation_result import ImageGenerationResult
 from ..future import Future
 
 def prompt_to_image(
     self,
     
-    model: str,
+    model: str | Checkpoint,
 
     scheduler: Scheduler,
 
@@ -40,7 +39,7 @@ def prompt_to_image(
     # Stability SDK
     key: str | None = None,
 
-    sdxl_refiner_model: str | None = None,
+    sdxl_refiner_model: str | Checkpoint | None = None,
 
     **kwargs
 ) -> Generator[Future, None, None]:

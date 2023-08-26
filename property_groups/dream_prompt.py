@@ -6,7 +6,6 @@ from typing import _AnnotatedAlias
 
 from ..generator_process.actions.detect_seamless import SeamlessAxes
 from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode
-from ..generator_process.actions.huggingface_hub import ModelType
 from ..prompt_engineering import *
 from ..preferences import StableDiffusionPreferences
 from .dream_prompt_validation import validate

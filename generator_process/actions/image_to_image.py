@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
 
@@ -13,7 +13,7 @@ from ..future import Future
 def image_to_image(
     self,
     
-    model: str,
+    model: str | Checkpoint,
 
     scheduler: Scheduler,
 

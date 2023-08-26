@@ -6,7 +6,7 @@ import numpy as np
 import logging
 import os
 import random
-from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
 from .load_model import revision_paths
@@ -46,7 +46,7 @@ def load_controlnet_model(model, half_precision):
 def control_net(
     self,
 
-    model: str,
+    model: str | Checkpoint,
 
     scheduler: Scheduler,
 

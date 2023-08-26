@@ -15,91 +15,8 @@ import requests
 import json
 import enum
 from ..future import Future
-from ...api.models.task import *
-from .convert_original_stable_diffusion_to_diffusers import ModelConfig
+from ..models import ModelType
 
-class ModelType(enum.IntEnum):
-    """
-    Inferred model type from the U-Net `in_channels`.
-    """
-    UNKNOWN = 0
-    PROMPT_TO_IMAGE = 4
-    DEPTH = 5
-    UPSCALING = 7
-    INPAINTING = 9
-
-    CONTROL_NET = -1
-    UNSPECIFIED_CHECKPOINT = -2
-
-    @classmethod
-    def _missing_(cls, _):
-        return cls.UNKNOWN
-    
-    def recommended_model(self) -> str:
-        """Provides a recommended model for a given task.
-
-        This method has a bias towards the latest version of official Stability AI models.
-        """
-        match self:
-            case ModelType.PROMPT_TO_IMAGE:
-                return "stabilityai/stable-diffusion-2-1"
-            case ModelType.DEPTH:
-                return "stabilityai/stable-diffusion-2-depth"
-            case ModelType.UPSCALING:
-                return "stabilityai/stable-diffusion-x4-upscaler"
-            case ModelType.INPAINTING:
-                return "stabilityai/stable-diffusion-2-inpainting"
-            case _:
-                return "stabilityai/stable-diffusion-2-1"
-    
-    def matches_task(self, task: Task) -> bool:
-        """Indicates if the model type is correct for a given `Task`.
-        
-        If not an error should be shown to the user to select a different model.
-        """
-        if self == ModelType.UNSPECIFIED_CHECKPOINT:
-            return True
-        match task:
-            case PromptToImage():
-                return self == ModelType.PROMPT_TO_IMAGE
-            case Inpaint():
-                return self == ModelType.INPAINTING
-            case DepthToImage():
-                return self == ModelType.DEPTH
-            case Outpaint():
-                return self == ModelType.INPAINTING
-            case ImageToImage():
-                return self == ModelType.PROMPT_TO_IMAGE
-            case _:
-                return False
-    
-    @staticmethod
-    def from_task(task: Task) -> 'ModelType | None':
-        match task:
-            case PromptToImage():
-                return ModelType.PROMPT_TO_IMAGE
-            case Inpaint():
-                return ModelType.INPAINTING
-            case DepthToImage():
-                return ModelType.DEPTH
-            case Outpaint():
-                return ModelType.INPAINTING
-            case ImageToImage():
-                return ModelType.PROMPT_TO_IMAGE
-            case _:
-                return None
-
-    @staticmethod
-    def from_config(config: ModelConfig):
-        match config:
-            case ModelConfig.AUTO_DETECT:
-                return ModelType.UNSPECIFIED_CHECKPOINT
-            case ModelConfig.STABLE_DIFFUSION_2_DEPTH:
-                return ModelType.DEPTH
-            case ModelConfig.STABLE_DIFFUSION_2_INPAINTING:
-                return ModelType.INPAINTING
-            case _:
-                return ModelType.PROMPT_TO_IMAGE
 
 @dataclass
 class Model:
@@ -198,28 +115,7 @@ def hf_list_installed_models(self) -> list[Model]:
     for model in list_dir(old_diffusers_cache):
         if os.path.basename(model.id) not in model_ids:
             new_cache_list.append(model)
-
-    checkpoints = {}
-    for path, config in checkpoint_links.items():
-        if not os.path.exists(path):
-            continue
-        if os.path.isfile(path):
-            checkpoints[os.path.basename(path)] = (path, config)
-            continue
-        for name in os.listdir(path):
-            if os.path.splitext(name)[1] not in [".ckpt", ".safetensors"]:
-                continue
-            if name in checkpoints:
-                continue
-            checkpoints[name] = (os.path.join(path, name), config)
-    for path, config in checkpoints.values():
-        new_cache_list.append(Model(path, "", [], -1, -1, ModelType.from_config(config)))
     return new_cache_list
-
-checkpoint_links = {}
-def set_checkpoint_links(self, links):
-    checkpoint_links.clear()
-    checkpoint_links.update(links)
 
 @dataclass
 class DownloadStatus:

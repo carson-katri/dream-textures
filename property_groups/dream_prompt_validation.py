@@ -1,5 +1,5 @@
 from ..preferences import StableDiffusionPreferences, _template_model_download_progress, InstallModel
-from ..generator_process.actions.huggingface_hub import ModelType
+from ..generator_process.models import ModelType
 from ..preferences import OpenURL
 
 def validate(self, context, task: ModelType | None = None) -> bool:

@@ -11,8 +11,8 @@ from .operators.install_dependencies import InstallDependencies, UninstallDepend
 from .operators.open_latest_version import OpenLatestVersion
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
 from .generator_process import Generator
-from .generator_process.actions.huggingface_hub import DownloadStatus, ModelType
-from .generator_process.actions.convert_original_stable_diffusion_to_diffusers import ModelConfig
+from .generator_process.actions.huggingface_hub import DownloadStatus, Model as HubModel
+from .generator_process.models import Checkpoint, ModelConfig, ModelType
 
 is_downloading = False
 
@@ -55,7 +55,7 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
 Press 'N' or click the gear icon in the top right of the file selection popup to reveal the sidebar.""")
             self.report({"ERROR"}, str(e))
         
-        set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+        fetch_installed_models()
 
         return {"FINISHED"}
 
@@ -101,6 +101,41 @@ def set_model_list(model_list: str, models: list):
             m.model_type = model.model_type.name
         except:
             pass
+
+checkpoint_lookup = {}
+def fetch_installed_models(blocking=True):
+    def on_done(future):
+        model_list = future.result()
+
+        pref = bpy.context.preferences.addons[__package__].preferences
+        checkpoint_links = ((link.path, ModelConfig[link.model_config]) for link in pref.linked_checkpoints)
+        checkpoints = {}
+        for path, config in checkpoint_links:
+            if not os.path.exists(path):
+                continue
+            if os.path.isfile(path):
+                checkpoints[os.path.basename(path)] = (path, config)
+                continue
+            for name in os.listdir(path):
+                if os.path.splitext(name)[1] not in [".ckpt", ".safetensors"]:
+                    continue
+                if name in checkpoints:
+                    # file linked config takes precedence over folder linked config
+                    continue
+                checkpoints[name] = (os.path.join(path, name), config)
+        checkpoint_lookup.clear()
+        for path, config in checkpoints.values():
+            model_list.append(HubModel(path, "", [], -1, -1, ModelType.from_config(config)))
+            checkpoint_lookup[os.path.basename(path)] = Checkpoint(path, config)
+
+        set_model_list('installed_models', model_list)
+
+    future = Generator.shared().hf_list_installed_models()
+    if blocking:
+        on_done(future)
+    else:
+        future.add_done_callback(on_done)
+
 
 class ModelSearch(bpy.types.Operator):
     bl_idname = "dream_textures.model_search"
@@ -174,7 +209,7 @@ def _template_model_download_progress(context, layout):
         progress_col.enabled = False
     return is_downloading
 
-class Checkpoint(bpy.types.PropertyGroup):
+class CheckpointGroup(bpy.types.PropertyGroup):
     bl_label = "Model"
     bl_idname = "dream_textures.checkpoint"
 
@@ -228,8 +263,7 @@ class LinkCheckpoint(bpy.types.Operator, ImportHelper):
                 link.path = path
             link.model_config = self.model_config
 
-        set_checkpoint_links()
-        set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+        fetch_installed_models()
 
         return {"FINISHED"}
 
@@ -244,8 +278,7 @@ class UnlinkCheckpoint(bpy.types.Operator):
         if index != -1:
             pref.linked_checkpoints.remove(index)
 
-        set_checkpoint_links()
-        set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+        fetch_installed_models()
 
         return {"FINISHED"}
 
@@ -258,10 +291,6 @@ class PREFERENCES_UL_CheckpointList(bpy.types.UIList):
         install_model.model = item.path
         unlink = layout.operator(UnlinkCheckpoint.bl_idname, text="", icon="TRASH")
         unlink.path = item.path
-
-def set_checkpoint_links():
-    pref = bpy.context.preferences.addons[__package__].preferences
-    Generator.shared().set_checkpoint_links({link.path: ModelConfig[link.model_config] for link in pref.linked_checkpoints})
 
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
@@ -278,7 +307,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     installed_models: CollectionProperty(type=Model)
     active_installed_model: bpy.props.IntProperty(name="Active Model", default=0)
 
-    linked_checkpoints: CollectionProperty(type=Checkpoint)
+    linked_checkpoints: CollectionProperty(type=CheckpointGroup)
     active_linked_checkpoint: bpy.props.IntProperty(name="Active Checkpoint", default=0)
 
     download_file: bpy.props.StringProperty(name="")
@@ -286,10 +315,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
     @staticmethod
     def register():
-        def on_done(future):
-            set_model_list('installed_models', future.result())
-        set_checkpoint_links()
-        Generator.shared().hf_list_installed_models().add_done_callback(on_done)
+        fetch_installed_models(False)
 
     def draw(self, context):
         layout = self.layout

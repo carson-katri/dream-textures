@@ -10,10 +10,9 @@ from .api.models.fix_it_error import FixItError
 from .generator_process import Generator
 from .generator_process.actions.prompt_to_image import ImageGenerationResult
 from .generator_process.future import Future
-from .generator_process.models import CPUOffload, Optimizations, Scheduler
-from .generator_process.actions.huggingface_hub import ModelType
+from .generator_process.models import CPUOffload, ModelType, Optimizations, Scheduler
 
-from .preferences import StableDiffusionPreferences, _template_model_download_progress, InstallModel
+from .preferences import checkpoint_lookup, StableDiffusionPreferences
 
 from functools import reduce
 
@@ -135,7 +134,7 @@ class DiffusersBackend(Backend):
     def generate(self, arguments: GenerationArguments, step_callback: StepCallback, callback: Callback):
         gen = Generator.shared()
         common_kwargs = {
-            'model': arguments.model.id,
+            'model': checkpoint_lookup.get(arguments.model.id, arguments.model.id),
             'scheduler': Scheduler(arguments.scheduler),
             'optimizations': self.optimizations(),
             'prompt': arguments.prompt.positive,
@@ -150,7 +149,7 @@ class DiffusersBackend(Backend):
             'iterations': arguments.iterations,
             'step_preview_mode': arguments.step_preview_mode,
             
-            'sdxl_refiner_model': (self.sdxl_refiner_model if self.use_sdxl_refiner else None)
+            'sdxl_refiner_model': (checkpoint_lookup.get(self.sdxl_refiner_model, self.sdxl_refiner_model) if self.use_sdxl_refiner else None),
         }
         future: Future
         match arguments.task:

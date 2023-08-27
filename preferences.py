@@ -44,21 +44,28 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
         name="Model Config",
         items=_model_config_options
     )
+    prefer_fp16_variant: bpy.props.BoolProperty(
+        name="Save Half Precision Weights",
+        default=True
+    )
 
     def execute(self, context):
-        _, extension = os.path.splitext(self.filepath)
-        if extension not in import_extensions:
-            self.report({"ERROR"}, "Select a valid stable diffusion '.ckpt' file.")
-            return {"FINISHED"}
-        try:
-            Generator.shared().convert_original_stable_diffusion_to_diffusers(self.filepath, ModelConfig[self.model_config]).result()
-        except Exception as e:
-            self.report({"ERROR"}, """Model conversion failed. Make sure you select the correct model configuration in the sidebar.
-Press 'N' or click the gear icon in the top right of the file selection popup to reveal the sidebar.""")
-            self.report({"ERROR"}, str(e))
-        
-        fetch_installed_models()
-
+        global is_downloading
+        is_downloading = True
+        f = Generator.shared().convert_original_stable_diffusion_to_diffusers(self.filepath, ModelConfig[self.model_config], self.prefer_fp16_variant)
+        def on_progress(_, response: DownloadStatus):
+            bpy.context.preferences.addons[__package__].preferences.download_file = response.file
+            bpy.context.preferences.addons[__package__].preferences.download_progress = int((response.index / response.total) * 100)
+        def on_done(future):
+            global is_downloading
+            is_downloading = False
+            fetch_installed_models()
+        def on_exception(_, exception):
+            self.report({"ERROR"}, str(exception))
+            raise exception
+        f.add_response_callback(on_progress)
+        f.add_done_callback(on_done)
+        f.add_exception_callback(on_exception)
         return {"FINISHED"}
 
 class Model(bpy.types.PropertyGroup):
@@ -186,7 +193,7 @@ class InstallModel(bpy.types.Operator):
             def on_done(future):
                 global is_downloading
                 is_downloading = False
-                set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+                fetch_installed_models()
             def on_exception(_, exception):
                 self.report({"ERROR"}, str(exception))
                 raise exception
@@ -382,7 +389,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                 search_box.prop(self, "resume_download")
 
             layout.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_installed_models", self, "installed_models", self, "active_installed_model")
-            layout.operator(ImportWeights.bl_idname, icon='IMPORT')
+            import_weights = layout.operator(ImportWeights.bl_idname, icon='IMPORT')
+            import_weights.prefer_fp16_variant = self.prefer_fp16_variant
             layout.template_list(PREFERENCES_UL_CheckpointList.__name__, "dream_textures_linked_checkpoints", self, "linked_checkpoints", self, "active_linked_checkpoint")
             layout.operator(LinkCheckpoint.bl_idname, icon='FOLDER_REDIRECT')
 

@@ -123,6 +123,37 @@ class DownloadStatus:
     index: int
     total: int
 
+    @classmethod
+    def hook_download_tqdm(cls, future):
+        from huggingface_hub import utils, file_download
+        progresses = set()
+
+        class future_tqdm(utils.tqdm):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.progress()
+
+            def update(self, n=1):
+                ret = super().update(n=n)
+                self.progress()
+                return ret
+
+            def progress(self):
+                nonlocal progresses
+                progresses.add(self)
+                ratio = self.n / self.total
+                count = 0
+                for tqdm in progresses:
+                    r = tqdm.n / tqdm.total
+                    if r == 1:
+                        continue
+                    count += 1
+                    if tqdm != self and ratio < r:
+                        # only show download status of most complete file
+                        return
+                future.add_response(cls(f"{count} file{'' if count == 1 else 's'}: {self.desc}", self.n, self.total))
+        file_download.tqdm = future_tqdm
+
 def hf_snapshot_download(
     self,
     model: str,
@@ -130,41 +161,12 @@ def hf_snapshot_download(
     variant: str | None = None,
     resume_download=True
 ):
-    from huggingface_hub import utils
+    from huggingface_hub import snapshot_download, repo_info
+    from diffusers import StableDiffusionPipeline
 
     future = Future()
     yield future
-    progresses = set()
-
-    class future_tqdm(utils.tqdm):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.progress()
-
-        def update(self, n=1):
-            ret = super().update(n=n)
-            self.progress()
-            return ret
-
-        def progress(self):
-            nonlocal progresses
-            progresses.add(self)
-            ratio = self.n / self.total
-            count = 0
-            for tqdm in progresses:
-                r = tqdm.n / tqdm.total
-                if r == 1:
-                    continue
-                count += 1
-                if tqdm != self and ratio < r:
-                    # only show download status of most complete file
-                    return
-            future.add_response(DownloadStatus(f"{count} file{'' if count == 1 else 's'}: {self.desc}", self.n, self.total))
-    
-    from huggingface_hub import file_download, snapshot_download, repo_info
-    file_download.tqdm = future_tqdm
-    
-    from diffusers import StableDiffusionPipeline
+    DownloadStatus.hook_download_tqdm(future)
 
     info = repo_info(model, token=token)
     files = [file.rfilename for file in info.siblings]

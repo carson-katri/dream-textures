@@ -29,12 +29,14 @@ class OpenURL(bpy.types.Operator):
         return {"FINISHED"}
 
 _model_config_options = [(m.name, m.value, '') for m in ModelConfig]
+import_extensions = ['.ckpt', '.safetensors', '.pth']
+import_extensions_glob = ";".join(import_extensions).replace(".", "*.")
 class ImportWeights(bpy.types.Operator, ImportHelper):
     bl_idname = "dream_textures.import_weights"
     bl_label = "Import Checkpoint File"
     filename_ext = ".ckpt"
     filter_glob: bpy.props.StringProperty(
-        default="*.ckpt;*.safetensors",
+        default=import_extensions_glob,
         options={'HIDDEN'},
         maxlen=255,
     )
@@ -45,7 +47,7 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
 
     def execute(self, context):
         _, extension = os.path.splitext(self.filepath)
-        if extension not in ['.ckpt', '.safetensors']:
+        if extension not in import_extensions:
             self.report({"ERROR"}, "Select a valid stable diffusion '.ckpt' file.")
             return {"FINISHED"}
         try:
@@ -102,7 +104,13 @@ def set_model_list(model_list: str, models: list):
         except:
             pass
 
-checkpoint_lookup = {}
+class checkpoint_lookup:
+    _checkpoints = {}
+
+    @classmethod
+    def get(cls, item):
+        return cls._checkpoints.get(item, item)
+
 def fetch_installed_models(blocking=True):
     def on_done(future):
         model_list = future.result()
@@ -117,16 +125,16 @@ def fetch_installed_models(blocking=True):
                 checkpoints[os.path.basename(path)] = (path, config)
                 continue
             for name in os.listdir(path):
-                if os.path.splitext(name)[1] not in [".ckpt", ".safetensors"]:
+                if os.path.splitext(name)[1] not in import_extensions:
                     continue
                 if name in checkpoints:
                     # file linked config takes precedence over folder linked config
                     continue
                 checkpoints[name] = (os.path.join(path, name), config)
-        checkpoint_lookup.clear()
+        checkpoint_lookup._checkpoints.clear()
         for path, config in checkpoints.values():
             model_list.append(HubModel(path, "", [], -1, -1, ModelType.from_config(config)))
-            checkpoint_lookup[os.path.basename(path)] = Checkpoint(path, config)
+            checkpoint_lookup._checkpoints[os.path.basename(path)] = Checkpoint(path, config)
 
         set_model_list('installed_models', model_list)
 
@@ -228,7 +236,7 @@ class LinkCheckpoint(bpy.types.Operator, ImportHelper):
         options={'HIDDEN', 'SKIP_SAVE'}
     )
     filter_glob: bpy.props.StringProperty(
-        default="*.ckpt;*.safetensors",
+        default=import_extensions_glob,
         options={'HIDDEN'},
         maxlen=255,
     )
@@ -253,7 +261,7 @@ class LinkCheckpoint(bpy.types.Operator, ImportHelper):
             if not os.path.exists(path):
                 self.report({"ERROR"}, f"{path} does not exist")
                 continue
-            if os.path.isfile(path) and os.path.splitext(path)[1] not in ['.ckpt', '.safetensors']:
+            if os.path.isfile(path) and os.path.splitext(path)[1] not in import_extensions:
                 self.report({"ERROR"}, f"{os.path.basename(path)} is not a checkpoint")
                 continue
 

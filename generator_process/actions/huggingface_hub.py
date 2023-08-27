@@ -80,7 +80,7 @@ def hf_list_installed_models(self) -> list[Model]:
             storage_folder = os.path.join(cache_dir, file)
             model_type = ModelType.UNKNOWN
 
-            if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
+            if os.path.exists(os.path.join(storage_folder, 'model_index.json')) or os.path.exists(os.path.join(storage_folder, 'config.json')):
                 snapshot_folder = storage_folder
                 model_type = detect_model_type(snapshot_folder)
             else:

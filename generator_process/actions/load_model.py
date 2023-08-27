@@ -64,11 +64,13 @@ def load_checkpoint(model_class, checkpoint, dtype, **kwargs):
             model,
             from_safetensors=model.endswith(".safetensors"),
             original_config_file=config_file,
-            pipeline_class=pipeline_class
+            pipeline_class=pipeline_class,
+            controlnet=kwargs.get("controlnet", None)
         )
-        pipe.to(torch_dtype=dtype)
+        if dtype is not None:
+            pipe.to(torch_dtype=dtype)
         if from_pipe:
-            pipe = model_class.from_pipe(pipe)
+            pipe = model_class.from_pipe(pipe, **kwargs)
         return pipe
 
 
@@ -79,7 +81,7 @@ def load_model(self, model_class, model, optimizations, **kwargs):
     half_precision = optimizations.can_use_half(device)
     invalidation_properties = (model, device, half_precision, optimizations.cpu_offloading(device))
     reload_pipeline = not hasattr(self, "_pipe") or self._pipe is None or self._pipe[0] != invalidation_properties
-    dtype = torch.float16 if half_precision else torch.float32
+    dtype = torch.float16 if half_precision else None
 
     if reload_pipeline and (isinstance(model, Checkpoint) or os.path.splitext(model)[1] in [".ckpt", ".safetensors"]):
         self._pipe = (invalidation_properties, load_checkpoint(model_class, model, dtype, **kwargs))

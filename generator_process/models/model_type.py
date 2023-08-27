@@ -84,5 +84,7 @@ class ModelType(enum.IntEnum):
                 return ModelType.DEPTH
             case ModelConfig.STABLE_DIFFUSION_2_INPAINTING:
                 return ModelType.INPAINTING
+            case ModelConfig.CONTROL_NET_1_5 | ModelConfig.CONTROL_NET_2_1:
+                return ModelType.CONTROL_NET
             case _:
                 return ModelType.PROMPT_TO_IMAGE

@@ -134,7 +134,7 @@ class DiffusersBackend(Backend):
     def generate(self, arguments: GenerationArguments, step_callback: StepCallback, callback: Callback):
         gen = Generator.shared()
         common_kwargs = {
-            'model': checkpoint_lookup.get(arguments.model.id, arguments.model.id),
+            'model': checkpoint_lookup.get(arguments.model.id),
             'scheduler': Scheduler(arguments.scheduler),
             'optimizations': self.optimizations(),
             'prompt': arguments.prompt.positive,
@@ -149,7 +149,7 @@ class DiffusersBackend(Backend):
             'iterations': arguments.iterations,
             'step_preview_mode': arguments.step_preview_mode,
             
-            'sdxl_refiner_model': (checkpoint_lookup.get(self.sdxl_refiner_model, self.sdxl_refiner_model) if self.use_sdxl_refiner else None),
+            'sdxl_refiner_model': (checkpoint_lookup.get(self.sdxl_refiner_model) if self.use_sdxl_refiner else None),
         }
         future: Future
         match arguments.task:
@@ -157,7 +157,7 @@ class DiffusersBackend(Backend):
                 if len(arguments.control_nets) > 0:
                     future = gen.control_net(
                         **common_kwargs,
-                        control_net=[c.model for c in arguments.control_nets],
+                        control_net=[checkpoint_lookup.get(c.model) for c in arguments.control_nets],
                         control=[c.image for c in arguments.control_nets],
                         controlnet_conditioning_scale=[c.strength for c in arguments.control_nets],
                         image=None,

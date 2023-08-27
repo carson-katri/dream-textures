@@ -7,6 +7,7 @@ import logging
 import os
 import random
 from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from ..models import ModelConfig
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
 from .load_model import revision_paths
@@ -18,6 +19,18 @@ logger = logging.getLogger(__name__)
 def load_controlnet_model(model, half_precision):
     from diffusers import ControlNetModel
     import torch
+
+    if isinstance(model, str) and os.path.isfile(model):
+        model = Checkpoint(model, None)
+
+    if isinstance(model, Checkpoint):
+        control_net_model = ControlNetModel.from_single_file(
+            model.path,
+            config_file=model.config.original_config if isinstance(model.config, ModelConfig) else model.config,
+        )
+        if half_precision:
+            control_net_model.to(torch.float16)
+        return control_net_model
 
     revisions = revision_paths(model, "config.json")
 
@@ -38,7 +51,7 @@ def load_controlnet_model(model, half_precision):
 
     return ControlNetModel.from_pretrained(
         revisions["main"],
-        torch_dtype=torch.float16 if half_precision else torch.float32,
+        torch_dtype=torch.float16 if half_precision else None,
         variant="fp16" if half_weights else None
     )
 

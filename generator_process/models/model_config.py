@@ -12,6 +12,8 @@ class ModelConfig(enum.Enum):
     STABLE_DIFFUSION_2_INPAINTING = "v2 (inpainting)"
     STABLE_DIFFUSION_XL_BASE = "XL (base)"
     STABLE_DIFFUSION_XL_REFINER = "XL (refiner)"
+    CONTROL_NET_1_5 = "1.5 (ControlNet)"
+    CONTROL_NET_2_1 = "2.1 (ControlNet)"
 
     @property
     def original_config(self):
@@ -32,10 +34,14 @@ class ModelConfig(enum.Enum):
                 return absolute_path("sd_configs/sd_xl_base.yaml")
             case ModelConfig.STABLE_DIFFUSION_XL_REFINER:
                 return absolute_path("sd_configs/sd_xl_refiner.yaml")
+            case ModelConfig.CONTROL_NET_1_5:
+                return absolute_path("sd_configs/cldm_v15.yaml")
+            case ModelConfig.CONTROL_NET_2_1:
+                return absolute_path("sd_configs/cldm_v21.yaml")
 
     @property
     def pipeline(self):
-        # allows for saving with correct _class_name in model_index.json
+        # allows for saving with correct _class_name in model_index.json and necessary for some models to import
         import diffusers
         match self:
             case ModelConfig.AUTO_DETECT:
@@ -48,5 +54,7 @@ class ModelConfig(enum.Enum):
                 return diffusers.StableDiffusionXLPipeline
             case ModelConfig.STABLE_DIFFUSION_XL_REFINER:
                 return diffusers.StableDiffusionXLImg2ImgPipeline
+            case ModelConfig.CONTROL_NET_1_5 | ModelConfig.CONTROL_NET_2_1:
+                return diffusers.ControlNetModel
             case _:
                 return diffusers.StableDiffusionPipeline

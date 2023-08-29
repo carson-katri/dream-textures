@@ -1,7 +1,7 @@
 import gc
 import logging
 import os
-from ..models import Checkpoint, ModelConfig
+from ..models import Checkpoint, ModelConfig, Scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -133,23 +133,26 @@ def _load_checkpoint(model_class, checkpoint, dtype, **kwargs):
         return pipe
 
 
-def _convert_pipe(cache, model, pipe, model_class, half_precision, **kwargs):
+def _convert_pipe(cache, model, pipe, model_class, half_precision, scheduler, **kwargs):
     if model_class.__name__ not in {
         # some tasks are not supported by auto pipeline
         'DreamTexturesDepth2ImgPipeline'
     }:
-        return model_class.from_pipe(pipe, **kwargs)
+        pipe = model_class.from_pipe(pipe, **kwargs)
+    scheduler.create(pipe)
     return pipe
 
 
 @cache_check(exists_callback=_convert_pipe)
-def _load_pipeline(cache, model, model_class, half_precision, **kwargs):
+def _load_pipeline(cache, model, model_class, half_precision, scheduler, **kwargs):
     import torch
 
     dtype = torch.float16 if half_precision else None
 
     if isinstance(model, Checkpoint) or os.path.splitext(model)[1] in [".ckpt", ".safetensors"]:
-        return _load_checkpoint(model_class, model, dtype, **kwargs)
+        pipe = _load_checkpoint(model_class, model, dtype, **kwargs)
+        scheduler.create(pipe)
+        return pipe
 
     revisions = revision_paths(model)
     strategies = []
@@ -169,14 +172,16 @@ def _load_pipeline(cache, model, model_class, half_precision, **kwargs):
         if strat.pop("_warn_precision_fallback", False):
             logger.warning(f"Can't load fp32 weights for model {model}, attempting to load fp16 instead")
         try:
-            return model_class.from_pretrained(strat.pop("model_path"), torch_dtype=dtype, **strat, **kwargs)
+            pipe = model_class.from_pretrained(strat.pop("model_path"), torch_dtype=dtype, **strat, **kwargs)
+            pipe.scheduler = scheduler.create(pipe)
+            return pipe
         except Exception as e:
             if exc is None:
                 exc = e
     raise exc
 
 
-def load_model(self, model_class, model, optimizations, controlnet=None, sdxl_refiner_model=None, **kwargs):
+def load_model(self, model_class, model, optimizations, scheduler, controlnet=None, sdxl_refiner_model=None, **kwargs):
     import torch
     from diffusers import StableDiffusionXLPipeline, AutoPipelineForImage2Image
     from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
@@ -215,9 +220,14 @@ def load_model(self, model_class, model, optimizations, controlnet=None, sdxl_re
         kwargs["controlnet"] = MultiControlNetModel([
             _load_controlnet_model(model_cache, name, half_precision) for name in controlnet
         ])
-    pipe = _load_pipeline(model_cache, model, model_class, half_precision, **kwargs)
+    if not isinstance(scheduler, Scheduler):
+        try:
+            scheduler = Scheduler[scheduler]
+        except KeyError:
+            raise ValueError(f"scheduler expected one of {[s.name for s in Scheduler]}, got {repr(scheduler)}")
+    pipe = _load_pipeline(model_cache, model, model_class, half_precision, scheduler, **kwargs)
     if isinstance(pipe, StableDiffusionXLPipeline) and sdxl_refiner_model is not None:
-        return pipe, _load_pipeline(model_cache, sdxl_refiner_model, AutoPipelineForImage2Image, half_precision, **kwargs)
+        return pipe, _load_pipeline(model_cache, sdxl_refiner_model, AutoPipelineForImage2Image, half_precision, scheduler, **kwargs)
     elif sdxl_refiner_model is not None:
         if model_cache.pop(sdxl_refiner_model, None) is not None:
             # refiner was previously used and left enabled but is not compatible with the now selected model

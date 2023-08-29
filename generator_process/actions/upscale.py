@@ -45,7 +45,7 @@ def upscale(
         revision="fp16" if optimizations.can_use_half(device) else None,
         torch_dtype=torch.float16 if optimizations.can_use_half(device) else torch.float32
     )
-    pipe.scheduler = scheduler.create(pipe, None)
+    scheduler.create(pipe)
     # vae would automatically be made float32 within the pipeline, but it fails to convert after offloading is enabled
     pipe.vae.to(dtype=torch.float32)
     if not optimizations.cpu_offloading(device):

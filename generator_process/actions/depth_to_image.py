@@ -14,7 +14,7 @@ def depth_to_image(
     
     model: str | Checkpoint,
 
-    scheduler: Scheduler,
+    scheduler: str | Scheduler,
 
     optimizations: Optimizations,
 
@@ -327,7 +327,7 @@ def depth_to_image(
     device = self.choose_device(optimizations)
 
     # StableDiffusionPipeline w/ caching
-    pipe = self.load_model(DreamTexturesDepth2ImgPipeline, model, optimizations)
+    pipe = self.load_model(DreamTexturesDepth2ImgPipeline, model, optimizations, scheduler)
 
     # Optimizations
     pipe = optimizations.apply(pipe, device)

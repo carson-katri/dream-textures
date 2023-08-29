@@ -13,7 +13,7 @@ def inpaint(
     
     model: str | Checkpoint,
 
-    scheduler: Scheduler,
+    scheduler: str | Scheduler,
 
     optimizations: Optimizations,
 
@@ -56,7 +56,7 @@ def inpaint(
     device = self.choose_device(optimizations)
 
     # StableDiffusionPipeline w/ caching
-    pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, optimizations)
+    pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, optimizations, scheduler)
     height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
     width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
 

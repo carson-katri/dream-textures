@@ -15,7 +15,7 @@ def prompt_to_image(
     
     model: str | Checkpoint,
 
-    scheduler: Scheduler,
+    scheduler: str | Scheduler,
 
     optimizations: Optimizations,
 
@@ -53,9 +53,9 @@ def prompt_to_image(
 
     # Stable Diffusion pipeline w/ caching
     if device == "cuda" and (optimizations.cpu_offloading(device) or torch.cuda.mem_get_info()[1] > 20 * 1024**3 * (1 if optimizations.can_use_half(device) else 2)):
-        pipe, refiner = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, sdxl_refiner_model=sdxl_refiner_model)
+        pipe, refiner = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler, sdxl_refiner_model=sdxl_refiner_model)
     else:
-        pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations)
+        pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler)
         refiner = None
     height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
     width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
@@ -103,7 +103,7 @@ def prompt_to_image(
         if is_sdxl and sdxl_refiner_model is not None and refiner is None:
             # allow load_model() to garbage collect pipe
             pipe = None
-            refiner = self.load_model(diffusers.AutoPipelineForImage2Image, sdxl_refiner_model, optimizations)
+            refiner = self.load_model(diffusers.AutoPipelineForImage2Image, sdxl_refiner_model, optimizations, scheduler)
         if refiner is not None:
             refiner = optimizations.apply(refiner, device)
             result = refiner(

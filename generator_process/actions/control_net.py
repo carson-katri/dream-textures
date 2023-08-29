@@ -7,53 +7,11 @@ import logging
 import os
 import random
 from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
-from ..models import ModelConfig
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
-from .load_model import revision_paths
 
 
 logger = logging.getLogger(__name__)
-
-
-def load_controlnet_model(model, half_precision):
-    from diffusers import ControlNetModel
-    import torch
-
-    if isinstance(model, str) and os.path.isfile(model):
-        model = Checkpoint(model, None)
-
-    if isinstance(model, Checkpoint):
-        control_net_model = ControlNetModel.from_single_file(
-            model.path,
-            config_file=model.config.original_config if isinstance(model.config, ModelConfig) else model.config,
-        )
-        if half_precision:
-            control_net_model.to(torch.float16)
-        return control_net_model
-
-    revisions = revision_paths(model, "config.json")
-
-    fp16_weights = ["diffusion_pytorch_model.fp16.safetensors", "diffusion_pytorch_model.fp16.bin"]
-    fp32_weights = ["diffusion_pytorch_model.safetensors", "diffusion_pytorch_model.bin"]
-    if half_precision:
-        weights_names = fp16_weights + fp32_weights
-    else:
-        weights_names = fp32_weights + fp16_weights
-
-    # controlnet models shouldn't have a fp16 revision to worry about
-    weights = next((name for name in weights_names if os.path.isfile(os.path.join(revisions["main"], name))), None)
-    if weights is None:
-        raise FileNotFoundError(f"Can't find appropriate weights in {model}")
-    half_weights = ".fp16" in weights
-    if not half_precision and half_weights:
-        logger.warning(f"Can't load fp32 weights for model {model}, attempting to load fp16 instead")
-
-    return ControlNetModel.from_pretrained(
-        revisions["main"],
-        torch_dtype=torch.float16 if half_precision else None,
-        variant="fp16" if half_weights else None
-    )
 
 
 def control_net(
@@ -65,7 +23,7 @@ def control_net(
 
     optimizations: Optimizations,
 
-    control_net: list[str],
+    control_net: list[str | Checkpoint],
     control: list[NDArray] | None,
     controlnet_conditioning_scale: list[float],
     
@@ -98,27 +56,20 @@ def control_net(
     yield future
 
     import diffusers
-    from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
-    from diffusers.utils import deprecate, randn_tensor
     import torch
     import PIL.Image
     import PIL.ImageOps
     
     device = self.choose_device(optimizations)
 
-    # Load the ControlNet model
-    controlnet_models = MultiControlNetModel([
-        load_controlnet_model(name, optimizations.can_use_half(device)) for name in control_net
-    ])
-
     # StableDiffusionPipeline w/ caching
     if image is not None:
         if inpaint:
-            pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, optimizations, controlnet=controlnet_models)
+            pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, optimizations, controlnet=control_net)
         else:
-            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, model, optimizations, controlnet=controlnet_models)
+            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, model, optimizations, controlnet=control_net)
     else:
-        pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, controlnet=controlnet_models)
+        pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, controlnet=control_net)
 
     # Optimizations
     pipe = optimizations.apply(pipe, device)

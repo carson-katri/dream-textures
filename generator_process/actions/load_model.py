@@ -1,3 +1,4 @@
+import gc
 import logging
 import os
 from ..models import Checkpoint, ModelConfig
@@ -33,7 +34,64 @@ def revision_paths(model, config="model_index.json"):
     return revisions
 
 
-def load_checkpoint(model_class, checkpoint, dtype, **kwargs):
+def cache_check(*, exists_callback=None):
+    def decorator(func):
+        def wrapper(cache, model, *args, **kwargs):
+            if model in cache:
+                r = cache[model]
+                if exists_callback is not None:
+                    r = cache[model] = exists_callback(cache, model, r, *args, **kwargs)
+            else:
+                r = cache[model] = func(cache, model, *args, **kwargs)
+            return r
+        return wrapper
+    return decorator
+
+
+@cache_check()
+def _load_controlnet_model(cache, model, half_precision):
+    from diffusers import ControlNetModel
+    import torch
+
+    if isinstance(model, str) and os.path.isfile(model):
+        model = Checkpoint(model, None)
+
+    if isinstance(model, Checkpoint):
+        control_net_model = ControlNetModel.from_single_file(
+            model.path,
+            config_file=model.config.original_config if isinstance(model.config, ModelConfig) else model.config,
+        )
+        if half_precision:
+            control_net_model.to(torch.float16)
+        return control_net_model
+
+    revisions = revision_paths(model, "config.json")
+    if "main" not in revisions:
+        # controlnet models shouldn't have a fp16 revision to worry about
+        raise FileNotFoundError(f"{model} does not contain a main revision")
+
+    fp16_weights = ["diffusion_pytorch_model.fp16.safetensors", "diffusion_pytorch_model.fp16.bin"]
+    fp32_weights = ["diffusion_pytorch_model.safetensors", "diffusion_pytorch_model.bin"]
+    if half_precision:
+        weights_names = fp16_weights + fp32_weights
+    else:
+        weights_names = fp32_weights + fp16_weights
+
+    weights = next((name for name in weights_names if os.path.isfile(os.path.join(revisions["main"], name))), None)
+    if weights is None:
+        raise FileNotFoundError(f"Can't find appropriate weights in {model}")
+    half_weights = weights in fp16_weights
+    if not half_precision and half_weights:
+        logger.warning(f"Can't load fp32 weights for model {model}, attempting to load fp16 instead")
+
+    return ControlNetModel.from_pretrained(
+        revisions["main"],
+        torch_dtype=torch.float16 if half_precision else None,
+        variant="fp16" if half_weights else None
+    )
+
+
+def _load_checkpoint(model_class, checkpoint, dtype, **kwargs):
     from diffusers.pipelines.stable_diffusion.convert_from_ckpt import download_from_original_stable_diffusion_ckpt
 
     if isinstance(checkpoint, Checkpoint):
@@ -51,7 +109,8 @@ def load_checkpoint(model_class, checkpoint, dtype, **kwargs):
         return model_class.from_single_file(
             model,
             torch_dtype=dtype,
-            original_config_file=config_file
+            original_config_file=config_file,
+            **kwargs
         )
     else:
         # auto pipelines won't support from_single_file() https://github.com/huggingface/diffusers/issues/4367
@@ -74,44 +133,96 @@ def load_checkpoint(model_class, checkpoint, dtype, **kwargs):
         return pipe
 
 
-def load_model(self, model_class, model, optimizations, **kwargs):
+def _convert_pipe(cache, model, pipe, model_class, half_precision, **kwargs):
+    if model_class.__name__ not in {
+        # some tasks are not supported by auto pipeline
+        'DreamTexturesDepth2ImgPipeline'
+    }:
+        return model_class.from_pipe(pipe, **kwargs)
+    return pipe
+
+
+@cache_check(exists_callback=_convert_pipe)
+def _load_pipeline(cache, model, model_class, half_precision, **kwargs):
     import torch
+
+    dtype = torch.float16 if half_precision else None
+
+    if isinstance(model, Checkpoint) or os.path.splitext(model)[1] in [".ckpt", ".safetensors"]:
+        return _load_checkpoint(model_class, model, dtype, **kwargs)
+
+    revisions = revision_paths(model)
+    strategies = []
+    if "main" in revisions:
+        strategies.append({"model_path": revisions["main"], "variant": "fp16" if half_precision else None})
+        if not half_precision:
+            # fp16 variant can automatically use fp32 files, but fp32 won't automatically use fp16 files
+            strategies.append({"model_path": revisions["main"], "variant": "fp16", "_warn_precision_fallback": True})
+    if "fp16" in revisions:
+        strategies.append({"model_path": revisions["fp16"], "_warn_precision_fallback": not half_precision})
+
+    if len(strategies) == 0:
+        raise FileNotFoundError(f"{model} does not contain a main or fp16 revision")
+
+    exc = None
+    for strat in strategies:
+        if strat.pop("_warn_precision_fallback", False):
+            logger.warning(f"Can't load fp32 weights for model {model}, attempting to load fp16 instead")
+        try:
+            return model_class.from_pretrained(strat.pop("model_path"), torch_dtype=dtype, **strat, **kwargs)
+        except Exception as e:
+            if exc is None:
+                exc = e
+    raise exc
+
+
+def load_model(self, model_class, model, optimizations, controlnet=None, sdxl_refiner_model=None, **kwargs):
+    import torch
+    from diffusers import StableDiffusionXLPipeline, AutoPipelineForImage2Image
+    from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
 
     device = self.choose_device(optimizations)
     half_precision = optimizations.can_use_half(device)
-    invalidation_properties = (model, device, half_precision, optimizations.cpu_offloading(device))
-    reload_pipeline = not hasattr(self, "_pipe") or self._pipe is None or self._pipe[0] != invalidation_properties
-    dtype = torch.float16 if half_precision else None
+    invalidation_properties = (device, half_precision, optimizations.cpu_offloading(device), controlnet is not None)
 
-    if reload_pipeline and (isinstance(model, Checkpoint) or os.path.splitext(model)[1] in [".ckpt", ".safetensors"]):
-        self._pipe = (invalidation_properties, load_checkpoint(model_class, model, dtype, **kwargs))
-    elif reload_pipeline:
-        revisions = revision_paths(model)
+    # determine models to be removed from cache
+    if not hasattr(self, "_pipe") or self._pipe is None or self._pipe[0] != invalidation_properties:
+        model_cache = {}
+        self._pipe = (invalidation_properties, model_cache)
+        gc.collect()
+        torch.cuda.empty_cache()
+    else:
+        model_cache = self._pipe[1]
+        expected_models = {model}
+        if sdxl_refiner_model is not None:
+            expected_models.add(sdxl_refiner_model)
+        if controlnet is not None:
+            expected_models.update(name for name in controlnet)
+        clear_models = set(model_cache).difference(expected_models)
+        for name in clear_models:
+            model_cache.pop(name)
+        for pipe in model_cache.items():
+            if isinstance(getattr(pipe, "controlnet", None), MultiControlNetModel):
+                # make sure no longer needed ControlNetModels are cleared
+                # the MultiControlNetModel container will be remade
+                pipe.controlnet = None
+        if len(clear_models) > 0:
+            gc.collect()
+            torch.cuda.empty_cache()
 
-        strategies = []
-        if "main" in revisions:
-            strategies.append({"model_path": revisions["main"], "variant": "fp16" if half_precision else None})
-            if not half_precision:
-                # fp16 variant can automatically use fp32 files, but fp32 won't automatically use fp16 files
-                strategies.append({"model_path": revisions["main"], "variant": "fp16", "_warn_precision_fallback": True})
-        if "fp16" in revisions:
-            strategies.append({"model_path": revisions["fp16"], "_warn_precision_fallback": not half_precision})
-
-        def try_strategies():
-            exc = None
-            for strat in strategies:
-                if strat.pop("_warn_precision_fallback", False):
-                    logger.warning(f"Can't load fp32 weights for model {model}, attempting to load fp16 instead")
-                try:
-                    return model_class.from_pretrained(strat.pop("model_path"), torch_dtype=dtype, **strat, **kwargs)
-                except Exception as e:
-                    if exc is None:
-                        exc = e
-            raise exc
-        self._pipe = (invalidation_properties, try_strategies())
-    elif model_class.__name__ not in {
-        # some tasks are not support by auto pipeline
-        'DreamTexturesDepth2ImgPipeline'
-    }:
-        self._pipe = (invalidation_properties, model_class.from_pipe(self._pipe[1], **kwargs))
-    return self._pipe[1]
+    # load or obtain models from cache
+    if controlnet is not None:
+        kwargs["controlnet"] = MultiControlNetModel([
+            _load_controlnet_model(model_cache, name, half_precision) for name in controlnet
+        ])
+    pipe = _load_pipeline(model_cache, model, model_class, half_precision, **kwargs)
+    if isinstance(pipe, StableDiffusionXLPipeline) and sdxl_refiner_model is not None:
+        return pipe, _load_pipeline(model_cache, sdxl_refiner_model, AutoPipelineForImage2Image, half_precision, **kwargs)
+    elif sdxl_refiner_model is not None:
+        if model_cache.pop(sdxl_refiner_model, None) is not None:
+            # refiner was previously used and left enabled but is not compatible with the now selected model
+            gc.collect()
+            torch.cuda.empty_cache()
+        # the caller expects a tuple since refiner was defined
+        return pipe, None
+    return pipe

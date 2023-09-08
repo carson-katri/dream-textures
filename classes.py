@@ -10,7 +10,9 @@ from .property_groups.control_net import ControlNet, SCENE_UL_ControlNetList, Co
 from .property_groups.dream_prompt import DreamPrompt
 from .property_groups.seamless_result import SeamlessResult
 from .ui.panels import dream_texture, history, upscaling, render_properties
-from .preferences import OpenURL, StableDiffusionPreferences, ImportWeights, Model, ModelSearch, InstallModel, PREFERENCES_UL_ModelList
+from .preferences import OpenURL, StableDiffusionPreferences,\
+    ImportWeights, Model, ModelSearch, InstallModel, PREFERENCES_UL_ModelList,\
+    CheckpointGroup, LinkCheckpoint, UnlinkCheckpoint, PREFERENCES_UL_CheckpointList
 
 from .ui.presets import DREAM_PT_AdvancedPresets, DREAM_MT_AdvancedPresets, AddAdvancedPreset, RestoreDefaultPresets
 
@@ -68,5 +70,9 @@ PREFERENCE_CLASSES = (
     OpenURL,
     ImportWeights,
     RestoreDefaultPresets,
+    CheckpointGroup,
+    LinkCheckpoint,
+    UnlinkCheckpoint,
+    PREFERENCES_UL_CheckpointList,
     StableDiffusionPreferences,
 )

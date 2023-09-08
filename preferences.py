@@ -11,8 +11,8 @@ from .operators.install_dependencies import InstallDependencies, UninstallDepend
 from .operators.open_latest_version import OpenLatestVersion
 from .ui.presets import RestoreDefaultPresets, default_presets_missing
 from .generator_process import Generator
-from .generator_process.actions.huggingface_hub import DownloadStatus, ModelType
-from .generator_process.actions.convert_original_stable_diffusion_to_diffusers import ModelConfig
+from .generator_process.actions.huggingface_hub import DownloadStatus, Model as HubModel
+from .generator_process.models import Checkpoint, ModelConfig, ModelType
 
 is_downloading = False
 
@@ -29,12 +29,14 @@ class OpenURL(bpy.types.Operator):
         return {"FINISHED"}
 
 _model_config_options = [(m.name, m.value, '') for m in ModelConfig]
+import_extensions = ['.ckpt', '.safetensors', '.pth']
+import_extensions_glob = ";".join(import_extensions).replace(".", "*.")
 class ImportWeights(bpy.types.Operator, ImportHelper):
     bl_idname = "dream_textures.import_weights"
     bl_label = "Import Checkpoint File"
     filename_ext = ".ckpt"
     filter_glob: bpy.props.StringProperty(
-        default="*.ckpt",
+        default=import_extensions_glob,
         options={'HIDDEN'},
         maxlen=255,
     )
@@ -42,21 +44,28 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
         name="Model Config",
         items=_model_config_options
     )
+    prefer_fp16_variant: bpy.props.BoolProperty(
+        name="Save Half Precision Weights",
+        default=True
+    )
 
     def execute(self, context):
-        _, extension = os.path.splitext(self.filepath)
-        if extension != '.ckpt':
-            self.report({"ERROR"}, "Select a valid stable diffusion '.ckpt' file.")
-            return {"FINISHED"}
-        try:
-            Generator.shared().convert_original_stable_diffusion_to_diffusers(self.filepath, ModelConfig[self.model_config]).result()
-        except Exception as e:
-            self.report({"ERROR"}, """Model conversion failed. Make sure you select the correct model configuration in the sidebar.
-Press 'N' or click the gear icon in the top right of the file selection popup to reveal the sidebar.""")
-            self.report({"ERROR"}, str(e))
-        
-        set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
-
+        global is_downloading
+        is_downloading = True
+        f = Generator.shared().convert_original_stable_diffusion_to_diffusers(self.filepath, ModelConfig[self.model_config], self.prefer_fp16_variant)
+        def on_progress(_, response: DownloadStatus):
+            bpy.context.preferences.addons[__package__].preferences.download_file = response.file
+            bpy.context.preferences.addons[__package__].preferences.download_progress = int((response.index / response.total) * 100)
+        def on_done(future):
+            global is_downloading
+            is_downloading = False
+            fetch_installed_models()
+        def on_exception(_, exception):
+            self.report({"ERROR"}, str(exception))
+            raise exception
+        f.add_response_callback(on_progress)
+        f.add_done_callback(on_done)
+        f.add_exception_callback(on_exception)
         return {"FINISHED"}
 
 class Model(bpy.types.PropertyGroup):
@@ -86,9 +95,9 @@ class PREFERENCES_UL_ModelList(bpy.types.UIList):
             split.label(text=item.model_type.replace('_', ' ').title())
         install_model = layout.operator(InstallModel.bl_idname, text="", icon="FILE_FOLDER" if is_installed else "IMPORT")
         install_model.model = item.model
-        install_model.prefer_fp16_revision = data.prefer_fp16_revision
+        install_model.prefer_fp16_variant = data.prefer_fp16_variant
+        install_model.resume_download = data.resume_download
 
-@staticmethod
 def set_model_list(model_list: str, models: list):
     getattr(bpy.context.preferences.addons[__package__].preferences, model_list).clear()
     for model in models:
@@ -101,6 +110,47 @@ def set_model_list(model_list: str, models: list):
             m.model_type = model.model_type.name
         except:
             pass
+
+class checkpoint_lookup:
+    _checkpoints = {}
+
+    @classmethod
+    def get(cls, item):
+        return cls._checkpoints.get(item, item)
+
+def fetch_installed_models(blocking=True):
+    def on_done(future):
+        model_list = future.result()
+
+        pref = bpy.context.preferences.addons[__package__].preferences
+        checkpoint_links = ((link.path, ModelConfig[link.model_config]) for link in pref.linked_checkpoints)
+        checkpoints = {}
+        for path, config in checkpoint_links:
+            if not os.path.exists(path):
+                continue
+            if os.path.isfile(path):
+                checkpoints[os.path.basename(path)] = (path, config)
+                continue
+            for name in os.listdir(path):
+                if os.path.splitext(name)[1] not in import_extensions:
+                    continue
+                if name in checkpoints:
+                    # file linked config takes precedence over folder linked config
+                    continue
+                checkpoints[name] = (os.path.join(path, name), config)
+        checkpoint_lookup._checkpoints.clear()
+        for path, config in checkpoints.values():
+            model_list.append(HubModel(path, "", [], -1, -1, ModelType.from_config(config)))
+            checkpoint_lookup._checkpoints[os.path.basename(path)] = Checkpoint(path, config)
+
+        set_model_list('installed_models', model_list)
+
+    future = Generator.shared().hf_list_installed_models()
+    if blocking:
+        on_done(future)
+    else:
+        future.add_done_callback(on_done)
+
 
 class ModelSearch(bpy.types.Operator):
     bl_idname = "dream_textures.model_search"
@@ -119,22 +169,31 @@ class InstallModel(bpy.types.Operator):
     bl_options = {"REGISTER", "INTERNAL"}
 
     model: StringProperty(name="Model ID")
-    prefer_fp16_revision: bpy.props.BoolProperty(name="", default=True)
+    prefer_fp16_variant: bpy.props.BoolProperty(name="", default=True)
+    resume_download: bpy.props.BoolProperty(name="", default=True)
 
     def execute(self, context):
         if os.path.exists(self.model):
-            webbrowser.open(f"file://{self.model}")
+            if os.path.isfile(self.model):
+                webbrowser.open(f"file://{os.path.dirname(self.model)}")
+            else:
+                webbrowser.open(f"file://{self.model}")
         else:
             global is_downloading
             is_downloading = True
-            f = Generator.shared().hf_snapshot_download(self.model, bpy.context.preferences.addons[__package__].preferences.hf_token, "fp16" if self.prefer_fp16_revision else None)
+            f = Generator.shared().hf_snapshot_download(
+                self.model,
+                bpy.context.preferences.addons[__package__].preferences.hf_token,
+                "fp16" if self.prefer_fp16_variant else None,
+                self.resume_download
+            )
             def on_progress(_, response: DownloadStatus):
                 bpy.context.preferences.addons[__package__].preferences.download_file = response.file
                 bpy.context.preferences.addons[__package__].preferences.download_progress = int((response.index / response.total) * 100)
             def on_done(future):
                 global is_downloading
                 is_downloading = False
-                set_model_list('installed_models', Generator.shared().hf_list_installed_models().result())
+                fetch_installed_models()
             def on_exception(_, exception):
                 self.report({"ERROR"}, str(exception))
                 raise exception
@@ -165,6 +224,89 @@ def _template_model_download_progress(context, layout):
         progress_col.enabled = False
     return is_downloading
 
+class CheckpointGroup(bpy.types.PropertyGroup):
+    bl_label = "Model"
+    bl_idname = "dream_textures.checkpoint"
+
+    path: bpy.props.StringProperty(name="Checkpoint")
+    model_config: bpy.props.EnumProperty(
+        name="Model Config",
+        items=_model_config_options
+    )
+
+class LinkCheckpoint(bpy.types.Operator, ImportHelper):
+    bl_idname = "dream_textures.link_checkpoint"
+    bl_label = "Link Checkpoint File or Folder"
+    filename_ext = ".ckpt"
+    files: CollectionProperty(
+        type=bpy.types.OperatorFileListElement,
+        options={'HIDDEN', 'SKIP_SAVE'}
+    )
+    filter_glob: bpy.props.StringProperty(
+        default=import_extensions_glob,
+        options={'HIDDEN'},
+        maxlen=255,
+    )
+    model_config: bpy.props.EnumProperty(
+        name="Model Config",
+        items=_model_config_options
+    )
+
+    def invoke(self, context, _event):
+        if os.path.isfile(self.filepath):
+            # Reset to a directory, otherwise the filename remains populated and can cause issues to select a directory if gone unnoticed.
+            self.filepath = os.path.dirname(self.filepath) + os.path.sep
+        return super().invoke(context, _event)
+
+    def execute(self, context):
+        pref = context.preferences.addons[__package__].preferences
+        for file in self.files:
+            path = self.filepath
+            if file.name != "":
+                path = os.path.join(os.path.dirname(path), file.name)
+
+            if not os.path.exists(path):
+                self.report({"ERROR"}, f"{path} does not exist")
+                continue
+            if os.path.isfile(path) and os.path.splitext(path)[1] not in import_extensions:
+                self.report({"ERROR"}, f"{os.path.basename(path)} is not a checkpoint")
+                continue
+
+            link = next((link for link in pref.linked_checkpoints if link.path == path), None)
+            if link is None:
+                link = pref.linked_checkpoints.add()
+                link.path = path
+            link.model_config = self.model_config
+
+        fetch_installed_models()
+
+        return {"FINISHED"}
+
+class UnlinkCheckpoint(bpy.types.Operator):
+    bl_idname = "dream_textures.unlink_checkpoint"
+    bl_label = "Unlink Checkpoint File"
+
+    path: bpy.props.StringProperty()
+    def execute(self, context):
+        pref = context.preferences.addons[__package__].preferences
+        index = next((i for i, link in enumerate(pref.linked_checkpoints) if link.path == self.path), -1)
+        if index != -1:
+            pref.linked_checkpoints.remove(index)
+
+        fetch_installed_models()
+
+        return {"FINISHED"}
+
+class PREFERENCES_UL_CheckpointList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
+        split = layout.split(factor=0.75)
+        split.label(text=item.path)
+        split.label(text=ModelConfig[item.model_config].value)
+        install_model = layout.operator(InstallModel.bl_idname, text="", icon="FILE_FOLDER")
+        install_model.model = item.path
+        unlink = layout.operator(UnlinkCheckpoint.bl_idname, text="", icon="TRASH")
+        unlink.path = item.path
+
 class StableDiffusionPreferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
@@ -174,19 +316,21 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
     model_results: CollectionProperty(type=Model)
     active_model_result: bpy.props.IntProperty(name="Active Model", default=0)
     hf_token: StringProperty(name="HuggingFace Token")
-    prefer_fp16_revision: bpy.props.BoolProperty(name="Prefer Half Precision Weights", description="Download fp16 weights if available for smaller file size. If you run with 'Half Precision' disabled, you should not use this setting", default=True)
+    prefer_fp16_variant: bpy.props.BoolProperty(name="Prefer Half Precision Weights", description="Download fp16 weights if available for smaller file size. If you run with 'Half Precision' disabled, you should not use this setting", default=True)
+    resume_download: bpy.props.BoolProperty(name="Resume Incomplete Download", description="Continue an in-progress download in case if Blender was closed or connection was interrupted, otherwise incomplete files will be entirely redownloaded", default=True)
 
     installed_models: CollectionProperty(type=Model)
     active_installed_model: bpy.props.IntProperty(name="Active Model", default=0)
+
+    linked_checkpoints: CollectionProperty(type=CheckpointGroup)
+    active_linked_checkpoint: bpy.props.IntProperty(name="Active Checkpoint", default=0)
 
     download_file: bpy.props.StringProperty(name="")
     download_progress: bpy.props.IntProperty(name="", min=0, max=100, subtype="PERCENTAGE", update=_update_ui)
 
     @staticmethod
     def register():
-        def on_done(future):
-            set_model_list('installed_models', future.result())
-        Generator.shared().hf_list_installed_models().add_done_callback(on_done)
+        fetch_installed_models(False)
 
     def draw(self, context):
         layout = self.layout
@@ -223,7 +367,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                     default_weights_box.label(text="You need to download at least one model.")
                     install_model = default_weights_box.operator(InstallModel.bl_idname, text="Download Stable Diffusion v2.1 (Recommended)", icon="IMPORT")
                     install_model.model = "stabilityai/stable-diffusion-2-1"
-                    install_model.prefer_fp16_revision = self.prefer_fp16_revision
+                    install_model.prefer_fp16_variant = self.prefer_fp16_variant
+                    install_model.resume_download = self.resume_download
 
                 search_box = layout.box()
                 search_box.label(text="Find Models", icon="SETTINGS")
@@ -240,10 +385,14 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
                 auth_row.prop(self, "hf_token", text="Token")
                 auth_row.operator(OpenURL.bl_idname, text="Get Your Token", icon="KEYINGSET").url = "https://huggingface.co/settings/tokens"
                 
-                search_box.prop(self, "prefer_fp16_revision")
+                search_box.prop(self, "prefer_fp16_variant")
+                search_box.prop(self, "resume_download")
 
             layout.template_list(PREFERENCES_UL_ModelList.__name__, "dream_textures_installed_models", self, "installed_models", self, "active_installed_model")
-            layout.operator(ImportWeights.bl_idname, icon='IMPORT')
+            import_weights = layout.operator(ImportWeights.bl_idname, icon='IMPORT')
+            import_weights.prefer_fp16_variant = self.prefer_fp16_variant
+            layout.template_list(PREFERENCES_UL_CheckpointList.__name__, "dream_textures_linked_checkpoints", self, "linked_checkpoints", self, "active_linked_checkpoint")
+            layout.operator(LinkCheckpoint.bl_idname, icon='FOLDER_REDIRECT')
 
             if weights_installed or len(self.dream_studio_key) > 0:
                 complete_box = layout.box()

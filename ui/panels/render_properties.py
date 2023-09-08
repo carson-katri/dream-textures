@@ -1,7 +1,7 @@
 import bpy
 from .dream_texture import create_panel, prompt_panel, advanced_panel
 from ...property_groups.dream_prompt import backend_options
-from ...generator_process.actions.huggingface_hub import ModelType
+from ...generator_process.models import ModelType
 from ...preferences import StableDiffusionPreferences
 
 class RenderPropertiesPanel(bpy.types.Panel):

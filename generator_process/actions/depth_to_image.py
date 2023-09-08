@@ -5,16 +5,16 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
 
 def depth_to_image(
     self,
     
-    model: str,
+    model: str | Checkpoint,
 
-    scheduler: Scheduler,
+    scheduler: str | Scheduler,
 
     optimizations: Optimizations,
 
@@ -327,7 +327,7 @@ def depth_to_image(
     device = self.choose_device(optimizations)
 
     # StableDiffusionPipeline w/ caching
-    pipe = self.load_model(DreamTexturesDepth2ImgPipeline, model)
+    pipe = self.load_model(DreamTexturesDepth2ImgPipeline, model, optimizations, scheduler)
 
     # Optimizations
     pipe = optimizations.apply(pipe, device)

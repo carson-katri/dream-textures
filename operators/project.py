@@ -17,8 +17,8 @@ from .notify_result import NotifyResult
 from ..preferences import StableDiffusionPreferences
 
 from ..generator_process import Generator
+from ..generator_process.models import ModelType
 from ..api.models import FixItError
-from ..generator_process.actions.huggingface_hub import ModelType
 import tempfile
 
 from ..engine.annotations.depth import render_depth_map

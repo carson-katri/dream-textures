@@ -4,16 +4,16 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
 
 def inpaint(
     self,
     
-    model: str,
+    model: str | Checkpoint,
 
-    scheduler: Scheduler,
+    scheduler: str | Scheduler,
 
     optimizations: Optimizations,
 
@@ -56,7 +56,7 @@ def inpaint(
     device = self.choose_device(optimizations)
 
     # StableDiffusionPipeline w/ caching
-    pipe = self.load_model(diffusers.AutoPipelineForInpainting, model)
+    pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, optimizations, scheduler)
     height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
     width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
 

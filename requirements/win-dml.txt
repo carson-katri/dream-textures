@@ -10,6 +10,7 @@ torch>=2.0
 # Original SD checkpoint conversion
 pytorch-lightning
 tensorboard
+omegaconf
 
 scipy # LMSDiscreteScheduler
 

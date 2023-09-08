@@ -3,21 +3,27 @@ from contextlib import nullcontext
 
 from numpy.typing import NDArray
 import numpy as np
+import logging
+import os
 import random
-from .prompt_to_image import Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
+
+
+logger = logging.getLogger(__name__)
+
 
 def control_net(
     self,
 
-    model: str,
+    model: str | Checkpoint,
 
-    scheduler: Scheduler,
+    scheduler: str | Scheduler,
 
     optimizations: Optimizations,
 
-    control_net: list[str],
+    control_net: list[str | Checkpoint],
     control: list[NDArray] | None,
     controlnet_conditioning_scale: list[float],
     
@@ -50,28 +56,20 @@ def control_net(
     yield future
 
     import diffusers
-    from diffusers.models.controlnet import ControlNetModel
-    from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
-    from diffusers.utils import deprecate, randn_tensor
     import torch
     import PIL.Image
     import PIL.ImageOps
     
     device = self.choose_device(optimizations)
 
-    # Load the ControlNet model
-    controlnet_models = MultiControlNetModel([
-        ControlNetModel.from_pretrained(name) for name in control_net
-    ])
-
     # StableDiffusionPipeline w/ caching
     if image is not None:
         if inpaint:
-            pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, controlnet=controlnet_models)
+            pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, optimizations, scheduler, controlnet=control_net)
         else:
-            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, model, controlnet=controlnet_models)
+            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, model, optimizations, scheduler, controlnet=control_net)
     else:
-        pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, controlnet=controlnet_models)
+        pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler, controlnet=control_net)
 
     # Optimizations
     pipe = optimizations.apply(pipe, device)

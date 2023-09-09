@@ -11,6 +11,7 @@ class ImageGenerationResult:
     seeds: List[int]
     step: int
     final: bool
+    total: int | None = None
 
     @staticmethod
     def step_preview(pipe, mode, width, height, latents, generator, iteration):

@@ -4,6 +4,7 @@ from typing import List, Literal
 from .. import api
 from ..prompt_engineering import custom_structure
 from ..generator_process import Generator
+from .dream_texture import CancelGenerator
 
 upscale_options = [
     ("2", "2x", "", 2),
@@ -100,12 +101,13 @@ class Upscale(bpy.types.Operator):
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                     area.spaces.active.image = last_data_block
-            return True
+            return CancelGenerator.should_continue
 
         def callback(results: List[api.GenerationResult] | Exception):
             if isinstance(results, Exception):
                 scene.dream_textures_info = ""
                 scene.dream_textures_progress = 0
+                CancelGenerator.should_continue = None
             else:
                 nonlocal last_data_block
                 if last_data_block is not None:
@@ -121,11 +123,13 @@ class Upscale(bpy.types.Operator):
                     active_node.image = image
                 scene.dream_textures_info = ""
                 scene.dream_textures_progress = 0
+                CancelGenerator.should_continue = None
         
         prompt = context.scene.dream_textures_upscale_prompt
         prompt.prompt_structure = custom_structure.id
         backend: api.Backend = prompt.get_backend()
         generated_args.task = api.models.task.Upscale(image=image_pixels, tile_size=context.scene.dream_textures_upscale_tile_size, blend=context.scene.dream_textures_upscale_blend)
+        CancelGenerator.should_continue = True
         backend.generate(
             generated_args, step_callback=step_callback, callback=callback
         )

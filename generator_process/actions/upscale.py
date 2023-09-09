@@ -61,6 +61,9 @@ def upscale(
     if image.shape[2] == 4:
         image = image[:, :, :3]
     for i in range(0, len(tiler), optimizations.batch_size):
+        if future.check_cancelled():
+            future.set_done()
+            return
         batch_size = min(len(tiler)-i, optimizations.batch_size)
         ids = list(range(i, i+batch_size))
         low_res_tiles = [Image.fromarray(tiler[id]).convert('RGB') for id in ids]
@@ -88,7 +91,8 @@ def upscale(
                 [(np.asarray(ImageOps.flip(step).convert('RGBA'), dtype=np.float32) / 255.)],
                 [seed],
                 i + batch_size,
-                (i + batch_size) == len(tiler)
+                (i + batch_size) == len(tiler),
+                total=len(tiler)
             ))
     if step_preview_mode == StepPreviewMode.NONE:
         final = Image.fromarray(tiler.combined().astype(np.uint8))
@@ -96,6 +100,7 @@ def upscale(
             [np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.],
             [seed],
             len(tiler),
-            True
+            True,
+            total=len(tiler)
         ))
     future.set_done()

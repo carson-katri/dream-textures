@@ -235,7 +235,7 @@ class DiffusersBackend(Backend):
                 raise NotImplementedError()
         def on_step(future: Future, step_image: ImageGenerationResult):
             should_continue = step_callback([
-                GenerationResult(progress=step_image.step, total=arguments.steps, image=step_image.images[i], seed=step_image.seeds[i])
+                GenerationResult(progress=step_image.step, total=step_image.total or arguments.steps, image=step_image.images[i], seed=step_image.seeds[i])
                 for i in range(len(step_image.images))
             ])
             if not should_continue:

@@ -79,11 +79,15 @@ def upscaling_panels():
                 layout.use_property_decorate = False
                 
                 image = get_source_image(context)
-                row = layout.row()
+                row = layout.row(align=True)
                 row.scale_y = 1.5
+                if CancelGenerator.poll(context):
+                    row.operator(CancelGenerator.bl_idname, icon="SNAP_FACE", text="")
                 if context.scene.dream_textures_progress <= 0:
                     if context.scene.dream_textures_info != "":
-                        row.label(text=context.scene.dream_textures_info, icon="INFO")
+                        disabled_row = row.row(align=True)
+                        disabled_row.operator(Upscale.bl_idname, text=context.scene.dream_textures_info, icon="INFO")
+                        disabled_row.enabled = False
                     else:
                         row.operator(
                             Upscale.bl_idname,
@@ -91,12 +95,10 @@ def upscaling_panels():
                             icon="FULLSCREEN_ENTER"
                         )
                 else:
-                    disabled_row = row.row()
+                    disabled_row = row.row(align=True)
                     disabled_row.use_property_split = True
                     disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
                     disabled_row.enabled = False
-                if CancelGenerator.poll(context):
-                    row.operator(CancelGenerator.bl_idname, icon="CANCEL", text="")
                 row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
         yield UpscalingPanel
         advanced_panels = [*create_panel(space_type, 'UI', UpscalingPanel.bl_idname, advanced_panel, lambda context: context.scene.dream_textures_upscale_prompt)]

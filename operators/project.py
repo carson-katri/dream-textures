@@ -137,19 +137,21 @@ def dream_texture_projection_panels():
                     for obj in context.selected_objects:
                         col.prop_search(obj.data.uv_layers, "active", obj.data, "uv_layers", text=f"{obj.name} Target UVs")
 
-                row = layout.row()
+                row = layout.row(align=True)
                 row.scale_y = 1.5
                 if CancelGenerator.poll(context):
                     row.operator(CancelGenerator.bl_idname, icon="SNAP_FACE", text="")
                 if context.scene.dream_textures_progress <= 0:
                     if context.scene.dream_textures_info != "":
-                        row.label(text=context.scene.dream_textures_info, icon="INFO")
+                        disabled_row = row.row(align=True)
+                        disabled_row.operator(ProjectDreamTexture.bl_idname, text=context.scene.dream_textures_info, icon="INFO")
+                        disabled_row.enabled = False
                     else:
                         r = row.row()
                         r.operator(ProjectDreamTexture.bl_idname, icon="MOD_UVPROJECT")
                         r.enabled = context.object is not None and context.object.mode == 'EDIT'
                 else:
-                    disabled_row = row.row()
+                    disabled_row = row.row(align=True)
                     disabled_row.use_property_split = True
                     disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
                     disabled_row.enabled = False

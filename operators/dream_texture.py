@@ -189,6 +189,7 @@ def kill_generator(context=bpy.context):
     try:
         context.scene.dream_textures_info = ""
         context.scene.dream_textures_progress = 0
+        CancelGenerator.should_continue = None
     except:
         pass
 

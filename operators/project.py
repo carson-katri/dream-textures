@@ -147,7 +147,7 @@ def dream_texture_projection_panels():
                         disabled_row.operator(ProjectDreamTexture.bl_idname, text=context.scene.dream_textures_info, icon="INFO")
                         disabled_row.enabled = False
                     else:
-                        r = row.row()
+                        r = row.row(align=True)
                         r.operator(ProjectDreamTexture.bl_idname, icon="MOD_UVPROJECT")
                         r.enabled = context.object is not None and context.object.mode == 'EDIT'
                 else:

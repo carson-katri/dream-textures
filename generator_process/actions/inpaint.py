@@ -97,28 +97,32 @@ def inpaint(
                 mask_image = Image.fromarray(np.uint8((1 - torch.sigmoid(outputs.logits).lt(text_mask_confidence).int().detach().numpy()) * 255), 'L').resize(init_image.size)
         
         def callback(step, timestep, latents):
+            if future.check_cancelled():
+                raise InterruptedError()
             future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
-
-        result = pipe(
-            prompt=prompt,
-            negative_prompt=negative_prompt if use_negative_prompt else None,
-            image=[init_image.convert('RGB')] * batch_size,
-            mask_image=[mask_image] * batch_size,
-            strength=strength,
-            height=init_image.size[1] if fit else height,
-            width=init_image.size[0] if fit else width,
-            num_inference_steps=steps,
-            guidance_scale=cfg_scale,
-            generator=generator,
-            callback=callback
-        )
-        
-        future.add_response(ImageGenerationResult(
-            [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                for image in result.images],
-            [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-            steps,
-            True
-        ))
+        try:
+            result = pipe(
+                prompt=prompt,
+                negative_prompt=negative_prompt if use_negative_prompt else None,
+                image=[init_image.convert('RGB')] * batch_size,
+                mask_image=[mask_image] * batch_size,
+                strength=strength,
+                height=init_image.size[1] if fit else height,
+                width=init_image.size[0] if fit else width,
+                num_inference_steps=steps,
+                guidance_scale=cfg_scale,
+                generator=generator,
+                callback=callback
+            )
+            
+            future.add_response(ImageGenerationResult(
+                [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                    for image in result.images],
+                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
+                steps,
+                True
+            ))
+        except InterruptedError:
+            pass
     
     future.set_done()

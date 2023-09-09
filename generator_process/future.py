@@ -15,6 +15,7 @@ class Future:
     _done_event: threading.Event
     done: bool = False
     cancelled: bool = False
+    check_cancelled: Callable[[], bool] = lambda: False
     call_done_on_exception: bool = True
 
     def __init__(self):

@@ -91,7 +91,7 @@ class DreamTexture(bpy.types.Operator):
 
         last_data_block = None
         execution_start = time.time()
-        def step_callback(progress: List[api.GenerationResult]):
+        def step_callback(progress: List[api.GenerationResult]) -> bool:
             nonlocal last_data_block
             scene.dream_textures_last_execution_time = f"{time.time() - execution_start:.2f} seconds"
             scene.dream_textures_progress = progress[-1].progress
@@ -104,6 +104,7 @@ class DreamTexture(bpy.types.Operator):
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                     area.spaces.active.image = last_data_block
+            return CancelGenerator.should_continue
 
         iteration = 0
         iteration_limit = len(file_batch_lines) if is_file_batch else generated_args.iterations
@@ -118,7 +119,9 @@ class DreamTexture(bpy.types.Operator):
             if isinstance(results, Exception):
                 scene.dream_textures_info = ""
                 scene.dream_textures_progress = 0
-                eval('bpy.ops.' + NotifyResult.bl_idname)('INVOKE_DEFAULT', exception=repr(results))
+                CancelGenerator.should_continue = None
+                if not isinstance(results, InterruptedError): # this is a user-initiated cancellation
+                    eval('bpy.ops.' + NotifyResult.bl_idname)('INVOKE_DEFAULT', exception=repr(results))
                 raise results
             else:
                 nonlocal last_data_block
@@ -171,7 +174,9 @@ class DreamTexture(bpy.types.Operator):
                 else:
                     scene.dream_textures_info = ""
                     scene.dream_textures_progress = 0
+                    CancelGenerator.should_continue = None
         
+        CancelGenerator.should_continue = True # reset global cancellation state
         def generate_next():
             backend.generate(prompt.generate_args(context, iteration=iteration), step_callback=step_callback, callback=callback)
         
@@ -203,14 +208,12 @@ class CancelGenerator(bpy.types.Operator):
     bl_description = "Stops the generator without reloading everything next time"
     bl_options = {'REGISTER'}
 
+    should_continue = None
+
     @classmethod
     def poll(cls, context):
-        gen = Generator.shared()
-        return hasattr(gen, "_active_generation_future") and gen._active_generation_future is not None and not gen._active_generation_future.cancelled and not gen._active_generation_future.done
+        return cls.should_continue is not None
 
     def execute(self, context):
-        gen = Generator.shared()
-        gen._active_generation_future.cancel()
-        context.scene.dream_textures_info = ""
-        context.scene.dream_textures_progress = 0
+        CancelGenerator.should_continue = False
         return {'FINISHED'}

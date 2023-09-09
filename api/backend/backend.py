@@ -5,7 +5,7 @@ try:
     from ..models.generation_result import GenerationResult
     from ..models.model import Model
 
-    StepCallback = Callable[[List[GenerationResult]], None]
+    StepCallback = Callable[[List[GenerationResult]], bool]
     Callback = Callable[[List[GenerationResult] | Exception], None]
 
     class Backend(bpy.types.PropertyGroup):
@@ -105,7 +105,12 @@ try:
             step_callback: StepCallback,
             callback: Callback
         ):
-            """A request to generate an image."""
+            """
+            A request to generate an image.
+
+            If the `step_callback` returns `False`, the generation should be cancelled.
+            After cancelling, `callback` should be called with an `InterruptedError`.
+            """
             ...
         
         def validate(

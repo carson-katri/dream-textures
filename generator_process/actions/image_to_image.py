@@ -87,23 +87,28 @@ def image_to_image(
     # Inference
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
         def callback(step, timestep, latents):
+            if future.check_cancelled():
+                raise InterruptedError()
             future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
-        result = pipe(
-            prompt=prompt,
-            negative_prompt=negative_prompt if use_negative_prompt else None,
-            image=[init_image] * batch_size,
-            strength=strength,
-            num_inference_steps=steps,
-            guidance_scale=cfg_scale,
-            generator=generator,
-            callback=callback
-        )
-        future.add_response(ImageGenerationResult(
-            [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                for image in result.images],
-            [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-            steps,
-            True
-        ))
+        try:
+            result = pipe(
+                prompt=prompt,
+                negative_prompt=negative_prompt if use_negative_prompt else None,
+                image=[init_image] * batch_size,
+                strength=strength,
+                num_inference_steps=steps,
+                guidance_scale=cfg_scale,
+                generator=generator,
+                callback=callback
+            )
+            future.add_response(ImageGenerationResult(
+                [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                    for image in result.images],
+                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
+                steps,
+                True
+            ))
+        except InterruptedError:
+            pass
     
     future.set_done()

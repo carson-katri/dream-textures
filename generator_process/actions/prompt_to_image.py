@@ -82,46 +82,51 @@ def prompt_to_image(
         is_sdxl = isinstance(pipe, diffusers.StableDiffusionXLPipeline)
         output_type = "latent" if is_sdxl and sdxl_refiner_model is not None else "pil"
         def callback(step, timestep, latents):
+            if future.check_cancelled():
+                raise InterruptedError()
             future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
-        result = pipe(
-            prompt=prompt,
-            height=height,
-            width=width,
-            num_inference_steps=steps,
-            guidance_scale=cfg_scale,
-            negative_prompt=negative_prompt if use_negative_prompt else None,
-            num_images_per_prompt=1,
-            eta=0.0,
-            generator=generator,
-            latents=None,
-            output_type=output_type,
-            return_dict=True,
-            callback=callback,
-            callback_steps=1,
-            #cfg_end=optimizations.cfg_end
-        )
-        if is_sdxl and sdxl_refiner_model is not None and refiner is None:
-            # allow load_model() to garbage collect pipe
-            pipe = None
-            refiner = self.load_model(diffusers.AutoPipelineForImage2Image, sdxl_refiner_model, optimizations, scheduler)
-        if refiner is not None:
-            refiner = optimizations.apply(refiner, device)
-            result = refiner(
+        try:
+            result = pipe(
                 prompt=prompt,
-                negative_prompt=[""],
+                height=height,
+                width=width,
+                num_inference_steps=steps,
+                guidance_scale=cfg_scale,
+                negative_prompt=negative_prompt if use_negative_prompt else None,
+                num_images_per_prompt=1,
+                eta=0.0,
+                generator=generator,
+                latents=None,
+                output_type=output_type,
+                return_dict=True,
                 callback=callback,
                 callback_steps=1,
-                num_inference_steps=steps,
-                image=result.images
+                #cfg_end=optimizations.cfg_end
             )
-        
-        future.add_response(ImageGenerationResult(
-            [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                for image in result.images],
-            [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-            steps,
-            True
-        ))
+            if is_sdxl and sdxl_refiner_model is not None and refiner is None:
+                # allow load_model() to garbage collect pipe
+                pipe = None
+                refiner = self.load_model(diffusers.AutoPipelineForImage2Image, sdxl_refiner_model, optimizations, scheduler)
+            if refiner is not None:
+                refiner = optimizations.apply(refiner, device)
+                result = refiner(
+                    prompt=prompt,
+                    negative_prompt=[""],
+                    callback=callback,
+                    callback_steps=1,
+                    num_inference_steps=steps,
+                    image=result.images
+                )
+            
+            future.add_response(ImageGenerationResult(
+                [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                    for image in result.images],
+                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
+                steps,
+                True
+            ))
+        except InterruptedError:
+            pass
     
     future.set_done()
 

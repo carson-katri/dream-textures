@@ -148,8 +148,9 @@ class NodeStableDiffusion(DreamTexturesNode):
         event = threading.Event()
         result = None
         exception = None
-        def step_callback(progress: List[api.GenerationResult]):
+        def step_callback(progress: List[api.GenerationResult]) -> bool:
             context.update(progress[-1].image)
+            return True
             # if context.test_break():
             #     nonlocal result
             #     result = [response]

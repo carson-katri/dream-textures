@@ -171,6 +171,12 @@ class Actor:
                     if extra_message == Message.CANCEL:
                         break
                     if isinstance(res, Future):
+                        def check_cancelled():
+                            try:
+                                return self._message_queue.get(block=False) == Message.CANCEL
+                            except:
+                                return False
+                        res.check_cancelled = check_cancelled
                         res.add_response_callback(lambda _, res: self._response_queue.put(res))
                         res.add_exception_callback(lambda _, e: self._response_queue.put(RuntimeError(repr(e))))
                         res.add_done_callback(lambda _: None)

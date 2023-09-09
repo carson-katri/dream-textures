@@ -126,32 +126,48 @@ def control_net(
     with (torch.inference_mode() if device not in ('mps', "dml") else nullcontext()), \
         (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
         def callback(step, timestep, latents):
+            if future.check_cancelled():
+                raise InterruptedError()
             future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
-        if init_image is not None:
-            if mask_image is not None:
-                result = pipe(
-                    prompt=prompt,
-                    negative_prompt=negative_prompt if use_negative_prompt else None,
-                    control_image=control_image,
-                    controlnet_conditioning_scale=controlnet_conditioning_scale,
-                    image=init_image.convert('RGB'),
-                    mask_image=mask_image,
-                    strength=strength,
-                    width=rounded_size[0],
-                    height=rounded_size[1],
-                    num_inference_steps=steps,
-                    guidance_scale=cfg_scale,
-                    generator=generator,
-                    callback=callback
-                )
+        try:
+            if init_image is not None:
+                if mask_image is not None:
+                    result = pipe(
+                        prompt=prompt,
+                        negative_prompt=negative_prompt if use_negative_prompt else None,
+                        control_image=control_image,
+                        controlnet_conditioning_scale=controlnet_conditioning_scale,
+                        image=init_image.convert('RGB'),
+                        mask_image=mask_image,
+                        strength=strength,
+                        width=rounded_size[0],
+                        height=rounded_size[1],
+                        num_inference_steps=steps,
+                        guidance_scale=cfg_scale,
+                        generator=generator,
+                        callback=callback
+                    )
+                else:
+                    result = pipe(
+                        prompt=prompt,
+                        negative_prompt=negative_prompt if use_negative_prompt else None,
+                        control_image=control_image,
+                        controlnet_conditioning_scale=controlnet_conditioning_scale,
+                        image=init_image.convert('RGB'),
+                        strength=strength,
+                        width=rounded_size[0],
+                        height=rounded_size[1],
+                        num_inference_steps=steps,
+                        guidance_scale=cfg_scale,
+                        generator=generator,
+                        callback=callback
+                    )
             else:
                 result = pipe(
                     prompt=prompt,
                     negative_prompt=negative_prompt if use_negative_prompt else None,
-                    control_image=control_image,
+                    image=control_image,
                     controlnet_conditioning_scale=controlnet_conditioning_scale,
-                    image=init_image.convert('RGB'),
-                    strength=strength,
                     width=rounded_size[0],
                     height=rounded_size[1],
                     num_inference_steps=steps,
@@ -159,26 +175,15 @@ def control_net(
                     generator=generator,
                     callback=callback
                 )
-        else:
-            result = pipe(
-                prompt=prompt,
-                negative_prompt=negative_prompt if use_negative_prompt else None,
-                image=control_image,
-                controlnet_conditioning_scale=controlnet_conditioning_scale,
-                width=rounded_size[0],
-                height=rounded_size[1],
-                num_inference_steps=steps,
-                guidance_scale=cfg_scale,
-                generator=generator,
-                callback=callback
-            )
 
-        future.add_response(ImageGenerationResult(
-            [np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                for image in result.images],
-            [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-            steps,
-            True
-        ))
+            future.add_response(ImageGenerationResult(
+                [np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
+                    for image in result.images],
+                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
+                steps,
+                True
+            ))
+        except InterruptedError:
+            pass
     
     future.set_done()

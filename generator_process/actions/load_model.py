@@ -136,7 +136,8 @@ def _load_checkpoint(model_class, checkpoint, dtype, **kwargs):
 def _convert_pipe(cache, model, pipe, model_class, half_precision, scheduler, **kwargs):
     if model_class.__name__ not in {
         # some tasks are not supported by auto pipeline
-        'DreamTexturesDepth2ImgPipeline'
+        'DreamTexturesDepth2ImgPipeline',
+        'StableDiffusionUpscalePipeline'
     }:
         pipe = model_class.from_pipe(pipe, **kwargs)
     scheduler.create(pipe)

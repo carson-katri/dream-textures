@@ -85,3 +85,13 @@ class Outpaint(Task):
     @classmethod
     def name(cls):
         return "outpainting"
+
+@dataclass
+class Upscale(Task):
+    image: NDArray
+    tile_size: int
+    blend: int
+
+    @classmethod
+    def name(cls):
+        return "upscaling"

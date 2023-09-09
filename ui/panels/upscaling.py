@@ -31,6 +31,9 @@ def upscaling_panels():
                 layout.use_property_decorate = False
 
                 prompt = context.scene.dream_textures_upscale_prompt
+
+                layout.prop(prompt, "backend")
+                layout.prop(prompt, "model")
                 
                 layout.prop(prompt, "prompt_structure_token_subject")
                 layout.prop(context.scene, "dream_textures_upscale_tile_size")

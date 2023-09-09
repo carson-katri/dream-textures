@@ -4,7 +4,7 @@ from typing import List
 
 from .api import Backend, StepCallback, Callback
 from .api.models import Model, GenerationArguments, GenerationResult
-from .api.models.task import PromptToImage, ImageToImage, Inpaint, DepthToImage, Outpaint
+from .api.models.task import PromptToImage, ImageToImage, Inpaint, DepthToImage, Outpaint, Upscale
 from .api.models.fix_it_error import FixItError
 
 from .generator_process import Generator
@@ -222,6 +222,13 @@ class DiffusersBackend(Backend):
                     width=size[0] if size is not None else None,
                     height=size[1] if size is not None else None,
                     outpaint_origin=origin,
+                    **common_kwargs
+                )
+            case Upscale(image=image, tile_size=tile_size, blend=blend):
+                future = gen.upscale(
+                    image=image,
+                    tile_size=tile_size,
+                    blend=blend,
                     **common_kwargs
                 )
             case _:

@@ -1,8 +1,9 @@
 import bpy
 import numpy as np
+from typing import List, Literal
+from .. import api
 from ..prompt_engineering import custom_structure
 from ..generator_process import Generator
-from ..generator_process.actions.upscale import ImageUpscaleResult
 
 upscale_options = [
     ("2", "2x", "", 2),
@@ -84,49 +85,49 @@ class Upscale(bpy.types.Operator):
                     if region.type == "UI":
                         region.tag_redraw()
             return None
-        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args['steps'], update=step_progress_update)
+        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args.steps, update=step_progress_update)
         scene.dream_textures_info = "Starting..."
 
         last_data_block = None
-        def on_tile_complete(_, tile: ImageUpscaleResult):
+        def step_callback(progress: List[api.GenerationResult]) -> bool:
             nonlocal last_data_block
             if last_data_block is None:
-                bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=tile.tile, min=0, max=tile.total, update=step_progress_update)
-            if tile.final or tile.image is None:
-                return
+                bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=progress[-1].progress, min=0, max=progress[-1].total, update=step_progress_update)
             
-            scene.dream_textures_progress = tile.tile
-            last_data_block = bpy_image(f"Tile {tile.tile}/{tile.total}", tile.image.shape[1], tile.image.shape[0], tile.image.ravel(), last_data_block)
+            scene.dream_textures_progress = progress[-1].progress
+            if progress[-1].image is not None:
+                last_data_block = bpy_image(f"Tile {progress[-1].progress}/{progress[-1].total}", progress[-1].image.shape[1], progress[-1].image.shape[0], progress[-1].image.ravel(), last_data_block)
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                     area.spaces.active.image = last_data_block
+            return True
 
-        def image_done(future):
-            nonlocal last_data_block
-            if last_data_block is not None:
-                bpy.data.images.remove(last_data_block)
-                last_data_block = None
-            tile: ImageUpscaleResult = future.result(last_only=True)
-            if tile.image is None:
-                return
-            image = bpy_image(f"{input_image.name} (Upscaled)", tile.image.shape[1], tile.image.shape[0], tile.image.ravel(), last_data_block)
-            for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
-                    area.spaces.active.image = image
-            if active_node is not None:
-                active_node.image = image
-            scene.dream_textures_info = ""
-            scene.dream_textures_progress = 0
-        gen = Generator.shared()
-        context.scene.dream_textures_upscale_prompt.prompt_structure = custom_structure.id
-        f = gen.upscale(
-            image=image_pixels,
-            tile_size=context.scene.dream_textures_upscale_tile_size,
-            blend=context.scene.dream_textures_upscale_blend,
-            **generated_args
+        def callback(results: List[api.GenerationResult] | Exception):
+            if isinstance(results, Exception):
+                scene.dream_textures_info = ""
+                scene.dream_textures_progress = 0
+            else:
+                nonlocal last_data_block
+                if last_data_block is not None:
+                    bpy.data.images.remove(last_data_block)
+                    last_data_block = None
+                if results[-1].image is None:
+                    return
+                image = bpy_image(f"{input_image.name} (Upscaled)", results[-1].image.shape[1], results[-1].image.shape[0], results[-1].image.ravel(), last_data_block)
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
+                        area.spaces.active.image = image
+                if active_node is not None:
+                    active_node.image = image
+                scene.dream_textures_info = ""
+                scene.dream_textures_progress = 0
+        
+        prompt = context.scene.dream_textures_upscale_prompt
+        prompt.prompt_structure = custom_structure.id
+        backend: api.Backend = prompt.get_backend()
+        generated_args.task = api.models.task.Upscale(image=image_pixels, tile_size=context.scene.dream_textures_upscale_tile_size, blend=context.scene.dream_textures_upscale_blend)
+        backend.generate(
+            generated_args, step_callback=step_callback, callback=callback
         )
-        f.add_response_callback(on_tile_complete)
-        f.add_done_callback(image_done)
-        gen._active_generation_future = f
         
         return {"FINISHED"}

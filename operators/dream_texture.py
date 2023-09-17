@@ -100,6 +100,8 @@ class DreamTexture(bpy.types.Operator):
                     if region.type == "UI":
                         region.tag_redraw()
             image = api.GenerationResult.tile_images(progress)
+            if image is None:
+                return CancelGenerator.should_continue
             last_data_block = bpy_image(f"Step {progress[-1].progress}/{progress[-1].total}", image.shape[1], image.shape[0], image.ravel(), last_data_block)
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:

@@ -216,12 +216,15 @@ class DiffusersBackend(Backend):
                     strength=strength,
                     **common_kwargs
                 )
-            case Outpaint(image=image, origin=origin):
+            case Outpaint(image=image, origin=origin, strength=strength):
                 future = gen.outpaint(
                     image=image,
-                    width=size[0] if size is not None else None,
-                    height=size[1] if size is not None else None,
                     outpaint_origin=origin,
+                    fit=False,
+                    strength=strength,
+                    inpaint_mask_src='alpha',
+                    text_mask='',
+                    text_mask_confidence=1,
                     **common_kwargs
                 )
             case Upscale(image=image, tile_size=tile_size, blend=blend):
@@ -305,7 +308,6 @@ class DiffusersBackend(Backend):
         optimization("half_precision")
         optimization("channels_last_memory_format")
         optimization("batch_size")
-        optimization("cfg_end")
     
     def draw_memory_optimizations(self, layout, context):
         inferred_device = Optimizations.infer_device()

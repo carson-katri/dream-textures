@@ -1,7 +1,8 @@
 from typing import Tuple, Generator
 from numpy.typing import NDArray
 import numpy as np
-from .prompt_to_image import ImageGenerationResult, StepPreviewMode
+from .prompt_to_image import ImageGenerationResult
+from ..future import Future
 
 def outpaint(
     self,
@@ -16,6 +17,9 @@ def outpaint(
     **kwargs
 ) -> Generator[ImageGenerationResult, None, None]:
     from PIL import Image, ImageOps
+
+    future = Future()
+    yield future
 
     init_image = Image.fromarray(image)
     width = width or 512
@@ -54,7 +58,7 @@ def outpaint(
         )
     )
 
-    def process(step: ImageGenerationResult):
+    def process(_, step: ImageGenerationResult):
         for i, result_image in enumerate(step.images):
             image = outpaint_bounds.copy()
             image.paste(
@@ -62,12 +66,19 @@ def outpaint(
                 offset_origin
             )
             step.images[i] = np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-        return step
+        future.add_response(step)
 
-    for step in self.inpaint(
+    inpaint_generator = self.inpaint(
         image=np.array(inpaint_tile),
         width=width,
         height=height,
         **kwargs
-    ):
-        yield process(step)
+    )
+    inpaint_future = next(inpaint_generator)
+    inpaint_future.check_cancelled = future.check_cancelled
+    inpaint_future.add_response_callback(process)
+    inpaint_future.add_exception_callback(future.set_exception)
+    for _ in inpaint_generator:
+        pass
+
+    future.set_done()

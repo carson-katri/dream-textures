@@ -260,7 +260,8 @@ def generate_args(self, context, iteration=0, init_image=None, control_images=No
             case 'outpaint':
                 task = api.Outpaint(
                     image=init_image,
-                    origin=(self.outpaint_origin[0], self.outpaint_origin[1])
+                    origin=(self.outpaint_origin[0], self.outpaint_origin[1]),
+                    strength=self.strength
                 )
 
     return api.GenerationArguments(

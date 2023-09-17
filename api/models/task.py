@@ -81,6 +81,7 @@ class DepthToImage(Task):
 class Outpaint(Task):
     image: NDArray
     origin: Tuple[int, int]
+    strength: float
 
     @classmethod
     def name(cls):

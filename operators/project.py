@@ -160,6 +160,11 @@ def dream_texture_projection_panels():
                 # Validation
                 try:
                     _validate_projection(context)
+                    prompt = context.scene.dream_textures_project_prompt
+                    backend: api.Backend = prompt.get_backend()
+                    args = prompt.generate_args(context)
+                    args.task = api.task.PromptToImage() if context.scene.dream_textures_project_use_control_net else api.task.DepthToImage(None, None, 0)
+                    backend.validate(args)
                 except FixItError as e:
                     error_box = layout.box()
                     error_box.use_property_split = False
@@ -236,8 +241,12 @@ class ProjectDreamTexture(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         try:
-            context.scene.dream_textures_project_prompt.validate(context, task=None if context.scene.dream_textures_project_use_control_net else ModelType.DEPTH)
             _validate_projection(context)
+            prompt = context.scene.dream_textures_project_prompt
+            backend: api.Backend = prompt.get_backend()
+            args = prompt.generate_args(context)
+            args.task = api.task.PromptToImage() if context.scene.dream_textures_project_use_control_net else api.task.DepthToImage(None, None, 0)
+            backend.validate(args)
         except:
             return False
         return Generator.shared().can_use()

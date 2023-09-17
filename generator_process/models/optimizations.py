@@ -5,6 +5,8 @@ import os
 import sys
 from dataclasses import dataclass
 
+from .upscale_tiler import tiled_decode_latents
+
 
 class CPUOffload(Enum):
     OFF = "off"
@@ -155,11 +157,11 @@ class Optimizations:
 
         try:
             if self.vae_tiling != "off":
-                if not isinstance(pipeline.decode_latents, functools.partial):
-                    pipeline.decode_latents = functools.partial(tiled_decode_latents.__get__(pipeline), pre_patch=pipeline.decode_latents)
-                pipeline.decode_latents.keywords['optimizations'] = self
-            elif self.vae_tiling == "off" and isinstance(pipeline.decode_latents, functools.partial):
-                pipeline.decode_latents = pipeline.decode_latents.keywords["pre_patch"]
+                if not isinstance(pipeline.vae.decode, functools.partial):
+                    pipeline.vae.decode = functools.partial(tiled_decode_latents.__get__(pipeline), pre_patch=pipeline.vae.decode)
+                pipeline.vae.decode.keywords['optimizations'] = self
+            elif self.vae_tiling == "off" and isinstance(pipeline.vae.decode, functools.partial):
+                pipeline.vae.decode = pipeline.vae.decode.keywords["pre_patch"]
         except: pass
         
         from .. import directml_patches

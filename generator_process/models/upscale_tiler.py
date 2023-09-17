@@ -163,7 +163,7 @@ class UpscaleTiler:
         return len(self.x_tiles) * len(self.y_tiles)
 
 
-def tiled_decode_latents(self, latents, *, pre_patch, optimizations):
+def tiled_decode_latents(self, latents, return_dict=False, *, pre_patch, optimizations):
     # not all pipelines (namely upscale) have the vae_scale_factor attribute
     vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
     default_size = self.unet.config.sample_size * vae_scale_factor
@@ -196,10 +196,16 @@ def tiled_decode_latents(self, latents, *, pre_patch, optimizations):
         configure_model_padding(self.vae, seamless_axes & ~tiler.seamless_axes)
 
         for id, tile in tiler:
-            tiler[id] = pre_patch(tile.permute(2, 0, 1).unsqueeze(0)).squeeze(0)
-        images.append(np.expand_dims(tiler.combined(), 0))
+            tiler[id] = pre_patch(tile.permute(2, 0, 1).unsqueeze(0)).sample.squeeze(0).permute(1, 2, 0).cpu().numpy()
+        images.append(np.expand_dims(tiler.combined(), 0).transpose(0, 3, 1, 2))
     configure_model_padding(self.vae, seamless_axes)
-    return np.concatenate(images)
+    images = np.concatenate(images)
+    import torch
+    images = torch.from_numpy(images)
+    if not return_dict:
+        return (images,)
+    from diffusers.models.vae import DecoderOutput
+    return DecoderOutput(images)
 
 def configure_model_padding(model, seamless_axes):
     import torch.nn as nn

@@ -77,10 +77,6 @@ def upscale(
                 guidance_scale=cfg_scale,
             ).images
 
-            # not implemented in diffusers.StableDiffusionUpscalePipeline
-            # Offload last model to CPU
-            if hasattr(pipe, "final_offload_hook") and pipe.final_offload_hook is not None:
-                pipe.final_offload_hook.offload()
 
         for id, tile in zip(ids, high_res_tiles):
             tiler[id] = np.array(tile.convert('RGBA'))

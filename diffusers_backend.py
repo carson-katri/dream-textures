@@ -216,12 +216,12 @@ class DiffusersBackend(Backend):
                     strength=strength,
                     **common_kwargs
                 )
-            case Outpaint(image=image, origin=origin, strength=strength):
+            case Outpaint(image=image, origin=origin):
                 future = gen.outpaint(
                     image=image,
                     outpaint_origin=origin,
                     fit=False,
-                    strength=strength,
+                    strength=1,
                     inpaint_mask_src='alpha',
                     text_mask='',
                     text_mask_confidence=1,

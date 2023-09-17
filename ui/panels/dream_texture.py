@@ -221,7 +221,8 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                         _outpaint_warning_box("Outpaint has no overlap, so the result will not blend")
             elif prompt.init_img_action == 'modify':
                 layout.prop(prompt, "fit")
-            layout.prop(prompt, "strength")
+            if prompt.init_img_action != 'outpaint':
+                layout.prop(prompt, "strength")
             layout.prop(prompt, "use_init_img_color")
             if prompt.init_img_action == 'modify':
                 layout.prop(prompt, "modify_action_source_type")

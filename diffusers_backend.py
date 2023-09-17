@@ -12,7 +12,7 @@ from .generator_process.actions.prompt_to_image import ImageGenerationResult
 from .generator_process.future import Future
 from .generator_process.models import CPUOffload, ModelType, Optimizations, Scheduler
 
-from .preferences import checkpoint_lookup, StableDiffusionPreferences
+from .preferences import checkpoint_lookup, StableDiffusionPreferences, _template_model_download_progress, InstallModel, model_lookup
 
 from functools import reduce
 
@@ -261,33 +261,31 @@ class DiffusersBackend(Backend):
         future.add_done_callback(on_done)
 
     def validate(self, arguments: GenerationArguments):
-        return
-#         installed_models = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
-#         model = next((m for m in installed_models if m.model_base == arguments.model.id), None)
-#         if model is None:
-#             raise FixItError("No model selected.", FixItError.ChangeProperty("model"))
-#         else:
-#             if not ModelType[model.model_type].matches_task(arguments.task):
-#                 class DownloadModel(FixItError.Solution):
-#                     def _draw(self, dream_prompt, context, layout):
-#                         if not _template_model_download_progress(context, layout):
-#                             target_model_type = ModelType.from_task(arguments.task)
-#                             if target_model_type is not None:
-#                                 install_model = layout.operator(InstallModel.bl_idname, text=f"Download {target_model_type.recommended_model()} (Recommended)", icon="IMPORT")
-#                                 install_model.model = target_model_type.recommended_model()
-#                                 install_model.prefer_fp16_revision = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.prefer_fp16_revision
-#                 model_task_description = f"""Incorrect model type selected for {type(arguments.task).name().replace('_', ' ').lower()} tasks.
-# The selected model is for {model.model_type.replace('_', ' ').lower()}."""
-#                 if not any(ModelType[m.model_type].matches_task(arguments.task) for m in installed_models):
-#                     raise FixItError(
-#                         message=model_task_description + "\nYou do not have any compatible models downloaded:",
-#                         solution=DownloadModel()
-#                     )
-#                 else:
-#                     raise FixItError(
-#                         message=model_task_description + "\nSelect a different model below.",
-#                         solution=FixItError.ChangeProperty("model")
-#                     )
+        model = model_lookup.get(arguments.model.id)
+        if model is None:
+            raise FixItError("No model selected.", FixItError.ChangeProperty("model"))
+        else:
+            if not model.model_type.matches_task(arguments.task):
+                class DownloadModel(FixItError.Solution):
+                    def _draw(self, dream_prompt, context, layout):
+                        if not _template_model_download_progress(context, layout):
+                            target_model_type = ModelType.from_task(arguments.task)
+                            if target_model_type is not None:
+                                install_model = layout.operator(InstallModel.bl_idname, text=f"Download {target_model_type.recommended_model()} (Recommended)", icon="IMPORT")
+                                install_model.model = target_model_type.recommended_model()
+                                install_model.prefer_fp16_revision = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.prefer_fp16_revision
+                model_task_description = f"""Incorrect model type selected for {type(arguments.task).name().replace('_', ' ').lower()} tasks.
+The selected model is for {model.model_type.name.replace('_', ' ').lower()}."""
+                if not any(m.model_type.matches_task(arguments.task) for m in model_lookup._models.values()):
+                    raise FixItError(
+                        message=model_task_description + "\nYou do not have any compatible models downloaded:",
+                        solution=DownloadModel()
+                    )
+                else:
+                    raise FixItError(
+                        message=model_task_description + "\nSelect a different model below.",
+                        solution=FixItError.ChangeProperty("model")
+                    )
 
     def draw_advanced(self, layout, context):
         layout.prop(self, "use_sdxl_refiner")

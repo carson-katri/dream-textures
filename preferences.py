@@ -118,9 +118,18 @@ class checkpoint_lookup:
     def get(cls, item):
         return cls._checkpoints.get(item, item)
 
+class model_lookup:
+    _models = {}
+
+    @classmethod
+    def get(cls, item):
+        return cls._models.get(item, item)
+
 def fetch_installed_models(blocking=True):
     def on_done(future):
         model_list = future.result()
+
+        model_lookup._models = { os.path.basename(model.id).replace('models--', '').replace('--', '/'): model for model in model_list }
 
         pref = bpy.context.preferences.addons[__package__].preferences
         checkpoint_links = ((link.path, ModelConfig[link.model_config]) for link in pref.linked_checkpoints)
@@ -140,8 +149,10 @@ def fetch_installed_models(blocking=True):
                 checkpoints[name] = (os.path.join(path, name), config)
         checkpoint_lookup._checkpoints.clear()
         for path, config in checkpoints.values():
-            model_list.append(HubModel(path, "", [], -1, -1, ModelType.from_config(config)))
+            model = HubModel(path, "", [], -1, -1, ModelType.from_config(config))
+            model_list.append(model)
             checkpoint_lookup._checkpoints[os.path.basename(path)] = Checkpoint(path, config)
+            model_lookup._models[os.path.basename(path)] = model
 
         set_model_list('installed_models', model_list)
 
@@ -327,6 +338,8 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
     download_file: bpy.props.StringProperty(name="")
     download_progress: bpy.props.IntProperty(name="", min=0, max=100, subtype="PERCENTAGE", update=_update_ui)
+
+    model_cache = []
 
     @staticmethod
     def register():

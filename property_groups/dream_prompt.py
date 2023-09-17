@@ -8,7 +8,6 @@ from ..generator_process.actions.detect_seamless import SeamlessAxes
 from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode
 from ..prompt_engineering import *
 from ..preferences import StableDiffusionPreferences
-from .dream_prompt_validation import validate
 from .control_net import ControlNet
 
 import numpy as np
@@ -297,5 +296,4 @@ DreamPrompt.generate_prompt = generate_prompt
 DreamPrompt.get_prompt_subject = get_prompt_subject
 DreamPrompt.get_seed = get_seed
 DreamPrompt.generate_args = generate_args
-DreamPrompt.validate = validate
 DreamPrompt.get_backend = get_backend

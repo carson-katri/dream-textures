@@ -159,7 +159,6 @@ def dream_texture_projection_panels():
                 
                 # Validation
                 try:
-                    prompt.validate(context, task=None if context.scene.dream_textures_project_use_control_net else ModelType.DEPTH)
                     _validate_projection(context)
                 except FixItError as e:
                     error_box = layout.box()

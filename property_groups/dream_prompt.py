@@ -205,7 +205,7 @@ def get_seed(self):
             h = ~h
         return (h & 0xFFFFFFFF) ^ (h >> 32) # 64 bit hash down to 32 bits
 
-def generate_args(self, context, iteration=0) -> api.GenerationArguments:
+def generate_args(self, context, iteration=0, init_image=None, control_images=None) -> api.GenerationArguments:
     is_file_batch = self.prompt_structure == file_batch_structure.id
     file_batch_lines = []
     file_batch_lines_negative = []
@@ -220,21 +220,6 @@ def generate_args(self, context, iteration=0) -> api.GenerationArguments:
 
     task: api.Task = api.PromptToImage()
     if self.use_init_img:
-        init_image = None
-        match self.init_img_src:
-            case 'file':
-                init_image = context.scene.init_img
-            case 'open_editor':
-                for area in context.screen.areas:
-                    if area.type == 'IMAGE_EDITOR':
-                        if area.spaces.active.image is not None:
-                            init_image = area.spaces.active.image
-        if init_image is not None:
-            init_image = np.flipud(
-                (np.array(init_image.pixels) * 255)
-                    .astype(np.uint8)
-                    .reshape((init_image.size[1], init_image.size[0], init_image.channels))
-            )
         match self.init_img_action:
             case 'modify':
                 match self.modify_action_source_type:
@@ -297,13 +282,10 @@ def generate_args(self, context, iteration=0) -> api.GenerationArguments:
         control_nets=[
             api.models.control_net.ControlNet(
                 net.control_net,
-                np.flipud(
-                    np.array(net.control_image.pixels)
-                        .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
-                ),
+                control_images[i] if control_images is not None else None,
                 net.conditioning_scale
             )
-            for net in self.control_nets
+            for i, net in enumerate(self.control_nets)
             if net.control_image is not None
         ]
     )

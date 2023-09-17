@@ -89,6 +89,29 @@ class DreamTexture(bpy.types.Operator):
         bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args.steps)
         scene.dream_textures_info = "Starting..."
 
+        # Get any init images
+        try:
+            init_image = get_source_image(context, prompt.init_img_src)
+        except ValueError:
+            init_image = None
+        if init_image is not None:
+            init_image = np.flipud(
+                (np.array(init_image.pixels) * 255)
+                    .astype(np.uint8)
+                    .reshape((init_image.size[1], init_image.size[0], init_image.channels))
+            )
+        
+        control_images = None
+        if len(prompt.control_nets) > 0:
+            control_images = [
+                np.flipud(
+                    np.array(net.control_image.pixels)
+                        .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
+                )
+                for net in prompt.control_nets
+            ]
+
+        # Callbacks
         last_data_block = None
         execution_start = time.time()
         def step_callback(progress: List[api.GenerationResult]) -> bool:
@@ -115,6 +138,7 @@ class DreamTexture(bpy.types.Operator):
             # keep image nodes grid centered but don't go beyond top and left sides of nodes editor
             node_anchor = node_tree_center + node_size * 0.5 * (-iteration_square, (iteration_limit-1) // iteration_square + 1)
             node_anchor = np.array((np.maximum(node_tree_top_left[0], node_anchor[0]), np.minimum(node_tree_top_left[1], node_anchor[1]))) + node_pad * (0.5, -0.5)
+        
         def callback(results: List[api.GenerationResult] | Exception):
             if isinstance(results, Exception):
                 scene.dream_textures_info = ""
@@ -176,9 +200,11 @@ class DreamTexture(bpy.types.Operator):
                     scene.dream_textures_progress = 0
                     CancelGenerator.should_continue = None
         
+        # Call the backend
         CancelGenerator.should_continue = True # reset global cancellation state
         def generate_next():
-            backend.generate(prompt.generate_args(context, iteration=iteration), step_callback=step_callback, callback=callback)
+            args = prompt.generate_args(context, iteration=iteration, init_image=init_image, control_images=control_images)
+            backend.generate(args, step_callback=step_callback, callback=callback)
         
         generate_next()
 

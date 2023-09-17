@@ -173,7 +173,7 @@ def _load_pipeline(cache, model, model_class, half_precision, scheduler, **kwarg
         if strat.pop("_warn_precision_fallback", False):
             logger.warning(f"Can't load fp32 weights for model {model}, attempting to load fp16 instead")
         try:
-            pipe = model_class.from_pretrained(strat.pop("model_path"), torch_dtype=dtype, **strat, **kwargs)
+            pipe = model_class.from_pretrained(strat.pop("model_path"), torch_dtype=dtype, safety_checker=None, **strat, **kwargs)
             pipe.scheduler = scheduler.create(pipe)
             return pipe
         except Exception as e:

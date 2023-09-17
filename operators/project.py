@@ -419,14 +419,7 @@ class ProjectDreamTexture(bpy.types.Operator):
         image_data = bpy.data.images.load(init_img_path) if init_img_path is not None else None
         image = np.asarray(image_data.pixels).reshape((*depth.shape, image_data.channels)) if image_data is not None else None
         if context.scene.dream_textures_project_use_control_net:
-            generated_args: api.GenerationArguments = context.scene.dream_textures_project_prompt.generate_args(context)
-            generated_args.control_nets = [api.models.control_net.ControlNet(
-                context.scene.dream_textures_project_prompt.control_nets[0].control_net,
-                np.flipud(depth),
-                context.scene.dream_textures_project_prompt.control_nets[0].conditioning_scale
-            )]
-            if image is not None:
-                generated_args.task = api.ImageToImage(image, context.scene.dream_textures_project_prompt.strength, True)
+            generated_args: api.GenerationArguments = context.scene.dream_textures_project_prompt.generate_args(context, init_image=image, control_images=[np.flipud(depth)])
             backend.generate(generated_args, step_callback=step_callback, callback=callback)
         else:
             generated_args: api.GenerationArguments = context.scene.dream_textures_project_prompt.generate_args(context)

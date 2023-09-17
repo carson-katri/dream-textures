@@ -305,7 +305,6 @@ class DiffusersBackend(Backend):
         optimization("half_precision")
         optimization("channels_last_memory_format")
         optimization("batch_size")
-        optimization("cfg_end")
     
     def draw_memory_optimizations(self, layout, context):
         inferred_device = Optimizations.infer_device()

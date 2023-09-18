@@ -1,8 +1,7 @@
 import bpy
 from .dream_texture import create_panel, prompt_panel, advanced_panel
-from ...property_groups.dream_prompt import pipeline_options
-from ...generator_process.actions.prompt_to_image import Pipeline
-from ...generator_process.actions.huggingface_hub import ModelType
+from ...property_groups.dream_prompt import backend_options
+from ...generator_process.models import ModelType
 from ...preferences import StableDiffusionPreferences
 
 class RenderPropertiesPanel(bpy.types.Panel):
@@ -27,10 +26,9 @@ class RenderPropertiesPanel(bpy.types.Panel):
         layout.use_property_decorate = False
         layout.active = context.scene.dream_textures_render_properties_enabled
 
-        if len(pipeline_options(self, context)) > 1:
-            layout.prop(context.scene.dream_textures_render_properties_prompt, "pipeline")
-        if Pipeline[context.scene.dream_textures_render_properties_prompt.pipeline].model():
-            layout.prop(context.scene.dream_textures_render_properties_prompt, 'model')
+        if len(backend_options(self, context)) > 1:
+            layout.prop(context.scene.dream_textures_render_properties_prompt, "backend")
+        layout.prop(context.scene.dream_textures_render_properties_prompt, 'model')
         layout.prop(context.scene.dream_textures_render_properties_prompt, "strength")
         layout.prop(context.scene, "dream_textures_render_properties_pass_inputs")
         if context.scene.dream_textures_render_properties_pass_inputs != 'color':
@@ -40,11 +38,6 @@ class RenderPropertiesPanel(bpy.types.Panel):
                 box.label(text="Enable the Z pass to use depth pass inputs")
                 box.use_property_split = False
                 box.prop(context.view_layer, "use_pass_z")
-
-            if not Pipeline[context.scene.dream_textures_render_properties_prompt.pipeline].depth():
-                box = layout.box()
-                box.label(text="Unsupported pipeline", icon="ERROR")
-                box.label(text="The selected pipeline does not support depth to image.")
             
             models = list(filter(
                 lambda m: m.model_base == context.scene.dream_textures_render_properties_prompt.model,

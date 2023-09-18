@@ -1,7 +1,7 @@
 import bpy
 import numpy as np
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, List
 import enum
 from ..node import DreamTexturesNode
 from ...generator_process import Generator
@@ -11,6 +11,8 @@ from ..annotations import openpose
 from ..annotations import depth
 from ..annotations import normal
 from ..annotations import ade20k
+from ... import api
+from ...property_groups.seamless_result import SeamlessAxes
 import threading
 
 class NodeSocketControlNet(bpy.types.NodeSocket):
@@ -73,6 +75,9 @@ class NodeStableDiffusion(DreamTexturesNode):
         ('inpaint', 'Inpaint', '', 4),
     ), update=_update_stable_diffusion_sockets)
 
+    def update(self):
+        self.prompt.backend = bpy.context.scene.dream_textures_render_engine.backend
+
     def init(self, context):
         self.inputs.new("NodeSocketColor", "Depth Map")
         self.inputs.new("NodeSocketColor", "Source Image")
@@ -97,180 +102,78 @@ class NodeStableDiffusion(DreamTexturesNode):
     def draw_buttons(self, context, layout):
         layout.prop(self, "task")
         prompt = self.prompt
-        layout.prop(prompt, "pipeline", text="")
         layout.prop(prompt, "model", text="")
         layout.prop(prompt, "scheduler", text="")
         layout.prop(prompt, "seamless_axes", text="")
     
     def execute(self, context, prompt, negative_prompt, width, height, steps, seed, cfg_scale, controlnets, depth_map, source_image, noise_strength):
-        self.prompt.use_negative_prompt = True
-        self.prompt.negative_prompt = negative_prompt
-        self.prompt.steps = steps
-        self.prompt.seed = str(seed)
-        self.prompt.cfg_scale = cfg_scale
-        args = self.prompt.generate_args()
+        backend: api.Backend = self.prompt.get_backend()
 
-        shared_args = context.depsgraph.scene.dream_textures_engine_prompt.generate_args()
+        def get_task():
+            match self.task:
+                case 'prompt_to_image':
+                    return api.PromptToImage()
+                case 'image_to_image':
+                    return api.ImageToImage(source_image, noise_strength, fit=False)
+                case 'depth_to_image':
+                    return api.DepthToImage(depth_map, source_image, noise_strength)
+                case 'inpaint':
+                    return api.Inpaint(source_image, noise_strength, fit=False, mask_source=api.Inpaint.MaskSource.ALPHA, mask_prompt="", confidence=0)
+        
+        def map_controlnet(c):
+            return api.models.control_net.ControlNet(c.model, c.control(context.depsgraph), c.conditioning_scale)
+
+        args = api.GenerationArguments(
+            get_task(),
+            model=next(model for model in self.prompt.get_backend().list_models(context) if model is not None and model.id == self.prompt.model),
+            prompt=api.Prompt(
+                prompt,
+                negative_prompt
+            ),
+            size=(width, height),
+            seed=seed,
+            steps=steps,
+            guidance_scale=cfg_scale,
+            scheduler=self.prompt.scheduler,
+            seamless_axes=SeamlessAxes(self.prompt.seamless_axes),
+            step_preview_mode=api.models.StepPreviewMode.FAST,
+            iterations=1,
+            control_nets=[map_controlnet(c) for c in controlnets] if isinstance(controlnets, list) else ([map_controlnet(controlnets)] if controlnets is not None else [])
+        )
 
         # the source image is a default color, ignore it.
         if np.array(source_image).shape == (4,):
             source_image = None
         
-        if controlnets is not None:
-            if not isinstance(controlnets, list):
-                controlnets = [controlnets]
-            future = Generator.shared().control_net(
-                pipeline=args['pipeline'],
-                model=args['model'],
-                scheduler=args['scheduler'],
-                optimizations=shared_args['optimizations'],
-                seamless_axes=args['seamless_axes'],
-                iterations=args['iterations'],
-                step_preview_mode=args['step_preview_mode'],
-
-                control_net=[c.model for c in controlnets],
-                control=[c.control(context.depsgraph) for c in controlnets],
-                controlnet_conditioning_scale=[c.conditioning_scale for c in controlnets],
-
-                image=np.flipud(np.uint8(source_image * 255)) if self.task in {'image_to_image', 'inpaint'} else None,
-                strength=noise_strength,
-
-                inpaint=self.task == 'inpaint',
-                inpaint_mask_src='alpha',
-                text_mask='',
-                text_mask_confidence=1,
-
-                prompt=prompt,
-                steps=steps,
-                seed=seed,
-                width=width,
-                height=height,
-                cfg_scale=cfg_scale,
-                use_negative_prompt=True,
-                negative_prompt=negative_prompt
-            )
-        else:
-            match self.task:
-                case 'prompt_to_image':
-                    future = Generator.shared().prompt_to_image(
-                        pipeline=args['pipeline'],
-                        model=args['model'],
-                        scheduler=args['scheduler'],
-                        optimizations=shared_args['optimizations'],
-                        seamless_axes=args['seamless_axes'],
-                        iterations=args['iterations'],
-                        step_preview_mode=args['step_preview_mode'],
-                        prompt=prompt,
-                        steps=steps,
-                        seed=seed,
-                        width=width,
-                        height=height,
-                        cfg_scale=cfg_scale,
-                        use_negative_prompt=True,
-                        negative_prompt=negative_prompt
-                    )
-                case 'image_to_image':
-                    future = Generator.shared().image_to_image(
-                        pipeline=args['pipeline'],
-                        model=args['model'],
-                        scheduler=args['scheduler'],
-                        optimizations=shared_args['optimizations'],
-                        seamless_axes=args['seamless_axes'],
-                        iterations=args['iterations'],
-                        step_preview_mode=args['step_preview_mode'],
-                        
-                        image=np.flipud(np.uint8(source_image * 255)),
-                        strength=noise_strength,
-                        fit=True,
-
-                        prompt=prompt,
-                        steps=steps,
-                        seed=seed,
-                        width=width,
-                        height=height,
-                        cfg_scale=cfg_scale,
-                        use_negative_prompt=True,
-                        negative_prompt=negative_prompt
-                    )
-                case 'depth_to_image':
-                    future = Generator.shared().depth_to_image(
-                        pipeline=args['pipeline'],
-                        model=args['model'],
-                        scheduler=args['scheduler'],
-                        optimizations=shared_args['optimizations'],
-                        seamless_axes=args['seamless_axes'],
-                        iterations=args['iterations'],
-                        step_preview_mode=args['step_preview_mode'],
-                        
-                        depth=depth_map,
-                        image=np.flipud(np.uint8(source_image * 255)) if source_image is not None else None,
-                        strength=noise_strength,
-
-                        prompt=prompt,
-                        steps=steps,
-                        seed=seed,
-                        width=width,
-                        height=height,
-                        cfg_scale=cfg_scale,
-                        use_negative_prompt=True,
-                        negative_prompt=negative_prompt
-                    )
-                case 'inpaint':
-                    future = Generator.shared().inpaint(
-                        pipeline=args['pipeline'],
-                        model=args['model'],
-                        scheduler=args['scheduler'],
-                        optimizations=shared_args['optimizations'],
-                        seamless_axes=args['seamless_axes'],
-                        iterations=args['iterations'],
-                        step_preview_mode=args['step_preview_mode'],
-                        
-                        image=np.flipud(np.uint8(source_image * 255)),
-                        strength=noise_strength,
-
-                        fit=args['fit'],
-                        inpaint_mask_src='alpha',
-                        text_mask='',
-                        text_mask_confidence=1,
-
-                        prompt=prompt,
-                        steps=steps,
-                        seed=seed,
-                        width=width,
-                        height=height,
-                        cfg_scale=cfg_scale,
-                        use_negative_prompt=True,
-                        negative_prompt=negative_prompt
-                    )
         event = threading.Event()
         result = None
         exception = None
-        def on_response(_, response):
-            context.update(response.images[0])
-            if context.test_break():
-                nonlocal result
-                future.cancel()
-                result = [response]
-                event.set()
+        def step_callback(progress: List[api.GenerationResult]) -> bool:
+            context.update(progress[-1].image)
+            return True
+            # if context.test_break():
+            #     nonlocal result
+            #     result = [response]
+            #     event.set()
 
-        def on_done(future):
-            nonlocal result
-            result = future.result()
-            event.set()
+        def callback(results: List[api.GenerationResult] | Exception):
+            if isinstance(results, Exception):
+                nonlocal exception
+                exception = results
+                event.set()
+            else:
+                nonlocal result
+                result = results[-1].image
+                event.set()
         
-        def on_exception(_, error):
-            nonlocal exception
-            exception = error
-            event.set()
-        
-        future.add_response_callback(on_response)
-        future.add_done_callback(on_done)
-        future.add_exception_callback(on_exception)
+        backend = self.prompt.get_backend()
+        backend.generate(args, step_callback=step_callback, callback=callback)
+
         event.wait()
         if exception is not None:
             raise exception
         return {
-            'Image': result[-1].images[-1]
+            'Image': result
         }
 
 def _update_control_net_sockets(self, context):

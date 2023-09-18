@@ -49,6 +49,8 @@ if current_process().name != "__actor__":
     
     from . import engine
 
+    from .diffusers_backend import DiffusersBackend
+
     requirements_path_items = (
         ('requirements/win-linux-cuda.txt', 'Linux/Windows (CUDA)', 'Linux or Windows with NVIDIA GPU'),
         ('requirements/mac-mps-cpu.txt', 'Apple Silicon', 'Apple M1/M2'),
@@ -127,6 +129,9 @@ if current_process().name != "__actor__":
         register_render_pass()
 
         register_default_presets()
+        
+        # Register the default backend.
+        bpy.utils.register_class(DiffusersBackend)
 
     def unregister():
         for cls in PREFERENCE_CLASSES:
@@ -142,5 +147,8 @@ if current_process().name != "__actor__":
         engine.unregister()
         
         unregister_render_pass()
+
+        # Unregister the default backend
+        bpy.utils.unregister_class(DiffusersBackend)
 
         kill_generator()

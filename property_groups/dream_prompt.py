@@ -5,18 +5,22 @@ import sys
 from typing import _AnnotatedAlias
 
 from ..generator_process.actions.detect_seamless import SeamlessAxes
-from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode, Pipeline
-from ..generator_process.actions.huggingface_hub import ModelType
+from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode
 from ..prompt_engineering import *
 from ..preferences import StableDiffusionPreferences
-from .dream_prompt_validation import validate
 from .control_net import ControlNet
 
 import numpy as np
 
 from functools import reduce
 
-scheduler_options = [(scheduler.value, scheduler.value, '') for scheduler in Scheduler]
+from .. import api
+
+def scheduler_options(self, context):
+    return [
+        (scheduler, scheduler, '')
+        for scheduler in self.get_backend().list_schedulers(context)
+    ]
 
 step_preview_mode_options = [(mode.value, mode.value, '') for mode in StepPreviewMode]
 
@@ -39,7 +43,7 @@ init_image_actions = [
 ]
 
 def init_image_actions_filtered(self, context):
-    available = Pipeline[self.pipeline].init_img_actions()
+    available = ['modify', 'inpaint', 'outpaint']
     return list(filter(lambda x: x[0] in available, init_image_actions))
 
 inpaint_mask_sources = [
@@ -48,7 +52,7 @@ inpaint_mask_sources = [
 ]
 
 def inpaint_mask_sources_filtered(self, context):
-    available = Pipeline[self.pipeline].inpaint_mask_sources()
+    available = ['alpha', 'prompt']
     return list(filter(lambda x: x[0] in available, inpaint_mask_sources))
 
 seamless_axes = [
@@ -69,48 +73,20 @@ def modify_action_source_type(self, context):
     ]
 
 def model_options(self, context):
-    match Pipeline[self.pipeline]:
-        case Pipeline.STABLE_DIFFUSION:
-            def model_case(model, i):
-                return (
-                    model.model_base,
-                    model.model_base.replace('models--', '').replace('--', '/'),
-                    ModelType[model.model_type].name,
-                    i
-                )
-            models = {}
-            for i, model in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models):
-                if model.model_type in {ModelType.CONTROL_NET.name, ModelType.UNKNOWN.name}:
-                    continue
-                if model.model_type not in models:
-                    models[model.model_type] = [model_case(model, i)]
-                else:
-                    models[model.model_type].append(model_case(model, i))
-            return reduce(
-                lambda a, b: a + [None] + sorted(b, key=lambda m: m[0]),
-                [
-                    models[group]
-                    for group in sorted(models.keys())
-                ],
-                []
-            )
-        case Pipeline.STABILITY_SDK:
-            return [
-                ("stable-diffusion-v1", "Stable Diffusion v1.4", ModelType.PROMPT_TO_IMAGE.name),
-                ("stable-diffusion-v1-5", "Stable Diffusion v1.5", ModelType.PROMPT_TO_IMAGE.name),
-                ("stable-diffusion-512-v2-0", "Stable Diffusion v2.0", ModelType.PROMPT_TO_IMAGE.name),
-                ("stable-diffusion-768-v2-0", "Stable Diffusion v2.0-768", ModelType.PROMPT_TO_IMAGE.name),
-                ("stable-diffusion-512-v2-1", "Stable Diffusion v2.1", ModelType.PROMPT_TO_IMAGE.name),
-                ("stable-diffusion-768-v2-1", "Stable Diffusion v2.1-768", ModelType.PROMPT_TO_IMAGE.name),
-                None,
-                ("stable-inpainting-v1-0", "Stable Inpainting v1.0", ModelType.INPAINTING.name),
-                ("stable-inpainting-512-v2-0", "Stable Inpainting v2.0", ModelType.INPAINTING.name),
-            ]
-
-def pipeline_options(self, context):
     return [
-        (Pipeline.STABLE_DIFFUSION.name, 'Stable Diffusion', 'Stable Diffusion on your own hardware', 1),
-        (Pipeline.STABILITY_SDK.name, 'DreamStudio', 'Cloud compute via DreamStudio', 2),
+        None if model is None else (model.id, model.name, model.description)
+        for model in self.get_backend().list_models(context)
+    ]
+
+def _model_update(self, context):
+    options = [m for m in model_options(self, context) if m is not None]
+    if self.model == '' and len(options) > 0:
+        self.model = options[0]
+
+def backend_options(self, context):
+    return [
+        (backend._id(), backend.name if hasattr(backend, "name") else backend.__name__, backend.description if hasattr(backend, "description") else "")
+        for backend in api.Backend._list_backends()
     ]
 
 def seed_clamp(self, ctx):
@@ -123,8 +99,8 @@ def seed_clamp(self, ctx):
         pass # will get hashed once generated
 
 attributes = {
-    "pipeline": EnumProperty(name="Pipeline", items=pipeline_options, default=1 if Pipeline.local_available() else 2, description="Specify which model and target should be used."),
-    "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference"),
+    "backend": EnumProperty(name="Backend", items=backend_options, default=1, description="Specify which generation backend to use"),
+    "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference", update=_model_update),
     
     "control_nets": CollectionProperty(type=ControlNet),
     "active_control_net": IntProperty(name="Active ControlNet"),
@@ -173,58 +149,6 @@ attributes = {
     # Resulting image
     "hash": StringProperty(name="Image Hash"),
 }
-
-default_optimizations = Optimizations()
-def optimization(optim, property=None, **kwargs):
-    if "name" not in kwargs:
-        kwargs["name"] = optim.replace('_', ' ').title()
-    if "default" not in kwargs:
-        kwargs["default"] = getattr(default_optimizations, optim)
-    if property is None:
-        match kwargs["default"]:
-            case bool():
-                property = BoolProperty
-            case int():
-                property = IntProperty
-            case float():
-                property = FloatProperty
-            case _:
-                raise TypeError(f"{optim} cannot infer optimization property from {type(kwargs['default'])}")
-    attributes[f"optimizations_{optim}"] = property(**kwargs)
-
-optimization("attention_slicing", description="Computes attention in several steps. Saves some memory in exchange for a small speed decrease")
-optimization("attention_slice_size_src", property=EnumProperty, items=(
-    ("auto", "Automatic", "Computes attention in two steps", 1),
-    ("manual", "Manual", "Computes attention in `attention_head_dim // size` steps. A smaller `size` saves more memory.\n"
-                         "`attention_head_dim` must be a multiple of `size`, otherwise the image won't generate properly.\n"
-                         "`attention_head_dim` can be found within the model snapshot's unet/config.json file", 2),
-), default=1, name="Attention Slice Size")
-optimization("attention_slice_size", default=1, min=1)
-optimization("cudnn_benchmark", name="cuDNN Benchmark", description="Allows cuDNN to benchmark multiple convolution algorithms and select the fastest")
-optimization("tf32", name="TF32", description="Utilizes tensor cores on Ampere (RTX 30xx) or newer GPUs for matrix multiplications.\nHas no effect if half precision is enabled")
-optimization("half_precision", description="Reduces memory usage and increases speed in exchange for a slight loss in image quality.\nHas no effect if CPU only is enabled or using a GTX 16xx GPU")
-optimization("cpu_offload", property=EnumProperty, items=(
-    ("off", "Off", "", 0),
-    ("model", "Model", "Some memory savings with minimal speed penalty", 1),
-    ("submodule", "Submodule", "Better memory savings with large speed penalty", 2)
-), default=0, name="CPU Offload", description="Dynamically moves models in and out of device memory for reduced memory usage with reduced speed")
-optimization("channels_last_memory_format", description="An alternative way of ordering NCHW tensors that may be faster or slower depending on the device")
-optimization("sdp_attention", name="SDP Attention",
-             description="Scaled dot product attention requires less memory and often comes with a good speed increase.\n"
-                         "Prompt recall may not produce the exact same image, but usually only minor noise differences.\n"
-                         "Overrides attention slicing")
-optimization("batch_size", default=1, min=1, description="Improves speed when using iterations or upscaling in exchange for higher memory usage.\nHighly recommended to use with VAE slicing enabled")
-optimization("vae_slicing", name="VAE Slicing", description="Reduces memory usage of batched VAE decoding. Has no effect if batch size is 1.\nMay have a small performance improvement with large batches")
-optimization("vae_tiling", property=EnumProperty, items=(
-    ("off", "Off", "", 0),
-    ("half", "Half", "Uses tiles of half the selected model's default size. Likely to cause noticeably inaccurate colors", 1),
-    ("full", "Full", "Uses tiles of the selected model's default size, intended for use where image size is manually set higher. May cause slightly inaccurate colors", 2),
-    ("manual", "Manual", "", 3)
-), default=0, name="VAE Tiling", description="Decodes generated images in tiled regions to reduce memory usage in exchange for longer decode time and less accurate colors.\nCan allow for generating larger images that would otherwise run out of memory on the final step")
-optimization("vae_tile_size", min=1, name="VAE Tile Size", description="Width and height measurement of tiles. Smaller sizes are more likely to cause inaccurate colors and other undesired artifacts")
-optimization("vae_tile_blend", min=0, name="VAE Tile Blend", description="Minimum amount of how much each edge of a tile will intersect its adjacent tile")
-optimization("cfg_end", name="CFG End", min=0, max=1, description="The percentage of steps to complete before disabling classifier-free guidance")
-optimization("cpu_only", name="CPU Only", description="Disables GPU acceleration and is extremely slow")
 
 def map_structure_token_items(value):
     return (value[0], value[1], '')
@@ -280,48 +204,96 @@ def get_seed(self):
             h = ~h
         return (h & 0xFFFFFFFF) ^ (h >> 32) # 64 bit hash down to 32 bits
 
-def get_optimizations(self: DreamPrompt):
-    optimizations = Optimizations()
-    for prop in dir(self):
-        split_name = prop.replace('optimizations_', '')
-        if prop.startswith('optimizations_') and hasattr(optimizations, split_name):
-            setattr(optimizations, split_name, getattr(self, prop))
-    if self.optimizations_attention_slice_size_src == 'auto':
-        optimizations.attention_slice_size = 'auto'
-    return optimizations
+def generate_args(self, context, iteration=0, init_image=None, control_images=None) -> api.GenerationArguments:
+    is_file_batch = self.prompt_structure == file_batch_structure.id
+    file_batch_lines = []
+    file_batch_lines_negative = []
+    if is_file_batch:
+        file_batch_lines = [line.body for line in context.scene.dream_textures_prompt_file.lines if len(line.body.strip()) > 0]
+        file_batch_lines_negative = [""] * len(file_batch_lines)
+    
+    backend: api.Backend = self.get_backend()
+    batch_size = backend.get_batch_size(context)
+    iteration_limit = len(file_batch_lines) if is_file_batch else self.iterations
+    batch_size = min(batch_size, iteration_limit-iteration)
 
-def generate_args(self):
-    args = { key: getattr(self, key) for key in DreamPrompt.__annotations__ }
-    if not args['use_negative_prompt']:
-        args['negative_prompt'] = None
-    args['prompt'] = self.generate_prompt()
-    args['seed'] = self.get_seed()
-    args['optimizations'] = self.get_optimizations()
-    args['scheduler'] = Scheduler(args['scheduler'])
-    args['step_preview_mode'] = StepPreviewMode(args['step_preview_mode'])
-    args['pipeline'] = Pipeline[args['pipeline']]
-    args['outpaint_origin'] = (args['outpaint_origin'][0], args['outpaint_origin'][1])
-    args['key'] = bpy.context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.dream_studio_key
-    args['seamless_axes'] = SeamlessAxes(args['seamless_axes'])
-    args['width'] = args['width'] if args['use_size'] else None
-    args['height'] = args['height'] if args['use_size'] else None
+    task: api.Task = api.PromptToImage()
+    if self.use_init_img:
+        match self.init_img_action:
+            case 'modify':
+                match self.modify_action_source_type:
+                    case 'color':
+                        task = api.ImageToImage(
+                            image=init_image,
+                            strength=self.strength,
+                            fit=self.fit
+                        )
+                    case 'depth_generated':
+                        task = api.DepthToImage(
+                            depth=None,
+                            image=init_image,
+                            strength=self.strength
+                        )
+                    case 'depth_map':
+                        task = api.DepthToImage(
+                            depth=np.array(context.scene.init_depth.pixels)
+                                .astype(np.float32)
+                                .reshape((context.scene.init_depth.size[1], context.scene.init_depth.size[0], context.scene.init_depth.channels)),
+                            image=init_image,
+                            strength=self.strength
+                        )
+                    case 'depth':
+                        task = api.DepthToImage(
+                            image=None,
+                            depth=np.flipud(init_image.astype(np.float32) / 255.),
+                            strength=self.strength
+                        )
+            case 'inpaint':
+                task = api.Inpaint(
+                    image=init_image,
+                    strength=self.strength,
+                    fit=self.fit,
+                    mask_source=api.Inpaint.MaskSource.ALPHA if self.inpaint_mask_src == 'alpha' else api.Inpaint.MaskSource.PROMPT,
+                    mask_prompt=self.text_mask,
+                    confidence=self.text_mask_confidence
+                )
+            case 'outpaint':
+                task = api.Outpaint(
+                    image=init_image,
+                    origin=(self.outpaint_origin[0], self.outpaint_origin[1])
+                )
 
-    args['control_net'] = [net.control_net for net in args['control_nets']]
-    args['controlnet_conditioning_scale'] = [net.conditioning_scale for net in args['control_nets']]
-    args['control'] = [
-        np.flipud(
-            np.array(net.control_image.pixels)
-                .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
-        )
-        for net in args['control_nets']
-        if net.control_image is not None
-    ]
-    del args['control_nets']
-    return args
+    return api.GenerationArguments(
+        task=task,
+        model=next(model for model in self.get_backend().list_models(context) if model is not None and model.id == self.model),
+        prompt=api.Prompt(
+            file_batch_lines[iteration:iteration+batch_size] if is_file_batch else [self.generate_prompt()] * batch_size,
+            file_batch_lines_negative[iteration:iteration+batch_size] if is_file_batch else ([self.negative_prompt] * batch_size if self.use_negative_prompt else None)
+        ),
+        size=(self.width, self.height) if self.use_size else None,
+        seed=self.get_seed(),
+        steps=self.steps,
+        guidance_scale=self.cfg_scale,
+        scheduler=self.scheduler,
+        seamless_axes=SeamlessAxes(self.seamless_axes),
+        step_preview_mode=StepPreviewMode(self.step_preview_mode),
+        iterations=self.iterations,
+        control_nets=[
+            api.models.control_net.ControlNet(
+                net.control_net,
+                control_images[i] if control_images is not None else None,
+                net.conditioning_scale
+            )
+            for i, net in enumerate(self.control_nets)
+            if net.control_image is not None
+        ]
+    )
+
+def get_backend(self) -> api.Backend:
+    return getattr(self, api.Backend._lookup(self.backend)._attribute())
 
 DreamPrompt.generate_prompt = generate_prompt
 DreamPrompt.get_prompt_subject = get_prompt_subject
 DreamPrompt.get_seed = get_seed
-DreamPrompt.get_optimizations = get_optimizations
 DreamPrompt.generate_args = generate_args
-DreamPrompt.validate = validate
+DreamPrompt.get_backend = get_backend

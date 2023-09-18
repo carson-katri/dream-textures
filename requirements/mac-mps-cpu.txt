@@ -1,6 +1,7 @@
-git+https://github.com/huggingface/diffusers@main#egg=diffusers
+diffusers==0.20.2
+invisible-watermark
 transformers
-accelerate==0.14.0
+accelerate
 huggingface_hub
 
 torch>=2.0
@@ -8,6 +9,7 @@ torch>=2.0
 # Original SD checkpoint conversion
 pytorch-lightning
 tensorboard
+omegaconf
 
 scipy # LMSDiscreteScheduler
 

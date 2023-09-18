@@ -15,39 +15,8 @@ import requests
 import json
 import enum
 from ..future import Future
+from ..models import ModelType
 
-class ModelType(enum.IntEnum):
-    """
-    Inferred model type from the U-Net `in_channels`.
-    """
-    UNKNOWN = 0
-    PROMPT_TO_IMAGE = 4
-    DEPTH = 5
-    UPSCALING = 7
-    INPAINTING = 9
-
-    CONTROL_NET = -1
-
-    @classmethod
-    def _missing_(cls, _):
-        return cls.UNKNOWN
-    
-    def recommended_model(self) -> str:
-        """Provides a recommended model for a given task.
-
-        This method has a bias towards the latest version of official Stability AI models.
-        """
-        match self:
-            case ModelType.PROMPT_TO_IMAGE:
-                return "stabilityai/stable-diffusion-2-1"
-            case ModelType.DEPTH:
-                return "stabilityai/stable-diffusion-2-depth"
-            case ModelType.UPSCALING:
-                return "stabilityai/stable-diffusion-x4-upscaler"
-            case ModelType.INPAINTING:
-                return "stabilityai/stable-diffusion-2-inpainting"
-            case _:
-                return "stabilityai/stable-diffusion-2-1"
 
 @dataclass
 class Model:
@@ -111,7 +80,7 @@ def hf_list_installed_models(self) -> list[Model]:
             storage_folder = os.path.join(cache_dir, file)
             model_type = ModelType.UNKNOWN
 
-            if os.path.exists(os.path.join(storage_folder, 'model_index.json')):
+            if os.path.exists(os.path.join(storage_folder, 'model_index.json')) or os.path.exists(os.path.join(storage_folder, 'config.json')):
                 snapshot_folder = storage_folder
                 model_type = detect_model_type(snapshot_folder)
             else:
@@ -154,69 +123,82 @@ class DownloadStatus:
     index: int
     total: int
 
+    @classmethod
+    def hook_download_tqdm(cls, future):
+        from huggingface_hub import utils, file_download
+        progresses = set()
+
+        class future_tqdm(utils.tqdm):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.progress()
+
+            def update(self, n=1):
+                ret = super().update(n=n)
+                self.progress()
+                return ret
+
+            def progress(self):
+                nonlocal progresses
+                progresses.add(self)
+                ratio = self.n / self.total
+                count = 0
+                for tqdm in progresses:
+                    r = tqdm.n / tqdm.total
+                    if r == 1:
+                        continue
+                    count += 1
+                    if tqdm != self and ratio < r:
+                        # only show download status of most complete file
+                        return
+                future.add_response(cls(f"{count} file{'' if count == 1 else 's'}: {self.desc}", self.n, self.total))
+        file_download.tqdm = future_tqdm
+
 def hf_snapshot_download(
     self,
     model: str,
     token: str,
-    revision: str | None = None
+    variant: str | None = None,
+    resume_download=True
 ):
-    from huggingface_hub import utils
+    from huggingface_hub import snapshot_download, repo_info
+    from diffusers import StableDiffusionPipeline
 
     future = Future()
     yield future
+    DownloadStatus.hook_download_tqdm(future)
 
-    class future_tqdm(utils.tqdm):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            future.add_response(DownloadStatus(self.desc, 0, self.total))
+    info = repo_info(model, token=token)
+    files = [file.rfilename for file in info.siblings]
 
-        def update(self, n=1):
-            future.add_response(DownloadStatus(self.desc, self.last_print_n + n, self.total))
-            return super().update(n=n)
-    
-    from huggingface_hub import file_download
-    file_download.tqdm = future_tqdm
-    from huggingface_hub import _snapshot_download
-    
-    from diffusers import StableDiffusionPipeline
-    from diffusers.utils import DIFFUSERS_CACHE, WEIGHTS_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME
-    from diffusers.schedulers.scheduling_utils import SCHEDULER_CONFIG_NAME
-    
-    try:
-        config_dict = StableDiffusionPipeline.load_config(
+    if "model_index.json" in files:
+        StableDiffusionPipeline.download(
             model,
-            cache_dir=DIFFUSERS_CACHE,
-            resume_download=True,
-            force_download=False,
-            use_auth_token=token
+            use_auth_token=token,
+            variant=variant,
+            resume_download=resume_download,
         )
-        folder_names = [k for k in config_dict.keys() if not k.startswith("_")]
-        allow_patterns = [os.path.join(k, "*") for k in folder_names]
-        allow_patterns += [WEIGHTS_NAME, SCHEDULER_CONFIG_NAME, CONFIG_NAME, ONNX_WEIGHTS_NAME, StableDiffusionPipeline.config_name]
-    except:
-        allow_patterns = None
-    
-    # make sure we don't download flax, safetensors, or ckpt weights.
-    ignore_patterns = ["*.msgpack", "*.safetensors", "*.ckpt"]
+    elif "config.json" in files:
+        # individual model, such as controlnet or vae
 
-    try:
-        _snapshot_download.snapshot_download(
+        fp16_weights = ["diffusion_pytorch_model.fp16.safetensors", "diffusion_pytorch_model.fp16.bin"]
+        fp32_weights = ["diffusion_pytorch_model.safetensors", "diffusion_pytorch_model.bin"]
+        if variant == "fp16":
+            weights_names = fp16_weights + fp32_weights
+        else:
+            weights_names = fp32_weights + fp16_weights
+
+        weights = next((name for name in weights_names if name in files), None)
+        if weights is None:
+            raise FileNotFoundError(f"Can't find appropriate weights in {model}")
+
+        snapshot_download(
             model,
-            cache_dir=DIFFUSERS_CACHE,
             token=token,
-            revision=revision,
-            resume_download=True,
-            allow_patterns=allow_patterns,
-            ignore_patterns=ignore_patterns
+            resume_download=resume_download,
+            allow_patterns=["config.json", weights]
         )
-    except utils._errors.RevisionNotFoundError:
-        _snapshot_download.snapshot_download(
-            model,
-            cache_dir=DIFFUSERS_CACHE,
-            token=token,
-            resume_download=True,
-            allow_patterns=allow_patterns,
-            ignore_patterns=ignore_patterns
-        )
+    else:
+        raise ValueError(f"{model} doesn't appear to be a pipeline or model")
 
     future.set_done()

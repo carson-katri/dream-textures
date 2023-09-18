@@ -1,13 +1,10 @@
 import bpy
 from bpy.props import FloatProperty, EnumProperty, PointerProperty
 
-from ..generator_process.actions.huggingface_hub import ModelType
-from ..preferences import StableDiffusionPreferences
-
 def control_net_options(self, context):
     return [
-        (model.model_base, model.model_base.replace('models--', '').replace('--', '/'), '') for model in context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
-        if model.model_type == ModelType.CONTROL_NET.name
+        None if model is None else (model.id, model.name, model.description)
+        for model in context.scene.dream_textures_prompt.get_backend().list_controlnet_models(context)
     ]
 
 class ControlNet(bpy.types.PropertyGroup):

@@ -6,6 +6,7 @@ import threading
 from typing import Type, TypeVar, Generator
 import site
 import sys
+import os
 from ..absolute_path import absolute_path
 from .future import Future
 
@@ -13,6 +14,12 @@ def _load_dependencies():
     site.addsitedir(absolute_path(".python_dependencies"))
     deps = sys.path.pop(-1)
     sys.path.insert(0, deps)
+    if sys.platform == 'win32':
+        # fix for ImportError: DLL load failed while importing cv2: The specified module could not be found.
+        # cv2 needs python3.dll, which is stored in Blender's root directory instead of its python directory.
+        python3_path = os.path.abspath(os.path.join(sys.executable, "..\\..\\..\\..\\python3.dll"))
+        if os.path.exists(python3_path):
+            os.add_dll_directory(os.path.dirname(python3_path))
 if current_process().name == "__actor__":
     _load_dependencies()
 
@@ -112,6 +119,7 @@ class Actor:
                 self.process = get_context('spawn').Process(target=_start_backend, args=(self.__class__, self._message_queue, self._response_queue), name="__actor__", daemon=True)
                 self.process.start()
             case ActorContext.BACKEND:
+                os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
                 self._backend_loop()
         return self
     
@@ -163,6 +171,12 @@ class Actor:
                     if extra_message == Message.CANCEL:
                         break
                     if isinstance(res, Future):
+                        def check_cancelled():
+                            try:
+                                return self._message_queue.get(block=False) == Message.CANCEL
+                            except:
+                                return False
+                        res.check_cancelled = check_cancelled
                         res.add_response_callback(lambda _, res: self._response_queue.put(res))
                         res.add_exception_callback(lambda _, e: self._response_queue.put(RuntimeError(repr(e))))
                         res.add_done_callback(lambda _: None)

@@ -13,10 +13,11 @@ from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGen
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
-from ...property_groups.dream_prompt import DreamPrompt, pipeline_options
+from ...property_groups.dream_prompt import DreamPrompt, backend_options
 from ...generator_process.actions.prompt_to_image import Optimizations
 from ...generator_process.actions.detect_seamless import SeamlessAxes
-from ...generator_process.models import Pipeline, FixItError
+from ...api.models import FixItError
+from ... import api
 
 def dream_texture_panels():
     for space_type in SPACE_TYPES:
@@ -50,9 +51,8 @@ def dream_texture_panels():
                 elif new_version_available():
                     layout.operator(OpenLatestVersion.bl_idname, icon="IMPORT")
 
-                layout.prop(context.scene.dream_textures_prompt, "pipeline")
-                if Pipeline[context.scene.dream_textures_prompt.pipeline].model():
-                    layout.prop(context.scene.dream_textures_prompt, 'model')
+                layout.prop(context.scene.dream_textures_prompt, "backend")
+                layout.prop(context.scene.dream_textures_prompt, 'model')
 
         DreamTexturePanel.__name__ = f"DREAM_PT_dream_panel_{space_type}"
         yield DreamTexturePanel
@@ -120,12 +120,12 @@ def prompt_panel(sub_panel, space_type, get_prompt, get_seamless_result=None):
                     segment_row.prop(prompt, enum_prop, icon_only=is_custom)
             if prompt.prompt_structure == file_batch_structure.id:
                 layout.template_ID(context.scene, "dream_textures_prompt_file", open="text.open")
-            if Pipeline[prompt.pipeline].seamless():
-                layout.prop(prompt, "seamless_axes")
-                if prompt.seamless_axes == SeamlessAxes.AUTO and get_seamless_result is not None:
-                    auto_row = self.layout.row()
-                    auto_row.enabled = False
-                    auto_row.prop(get_seamless_result(context, prompt), "result")
+            
+            layout.prop(prompt, "seamless_axes")
+            if prompt.seamless_axes == SeamlessAxes.AUTO and get_seamless_result is not None:
+                auto_row = self.layout.row()
+                auto_row.enabled = False
+                auto_row.prop(get_seamless_result(context, prompt), "result")
 
     yield PromptPanel
 
@@ -137,7 +137,7 @@ def prompt_panel(sub_panel, space_type, get_prompt, get_seamless_result=None):
 
         @classmethod
         def poll(cls, context):
-            return get_prompt(context).prompt_structure != file_batch_structure.id and Pipeline[get_prompt(context).pipeline].negative_prompts()
+            return get_prompt(context).prompt_structure != file_batch_structure.id
 
         def draw_header(self, context):
             layout = self.layout
@@ -221,9 +221,9 @@ def init_image_panels(sub_panel, space_type, get_prompt):
                         _outpaint_warning_box("Outpaint has no overlap, so the result will not blend")
             elif prompt.init_img_action == 'modify':
                 layout.prop(prompt, "fit")
-            layout.prop(prompt, "strength")
-            if Pipeline[prompt.pipeline].color_correction():
-                layout.prop(prompt, "use_init_img_color")
+            if prompt.init_img_action != 'outpaint':
+                layout.prop(prompt, "strength")
+            layout.prop(prompt, "use_init_img_color")
             if prompt.init_img_action == 'modify':
                 layout.prop(prompt, "modify_action_source_type")
                 if prompt.modify_action_source_type == 'depth_map':
@@ -263,14 +263,18 @@ def advanced_panel(sub_panel, space_type, get_prompt):
             layout = self.layout
             layout.use_property_split = True
             
-            layout.prop(get_prompt(context), "random_seed")
-            if not get_prompt(context).random_seed:
-                layout.prop(get_prompt(context), "seed")
+            prompt = get_prompt(context)
+            layout.prop(prompt, "random_seed")
+            if not prompt.random_seed:
+                layout.prop(prompt, "seed")
             # advanced_box.prop(self, "iterations") # Disabled until supported by the addon.
-            layout.prop(get_prompt(context), "steps")
-            layout.prop(get_prompt(context), "cfg_scale")
-            layout.prop(get_prompt(context), "scheduler")
-            layout.prop(get_prompt(context), "step_preview_mode")
+            layout.prop(prompt, "steps")
+            layout.prop(prompt, "cfg_scale")
+            layout.prop(prompt, "scheduler")
+            layout.prop(prompt, "step_preview_mode")
+
+            backend: api.Backend = prompt.get_backend()
+            backend.draw_advanced(layout, context)
 
     yield AdvancedPanel
 
@@ -289,19 +293,8 @@ def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
             layout.use_property_split = True
             prompt = get_prompt(context)
 
-            inferred_device = Optimizations.infer_device()
-            if prompt.optimizations_cpu_only:
-                inferred_device = "cpu"
-            def optimization(prop):
-                if Optimizations.device_supports(prop, inferred_device):
-                    layout.prop(prompt, f"optimizations_{prop}")
-
-            optimization("cudnn_benchmark")
-            optimization("tf32")
-            optimization("half_precision")
-            optimization("channels_last_memory_format")
-            optimization("batch_size")
-            optimization("cfg_end")
+            backend: api.Backend = prompt.get_backend()
+            backend.draw_speed_optimizations(layout, context)
     yield SpeedOptimizationPanel
 
     class MemoryOptimizationPanel(sub_panel):
@@ -316,26 +309,8 @@ def optimization_panels(sub_panel, space_type, get_prompt, parent_id=""):
             layout.use_property_split = True
             prompt = get_prompt(context)
 
-            inferred_device = Optimizations.infer_device()
-            if prompt.optimizations_cpu_only:
-                inferred_device = "cpu"
-            def optimization(prop):
-                if Optimizations.device_supports(prop, inferred_device):
-                    layout.prop(prompt, f"optimizations_{prop}")
-
-            optimization("attention_slicing")
-            slice_size_row = layout.row()
-            slice_size_row.prop(prompt, "optimizations_attention_slice_size_src")
-            if prompt.optimizations_attention_slice_size_src == 'manual':
-                slice_size_row.prop(prompt, "optimizations_attention_slice_size", text="Size")
-            optimization("sdp_attention")
-            optimization("cpu_offload")
-            optimization("cpu_only")
-            optimization("vae_slicing")
-            optimization("vae_tiling")
-            if prompt.optimizations_vae_tiling == "manual":
-                optimization("vae_tile_size")
-                optimization("vae_tile_blend")
+            backend: api.Backend = prompt.get_backend()
+            backend.draw_memory_optimizations(layout, context)
     yield MemoryOptimizationPanel
 
 def actions_panel(sub_panel, space_type, get_prompt):
@@ -356,17 +331,19 @@ def actions_panel(sub_panel, space_type, get_prompt):
             iterations_row.enabled = prompt.prompt_structure != file_batch_structure.id
             iterations_row.prop(prompt, "iterations")
             
-            row = layout.row()
+            row = layout.row(align=True)
             row.scale_y = 1.5
             if CancelGenerator.poll(context):
                 row.operator(CancelGenerator.bl_idname, icon="SNAP_FACE", text="")
             if context.scene.dream_textures_progress <= 0:
                 if context.scene.dream_textures_info != "":
-                    row.label(text=context.scene.dream_textures_info, icon="INFO")
+                    disabled_row = row.row(align=True)
+                    disabled_row.operator(DreamTexture.bl_idname, text=context.scene.dream_textures_info, icon="INFO")
+                    disabled_row.enabled = False
                 else:
                     row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
             else:
-                disabled_row = row.row()
+                disabled_row = row.row(align=True)
                 disabled_row.use_property_split = True
                 disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
                 disabled_row.enabled = False
@@ -380,13 +357,14 @@ def actions_panel(sub_panel, space_type, get_prompt):
 
             # Validation
             try:
-                prompt.validate(context)
+                backend: api.Backend = prompt.get_backend()
+                backend.validate(prompt.generate_args(context))
             except FixItError as e:
                 error_box = layout.box()
                 error_box.use_property_split = False
                 for i, line in enumerate(e.args[0].split('\n')):
                     error_box.label(text=line, icon="ERROR" if i == 0 else "NONE")
-                e.draw(context, error_box)
+                e._draw(prompt, context, error_box)
             except Exception as e:
                 print(e)
     return ActionsPanel

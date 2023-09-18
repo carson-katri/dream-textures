@@ -2,9 +2,10 @@ import bpy
 import cycles
 import numpy as np
 import os
-from .generator_process.actions.prompt_to_image import ImageGenerationResult
-from .generator_process import Generator
+from typing import List
 import threading
+from .generator_process import Generator
+from . import api
 
 pass_inputs = [
     ('color', 'Color', 'Provide the scene color as input'),
@@ -112,43 +113,47 @@ def _render_dream_textures_pass(self, layer, size, scene, render_pass, render_re
 
     self.update_stats("Dream Textures", "Generating...")
     
-    generated_args = scene.dream_textures_render_properties_prompt.generate_args()
-    generated_args['width'] = size[0]
-    generated_args['height'] = size[1]
+    prompt = scene.dream_textures_render_properties_prompt
     match scene.dream_textures_render_properties_pass_inputs:
         case 'color':
-            f = gen.image_to_image(
-                image=np.flipud(combined_pixels.reshape((size[1], size[0], 4)) * 255).astype(np.uint8),
-                **generated_args
+            task = api.ImageToImage(
+                np.flipud(combined_pixels.reshape((size[1], size[0], 4)) * 255).astype(np.uint8),
+                prompt.strength,
+                True
             )
         case 'depth':
-            f = gen.depth_to_image(
-                depth=depth,
-                image=None,
-                **generated_args
+            task = api.DepthToImage(
+                depth,
+                None,
+                prompt.strength
             )
         case 'color_depth':
-            f = gen.depth_to_image(
-                depth=depth,
-                image=np.flipud(combined_pixels.reshape((size[1], size[0], 4)) * 255).astype(np.uint8),
-                **generated_args
+            task = api.DepthToImage(
+                depth,
+                np.flipud(combined_pixels.reshape((size[1], size[0], 4)) * 255).astype(np.uint8),
+                prompt.strength
             )
     event = threading.Event()
-    def on_step(_, step: ImageGenerationResult):
-        if step.final:
-            return
-        self.update_progress(step.step / generated_args['steps'])
-        if len(step.images) > 0:
-            combined_pixels = step.images[0]
-            render_pass.rect.foreach_set(combined_pixels.reshape((size[0] * size[1], 4)))
-            self.update_result(render_result) # This does not seem to have an effect.
-    def on_done(future):
+    def step_callback(progress: List[api.GenerationResult]) -> bool:
+        self.update_progress(progress[-1].progress / progress[-1].total)
+        render_pass.rect.foreach_set(progress[-1].image.reshape((size[0] * size[1], 4)))
+        self.update_result(render_result) # This does not seem to have an effect.
+        return True
+    def callback(results: List[api.GenerationResult] | Exception):
         nonlocal combined_pixels
-        result = future.result(last_only=True)
-        combined_pixels = result.images[0]
+        combined_pixels = results[-1].image
         event.set()
-    f.add_response_callback(on_step)
-    f.add_done_callback(on_done)
+    
+    backend: api.Backend = prompt.get_backend()
+    generated_args: api.GenerationArguments = prompt.generate_args(bpy.context)
+    generated_args.task = task
+    generated_args.size = size
+    backend.generate(
+        generated_args,
+        step_callback=step_callback,
+        callback=callback
+    )
+
     event.wait()
 
     # Perform an inverse transform so when Blender applies its transform everything looks correct.

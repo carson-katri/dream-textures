@@ -1,3 +1,4 @@
+import importlib.util
 import sys
 
 def choose_device(self, optimizations) -> str:
@@ -13,7 +14,7 @@ def choose_device(self, optimizations) -> str:
         return "cuda"
     elif torch.backends.mps.is_available():
         return "mps"
-    if 'torch_directml' in sys.modules:
+    elif importlib.util.find_spec("torch_directml"):
         import torch_directml
         if torch_directml.is_available():
             torch.utils.rename_privateuse1_backend("dml")

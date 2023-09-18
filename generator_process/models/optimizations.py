@@ -24,10 +24,10 @@ class Optimizations:
     cudnn_benchmark: Annotated[bool, "cuda"] = False
     tf32: Annotated[bool, "cuda"] = False
     amp: Annotated[bool, "cuda"] = False
-    half_precision: Annotated[bool, {"cuda", "privateuseone"}] = True
-    cpu_offload: Annotated[str, {"cuda", "privateuseone"}] = CPUOffload.OFF
+    half_precision: Annotated[bool, {"cuda", "dml"}] = True
+    cpu_offload: Annotated[str, {"cuda", "dml"}] = CPUOffload.OFF
     channels_last_memory_format: bool = False
-    sdp_attention: Annotated[bool, {"cpu", "cuda", "mps"}] = True
+    sdp_attention: bool = True
     batch_size: int = 1
     vae_slicing: bool = True
     vae_tiling: str = "off"
@@ -43,7 +43,7 @@ class Optimizations:
         if sys.platform == "darwin":
             return "mps"
         elif os.path.exists(absolute_path(".python_dependencies/torch_directml")):
-            return "privateuseone"
+            return "dml"
         else:
             return "cuda"
 
@@ -165,7 +165,7 @@ class Optimizations:
         except: pass
         
         from .. import directml_patches
-        if device == "privateuseone":
+        if device == "dml":
             directml_patches.enable(pipeline)
         else:
             directml_patches.disable(pipeline)

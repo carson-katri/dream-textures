@@ -1,4 +1,6 @@
 import functools
+import gc
+import time
 
 import torch
 from torch import Tensor
@@ -44,7 +46,52 @@ def getitem(self, key, *, pre_patch):
     return pre_patch(self, key)
 
 
+def retry_OOM(module):
+    if hasattr(module, "_retry_OOM"):
+        return
+    forward = module.forward
+
+    def is_OOM(e: RuntimeError):
+        if hasattr(e, "_retry_OOM"):
+            return False
+        if len(e.args) == 0:
+            return False
+        if not isinstance(e.args[0], str):
+            return False
+        return (
+            e.args[0].startswith("Could not allocate tensor with") and
+            e.args[0].endswith("bytes. There is not enough GPU video memory available!")
+        )
+
+    def wrapper(*args, **kwargs):
+        try:
+            try:
+                return forward(*args, **kwargs)
+            except RuntimeError as e:
+                if is_OOM(e):
+                    # print("retrying!", type(module).__name__)
+                    gc.collect()
+                    # no torch.cuda.empty_cache() equivalent for directml, waiting a moment may help though
+                    time.sleep(.1)
+                    return forward(*args, **kwargs)
+                raise
+        except RuntimeError as e:
+            if is_OOM(e):
+                # only retry leaf modules
+                e._retry_OOM = True
+            raise
+
+    module.forward = wrapper
+    module._retry_OOM = True
+
+
 def enable(pipe):
+    for comp in pipe.components.values():
+        if not isinstance(comp, torch.nn.Module):
+            continue
+        for module in comp.modules():
+            retry_OOM(module)
+
     global active_dml_patches
     if active_dml_patches is not None:
         return

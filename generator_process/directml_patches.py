@@ -1,6 +1,5 @@
 import functools
 import gc
-import time
 
 import torch
 from torch import Tensor
@@ -69,10 +68,14 @@ def retry_OOM(module):
                 return forward(*args, **kwargs)
             except RuntimeError as e:
                 if is_OOM(e):
+                    tb = e.__traceback__.tb_next
+                    while tb is not None:
+                        # clear locals from traceback so that intermediate tensors can be garbage collected
+                        # helps recover from Attention blocks more often
+                        tb.tb_frame.clear()
+                        tb = tb.tb_next
                     # print("retrying!", type(module).__name__)
                     gc.collect()
-                    # no torch.cuda.empty_cache() equivalent for directml, waiting a moment may help though
-                    time.sleep(.1)
                     return forward(*args, **kwargs)
                 raise
         except RuntimeError as e:

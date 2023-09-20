@@ -47,6 +47,7 @@ def prompt_to_image(
     import diffusers
     import torch
     from PIL import Image, ImageOps
+    from diffusers.pipelines.wuerstchen import WuerstchenCombinedPipeline
 
     device = self.choose_device(optimizations)
 
@@ -56,8 +57,8 @@ def prompt_to_image(
     else:
         pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler)
         refiner = None
-    height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
-    width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
+    height = height or ((pipe.unet.config.sample_size * pipe.vae_scale_factor) if hasattr(pipe, 'unet') and hasattr(pipe, 'vae_scale_factor') else 512)
+    width = width or ((pipe.unet.config.sample_size * pipe.vae_scale_factor) if hasattr(pipe, 'unet') and hasattr(pipe, 'vae_scale_factor') else 512)
 
     # Optimizations
     pipe = optimizations.apply(pipe, device)
@@ -73,8 +74,16 @@ def prompt_to_image(
         generator = generator[0]
     
     # Seamless
-    _configure_model_padding(pipe.unet, seamless_axes)
-    _configure_model_padding(pipe.vae, seamless_axes)
+    if hasattr(pipe, 'unet'):
+        _configure_model_padding(pipe.unet, seamless_axes)
+    if hasattr(pipe, 'vae'):
+        _configure_model_padding(pipe.vae, seamless_axes)
+    if hasattr(pipe, 'prior_prior'):
+        _configure_model_padding(pipe.prior_prior, seamless_axes)
+    if hasattr(pipe, 'decoder'):
+        _configure_model_padding(pipe.decoder, seamless_axes)
+    if hasattr(pipe, 'vqgan'):
+        _configure_model_padding(pipe.vqgan, seamless_axes)
 
     # Inference
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
@@ -85,23 +94,28 @@ def prompt_to_image(
                 raise InterruptedError()
             future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
         try:
-            result = pipe(
-                prompt=prompt,
-                height=height,
-                width=width,
-                num_inference_steps=steps,
-                guidance_scale=cfg_scale,
-                negative_prompt=negative_prompt if use_negative_prompt else None,
-                num_images_per_prompt=1,
-                eta=0.0,
-                generator=generator,
-                latents=None,
-                output_type=output_type,
-                return_dict=True,
-                callback=callback,
-                callback_steps=1,
-                #cfg_end=optimizations.cfg_end
-            )
+            pipe_kwargs = {
+                'prompt': prompt,
+                'height': height,
+                'width': width,
+                'num_inference_steps': steps,
+                'guidance_scale': cfg_scale,
+                'negative_prompt': negative_prompt if use_negative_prompt else None,
+                'num_images_per_prompt': 1,
+                'eta': 0.0,
+                'generator': generator,
+                'latents': None,
+                'output_type': output_type,
+                'return_dict': True,
+                'callback': callback,
+                'callback_steps': 1,
+            }
+            if isinstance(pipe, WuerstchenCombinedPipeline):
+                pipe_kwargs['prior_guidance_scale'] = pipe_kwargs.pop('guidance_scale')
+                del pipe_kwargs['eta']
+                del pipe_kwargs['callback']
+                del pipe_kwargs['callback_steps']
+            result = pipe(**pipe_kwargs)
             if is_sdxl and sdxl_refiner_model is not None and refiner is None:
                 # allow load_model() to garbage collect pipe
                 pipe = None

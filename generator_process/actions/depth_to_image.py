@@ -8,6 +8,7 @@ import random
 from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
+from ...image_utils import resize, rgb
 
 def depth_to_image(
     self,
@@ -44,7 +45,6 @@ def depth_to_image(
     import diffusers
     import torch
     import PIL.Image
-    import PIL.ImageOps
     
     class DreamTexturesDepth2ImgPipeline(diffusers.StableDiffusionInpaintPipeline):
         def prepare_depth(self, depth, image, dtype, device):
@@ -56,7 +56,7 @@ def depth_to_image(
                 depth_estimator = DPTForDepthEstimation.from_pretrained("Intel/dpt-large")
                 depth_estimator = depth_estimator.to(device)
                 
-                pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+                pixel_values = feature_extractor(images=image, return_tensors="pt", do_rescale=False).pixel_values
                 pixel_values = pixel_values.to(device=device)
                 # The DPT-Hybrid model uses batch-norm layers which are not compatible with fp16.
                 # So we use `torch.autocast` here for half precision inference.
@@ -212,9 +212,7 @@ def depth_to_image(
 
             # 4. Prepare the depth image
             depth = self.prepare_depth(depth_image, image, text_embeddings.dtype, device)
-
-            if image is not None and isinstance(image, PIL.Image.Image):
-                image = diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img.preprocess(image)
+            image = self.image_processor.preprocess(image)
 
             # 5. set timesteps
             self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -347,18 +345,18 @@ def depth_to_image(
     height = height or 512
     width = width or 512
     rounded_size = (
-        int(8 * (width // 8)),
         int(8 * (height // 8)),
+        int(8 * (width // 8)),
     )
-    depth_image = PIL.ImageOps.flip(PIL.Image.fromarray(np.uint8(depth * 255)).convert('L')).resize(rounded_size) if depth is not None else None
-    init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).convert('RGB').resize(rounded_size)
+    depth = resize(depth, rounded_size) if depth is not None else None
+    image = None if image is None else resize(rgb(PIL.Image.open(image) if isinstance(image, str) else image), rounded_size)
 
     # Seamless
     if seamless_axes == SeamlessAxes.AUTO:
-        init_sa = None if init_image is None else self.detect_seamless(np.array(init_image) / 255)
-        depth_sa = None if depth_image is None else self.detect_seamless(np.array(depth_image.convert('RGB')) / 255)
+        init_sa = None if image is None else self.detect_seamless(image)
+        depth_sa = None if depth is None else self.detect_seamless(rgb(depth))
         if init_sa is not None and depth_sa is not None:
-            seamless_axes = SeamlessAxes((init_sa.x and depth_sa.x, init_sa.y and depth_sa.y))
+            seamless_axes = init_sa & depth_sa
         elif init_sa is not None:
             seamless_axes = init_sa
         elif depth_sa is not None:
@@ -376,20 +374,20 @@ def depth_to_image(
             result = pipe(
                 prompt=prompt,
                 negative_prompt=negative_prompt if use_negative_prompt else None,
-                depth_image=depth_image,
-                image=init_image,
+                depth_image=depth,
+                image=image,
                 strength=strength,
                 width=rounded_size[0],
                 height=rounded_size[1],
                 num_inference_steps=steps,
                 guidance_scale=cfg_scale,
                 generator=generator,
-                callback=callback
+                callback=callback,
+                output_type="np"
             )
             
             future.add_response(ImageGenerationResult(
-                [np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                    for image in result.images],
+                list(result.images),
                 [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
                 steps,
                 True

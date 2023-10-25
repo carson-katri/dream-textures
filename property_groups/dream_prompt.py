@@ -262,6 +262,8 @@ def generate_args(self, context, iteration=0, init_image=None, control_images=No
                     image=init_image,
                     origin=(self.outpaint_origin[0], self.outpaint_origin[1])
                 )
+    if control_images is None:
+        control_images = [None] * len(self.control_nets)
 
     return api.GenerationArguments(
         task=task,
@@ -281,11 +283,10 @@ def generate_args(self, context, iteration=0, init_image=None, control_images=No
         control_nets=[
             api.models.control_net.ControlNet(
                 net.control_net,
-                control_images[i] if control_images is not None else None,
+                control_image,
                 net.conditioning_scale
             )
-            for i, net in enumerate(self.control_nets)
-            if net.control_image is not None
+            for net, control_image in zip(self.control_nets, control_images)
         ]
     )
 

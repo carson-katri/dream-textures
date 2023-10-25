@@ -5,6 +5,7 @@ from ..generator_process.actions.detect_seamless import SeamlessAxes
 from ..generator_process import Generator
 from ..preferences import StableDiffusionPreferences
 from ..api.models import GenerationArguments
+from .. import image_utils
 
 def update(self, context):
     if hasattr(context.area, "regions"):
@@ -44,9 +45,7 @@ class SeamlessResult(bpy.types.PropertyGroup):
 
         if not can_process:
             return
-        pixels = np.empty(image.size[0]*image.size[1]*4, dtype=np.float32)
-        image.pixels.foreach_get(pixels)
-        pixels = pixels.reshape(image.size[1], image.size[0], -1)
+        pixels = image_utils.bpy_to_np(image)
 
         def result(future):
             self.result = future.result().text

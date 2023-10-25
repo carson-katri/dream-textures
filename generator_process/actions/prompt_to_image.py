@@ -1,3 +1,4 @@
+import functools
 from typing import Generator
 from contextlib import nullcontext
 
@@ -46,7 +47,6 @@ def prompt_to_image(
 
     import diffusers
     import torch
-    from PIL import Image, ImageOps
 
     device = self.choose_device(optimizations)
 
@@ -79,11 +79,11 @@ def prompt_to_image(
     # Inference
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
         is_sdxl = isinstance(pipe, diffusers.StableDiffusionXLPipeline)
-        output_type = "latent" if is_sdxl and sdxl_refiner_model is not None else "pil"
-        def callback(step, timestep, latents):
+        output_type = "latent" if is_sdxl and sdxl_refiner_model is not None else "np"
+        def callback(pipe, step, timestep, latents):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
+            future.add_response(ImageGenerationResult.step_preview(pipe, step_preview_mode, width, height, latents, generator, step))
         try:
             result = pipe(
                 prompt=prompt,
@@ -98,7 +98,7 @@ def prompt_to_image(
                 latents=None,
                 output_type=output_type,
                 return_dict=True,
-                callback=callback,
+                callback=functools.partial(callback, pipe),
                 callback_steps=1,
                 #cfg_end=optimizations.cfg_end
             )
@@ -111,15 +111,15 @@ def prompt_to_image(
                 result = refiner(
                     prompt=prompt,
                     negative_prompt=[""],
-                    callback=callback,
+                    callback=functools.partial(callback, refiner),
                     callback_steps=1,
                     num_inference_steps=steps,
-                    image=result.images
+                    image=result.images,
+                    output_type="np"
                 )
-            
+
             future.add_response(ImageGenerationResult(
-                [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                    for image in result.images],
+                list(result.images),
                 [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
                 steps,
                 True

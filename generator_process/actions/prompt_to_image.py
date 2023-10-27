@@ -51,7 +51,7 @@ def prompt_to_image(
     device = self.choose_device(optimizations)
 
     # Stable Diffusion pipeline w/ caching
-    if device == "cuda" and (optimizations.cpu_offloading(device) or torch.cuda.mem_get_info()[1] > 20 * 1024**3 * (1 if optimizations.can_use_half(device) else 2)):
+    if sdxl_refiner_model is not None and device == "cuda" and (optimizations.cpu_offloading(device) or torch.cuda.mem_get_info()[1] > 20 * 1024**3 * (1 if optimizations.can_use_half(device) else 2)):
         pipe, refiner = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler, sdxl_refiner_model=sdxl_refiner_model)
     else:
         pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler)

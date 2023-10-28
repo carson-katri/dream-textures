@@ -285,7 +285,6 @@ def generate_args(self, context, iteration=0, init_image=None, control_images=No
                 net.conditioning_scale
             )
             for i, net in enumerate(self.control_nets)
-            if net.control_image is not None
         ]
     )
 

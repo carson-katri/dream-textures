@@ -31,22 +31,24 @@ framebuffer_arguments = [
 
 def _validate_projection(context):
     if len(context.selected_objects) == 0:
-        def fix_selection(context, layout):
-            if context.object.mode != 'OBJECT':
-                layout.operator("object.mode_set", text="Switch to Object Mode", icon="OBJECT_DATAMODE").mode = 'OBJECT'
-            layout.operator("object.select_by_type", text="Select All Meshes", icon="RESTRICT_SELECT_OFF").type = 'MESH'
+        def object_mode_operator(operator):
+            operator.mode = 'OBJECT'
+        def select_by_type_operator(operator):
+            operator.type = 'MESH'
         raise FixItError(
             """No objects selected
 Select at least one object to project onto.""",
-            fix_selection
+            FixItError.RunOperator("Switch to Object Mode", "object.mode_set", object_mode_operator)
+            if context.object.mode != 'OBJECT'
+            else FixItError.RunOperator("Select All Meshes", "object.select_by_type", select_by_type_operator)
         )
     if context.object is not None and context.object.mode != 'EDIT':
-        def fix_mode(_, layout):
-            layout.operator("object.mode_set", text="Switch to Edit Mode", icon="EDITMODE_HLT").mode = 'EDIT'
+        def fix_mode(operator):
+            operator.mode = 'EDIT'
         raise FixItError(
             """Enter edit mode
 In edit mode, select the faces to project onto.""",
-            fix_mode
+            FixItError.RunOperator("Switch to Edit Mode", "object.mode_set", fix_mode)
         )
     has_selection = False
     for obj in context.selected_objects:
@@ -63,7 +65,7 @@ In edit mode, select the faces to project onto.""",
         raise FixItError(
             """No faces selected.
 Select at least one face to project onto.""",
-            lambda ctx, layout: None
+            FixItError.RunOperator("Select All Faces", "mesh.select_all", lambda _: None)
         )
 
 def dream_texture_projection_panels():

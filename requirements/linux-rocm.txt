@@ -4,8 +4,8 @@ transformers
 accelerate
 huggingface_hub
 
---extra-index-url https://download.pytorch.org/whl/rocm5.4.2/
-torch>=2.0
+--extra-index-url https://download.pytorch.org/whl/rocm5.6/
+torch>=2.1
 
 # Original SD checkpoint conversion
 pytorch-lightning

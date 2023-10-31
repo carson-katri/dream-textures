@@ -1,14 +1,13 @@
 from typing import Tuple, Generator
-from numpy.typing import NDArray
 import numpy as np
 from .prompt_to_image import ImageGenerationResult
 from ..future import Future
-from ...image_utils import rgba
+from ...image_utils import image_to_np, rgba, ImageOrPath
 
 def outpaint(
     self,
 
-    image: NDArray,
+    image: ImageOrPath,
 
     width: int | None,
     height: int | None,
@@ -16,13 +15,14 @@ def outpaint(
     outpaint_origin: Tuple[int, int],
 
     **kwargs
-) -> Generator[ImageGenerationResult, None, None]:
+) -> Generator[Future, None, None]:
 
     future = Future()
     yield future
 
     width = width or 512
     height = height or 512
+    image = image_to_np(image)
     
     if outpaint_origin[0] > image.shape[1] or outpaint_origin[0] < -width:
         raise ValueError(f"Outpaint origin X ({outpaint_origin[0]}) must be between {-width} and {image.shape[1]}")

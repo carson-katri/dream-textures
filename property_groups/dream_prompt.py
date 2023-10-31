@@ -15,6 +15,7 @@ import numpy as np
 from functools import reduce
 
 from .. import api
+from ..image_utils import bpy_to_np, grayscale
 
 def scheduler_options(self, context):
     return [
@@ -236,16 +237,14 @@ def generate_args(self, context, iteration=0, init_image=None, control_images=No
                         )
                     case 'depth_map':
                         task = api.DepthToImage(
-                            depth=np.array(context.scene.init_depth.pixels)
-                                .astype(np.float32)
-                                .reshape((context.scene.init_depth.size[1], context.scene.init_depth.size[0], context.scene.init_depth.channels)),
+                            depth=None if init_image is None else grayscale(bpy_to_np(context.scene.init_depth, color_space=None)),
                             image=init_image,
                             strength=self.strength
                         )
                     case 'depth':
                         task = api.DepthToImage(
                             image=None,
-                            depth=np.flipud(init_image.astype(np.float32) / 255.),
+                            depth=None if init_image is None else grayscale(init_image),
                             strength=self.strength
                         )
             case 'inpaint':
@@ -262,8 +261,6 @@ def generate_args(self, context, iteration=0, init_image=None, control_images=No
                     image=init_image,
                     origin=(self.outpaint_origin[0], self.outpaint_origin[1])
                 )
-    if control_images is None:
-        control_images = [None] * len(self.control_nets)
 
     return api.GenerationArguments(
         task=task,
@@ -283,10 +280,10 @@ def generate_args(self, context, iteration=0, init_image=None, control_images=No
         control_nets=[
             api.models.control_net.ControlNet(
                 net.control_net,
-                control_image,
+                control_images[i] if control_images is not None else None,
                 net.conditioning_scale
             )
-            for net, control_image in zip(self.control_nets, control_images)
+            for i, net in enumerate(self.control_nets)
         ]
     )
 

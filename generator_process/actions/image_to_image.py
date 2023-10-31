@@ -8,7 +8,7 @@ import random
 from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
-from ...image_utils import height_width, rgb, resize
+from ...image_utils import image_to_np, height_width, resize, ImageOrPath
 
 
 def image_to_image(
@@ -20,7 +20,7 @@ def image_to_image(
 
     optimizations: Optimizations,
 
-    image: NDArray,
+    image: ImageOrPath,
     fit: bool,
     strength: float,
     prompt: str | list[str],
@@ -67,7 +67,7 @@ def image_to_image(
         generator = generator[0]
 
     # Init Image
-    image = rgb(image)
+    image = image_to_np(image, mode="RGB")
     if fit:
         height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
         width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor

@@ -1,6 +1,8 @@
+import importlib.util
+import os
 import sys
-from pathlib import Path
-from typing import Tuple, Literal
+from os import PathLike
+from typing import Tuple, Literal, Union, TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray, DTypeLike
@@ -20,6 +22,40 @@ Channels:
     3: RGB
     4: RGBA
 """
+
+
+def version_str(version):
+    return ".".join(str(x) for x in version)
+
+
+# find_spec("bpy") will never return None
+has_bpy = sys.modules.get("bpy", None) is not None
+has_ocio = importlib.util.find_spec("PyOpenColorIO") is not None
+has_oiio = importlib.util.find_spec("OpenImageIO") is not None
+has_pil = importlib.util.find_spec("PIL") is not None
+
+if has_bpy:
+    # frontend
+    import bpy
+    BLENDER_VERSION = bpy.app.version
+    OCIO_CONFIG = os.path.join(bpy.utils.resource_path('LOCAL'), 'datafiles/colormanagement/config.ocio')
+    # Easier to share via environment variables than to enforce backends with subprocesses to use their own methods of sharing.
+    os.environ["BLENDER_VERSION"] = version_str(BLENDER_VERSION)
+    os.environ["BLENDER_OCIO_CONFIG"] = OCIO_CONFIG
+else:
+    # backend
+    BLENDER_VERSION = tuple(int(x) for x in os.environ["BLENDER_VERSION"].split("."))
+    OCIO_CONFIG = os.environ["BLENDER_OCIO_CONFIG"]
+
+if TYPE_CHECKING:
+    import bpy
+    import PIL.Image
+
+
+def _bpy_version_error(required_version, feature, module):
+    if BLENDER_VERSION >= required_version:
+        return Exception(f"{module} is unexpectedly missing in Blender {version_str(BLENDER_VERSION)}")
+    return Exception(f"{feature} requires Blender {version_str(required_version)} or higher, you are using {version_str(BLENDER_VERSION)}")
 
 
 def height_width(array: NDArray) -> Tuple[int, int]:
@@ -115,6 +151,30 @@ def rgba(array: NDArray, alpha=None) -> NDArray:
     return ensure_alpha(rgb(array), alpha)
 
 
+def grayscale(array: NDArray) -> NDArray:
+    """
+    Converts `array` into HW or NHWC grayscale. This is intended for converting an
+    RGB image that is already visibly grayscale, such as a depth map. It will not
+    make a good approximation of perceived lightness of an otherwise colored image.
+    """
+    if array.ndim == 2:
+        return array
+    c = channels(array)
+    if array.ndim == 3:
+        if c in [1, 2]:
+            return array[..., 0]
+        elif c in [3, 4]:
+            return np.max(array[..., :3], axis=-1)
+        raise ValueError(f"Can't make {c} channels grayscale")
+    elif array.ndim == 4:
+        if c in [1, 2]:
+            return array[..., :1]
+        elif c in [3, 4]:
+            return np.max(array[..., :3], axis=-1, keepdims=True)
+        raise ValueError(f"Can't make {c} channels grayscale")
+    raise ValueError(f"Can't make {array.ndim} dimensions grayscale")
+
+
 def _passthrough_alpha(from_array, to_array):
     if channels(from_array) not in [2, 4]:
         return to_array
@@ -184,10 +244,10 @@ def color_transform(array: NDArray, from_color_space: str, to_color_space: str, 
     elif from_color_space == "sRGB" and to_color_space == "Linear":
         return srgb_to_linear(array)
 
-    # This will fail on Blender versions older than 3.5 on the frontend.
-    # Most conversions should be between linear and sRGB anyway.
+    if not has_ocio:
+        raise _bpy_version_error((3, 5, 0), "color transform", "PyOpenColorIO")
     import PyOpenColorIO as OCIO
-    config = OCIO.Config.CreateFromFile(str(Path(sys.executable).parents[2] / "datafiles/colormanagement/config.ocio"))
+    config = OCIO.Config.CreateFromFile(OCIO_CONFIG)
     proc = config.getProcessor(from_color_space, to_color_space).getDefaultCPUProcessor()
     # OCIO requires RGB/RGBA float32.
     # There is a channel agnostic apply(), but I can't seem to get it to work.
@@ -330,7 +390,7 @@ def resize(array: NDArray, size: Tuple[int, int]):
     return array
 
 
-def bpy_to_np(image, color_space: str | None = "sRGB") -> NDArray:
+def bpy_to_np(image: "bpy.types.Image", color_space: str | None = "sRGB") -> NDArray:
     """
     Args:
         image: Image to extract pixels values from.
@@ -344,12 +404,13 @@ def bpy_to_np(image, color_space: str | None = "sRGB") -> NDArray:
     # foreach_get/set is extremely fast to read/write an entire image compared to alternatives
     # see https://projects.blender.org/blender/blender/commit/9075ec8269e7cb029f4fab6c1289eb2f1ae2858a
     image.pixels.foreach_get(array.ravel())
+    # TODO check for image.type == "RENDER_RESULT" or "COMPOSITING"
     if color_space is not None:
         array = color_transform(array, image.colorspace_settings.name, color_space)
     return rgba(np.flipud(array))
 
 
-def np_to_bpy(array: NDArray, name=None, existing_image=None, float_buffer=None, color_space: str = "sRGB"):
+def np_to_bpy(array: NDArray, name=None, existing_image=None, float_buffer=None, color_space: str = "sRGB") -> "bpy.types.Image":
     """
     Args:
         array: Image pixel values. The y-axis is expected to be ordered `top=0` to `bottom=height-1`.
@@ -370,7 +431,9 @@ def np_to_bpy(array: NDArray, name=None, existing_image=None, float_buffer=None,
     height, width = height_width(array)
     if name is None:
         name = "Untitled" if existing_image is None else existing_image.name
-    if existing_image is not None and (
+    if existing_image is not None and existing_image.type in ["RENDER_RESULT", "COMPOSITING"]:
+        existing_image = None
+    elif existing_image is not None and (
             existing_image.size[0] != width
             or existing_image.size[1] != height
             or (existing_image.channels != channels(array) and existing_image.channels != 4)
@@ -420,10 +483,14 @@ def _mode(array, mode):
         return rgba(array)
     elif mode == "RGB":
         return rgb(array)
-    raise ValueError(f"mode expected one of {['RGB', 'RGBA', None]}, got {repr(mode)}")
+    elif mode == "L":
+        return grayscale(array)
+    elif mode == "LA":
+        return _passthrough_alpha(array, grayscale(array))
+    raise ValueError(f"mode expected one of {['RGB', 'RGBA', 'L', 'LA', None]}, got {repr(mode)}")
 
 
-def pil_to_np(image, *, dtype: DTypeLike | None = None, mode: Literal["RGB", "RGBA"] | None = None):
+def pil_to_np(image, *, dtype: DTypeLike | None = np.float32, mode: Literal["RGB", "RGBA", "L", "LA"] | None = None) -> NDArray:
     # some modes don't require being converted to RGBA for proper handling in other module functions
     # see for other modes https://pillow.readthedocs.io/en/stable/handbook/concepts.html#concept-modes
     if image.mode not in ["RGB", "RGBA", "L", "LA", "I", "F", "I;16"]:
@@ -435,19 +502,118 @@ def pil_to_np(image, *, dtype: DTypeLike | None = None, mode: Literal["RGB", "RG
     return array
 
 
-def np_to_pil(array: NDArray, *, mode: Literal["RGB", "RGBA"] | None = None):
+def np_to_pil(array: NDArray, *, mode: Literal["RGB", "RGBA", "L", "LA"] | None = None):
     from PIL import Image
     array = to_dtype(array, np.uint8)
     if mode is None:
-        c = channels(array)
-        if c in [2, 4]:
-            array = rgba(array)
-            mode = "RGBA"
-        else:
-            array = rgb(array)
-            mode = "RGB"
+        if channels(array) == 1 and array.ndim == 3:
+            # PIL L mode can't have a channel dimension
+            array = array[..., 1]
     else:
         array = _mode(array, mode)
-    # PIL does support modes for a single channel, but I don't see a need for supporting them yet.
-    # uint8="L", uint16="I;16", int32="I", float32="F"
+    # PIL does support higher precision modes for a single channel, but I don't see a need for supporting them yet.
+    # uint16="I;16", int32="I", float32="F"
     return Image.fromarray(array, mode=mode)
+
+
+def _dtype_to_type_desc(dtype):
+    import OpenImageIO as oiio
+    dtype = np.dtype(dtype)
+    match dtype:
+        case np.uint8:
+            return oiio.TypeUInt8
+        case np.uint16:
+            return oiio.TypeUInt16
+        case np.uint32:
+            return oiio.TypeUInt32
+        case np.uint64:
+            return oiio.TypeUInt64
+        case np.int8:
+            return oiio.TypeInt8
+        case np.int16:
+            return oiio.TypeInt16
+        case np.int32:
+            return oiio.TypeInt32
+        case np.int64:
+            return oiio.TypeInt64
+        case np.float16:
+            return oiio.TypeHalf
+        case np.float32 | np.float64:
+            return oiio.TypeFloat
+        case np.float64:
+            # no oiio.TypeDouble
+            return oiio.TypeDesc(oiio.BASETYPE.DOUBLE)
+    raise TypeError(f"can't convert {dtype} to OpenImageIO.TypeDesc")
+
+
+ImageOrPath = Union[NDArray, "PIL.Image.Image", str, PathLike]
+"""Backend compatible image types"""
+
+
+def image_to_np(
+        image_or_path: ImageOrPath | "bpy.types.Image" | None,
+        *,
+        dtype: DTypeLike | None = np.float32,
+        mode: Literal["RGB", "RGBA", "L", "LA"] | None = "RGBA",
+        color_space: str | None = "sRGB",
+        size: Tuple[int, int] | None = None
+) -> NDArray:
+    """
+    Opens an image from disk or takes an image object and converts it to `numpy.ndarray`.
+    Usable for image argument sanitization when the source can vary in type or format.
+
+    Args:
+        image_or_path: Either a file path or an instance of `bpy.types.Image`, `PIL.Image.Image`, or `numpy.ndarray`. `None` will return `None`.
+        dtype: Data type of the returned array. `None` won't change the data type. The data type may still change if a color transform occurs.
+        mode: Channel mode of the returned array. `None` won't change the mode. The mode may still change if a color transform occurs.
+        color_space: Color space of the returned array. `None` won't apply a color transform. If `image_or_path` is of type `numpy.ndarray` no color transform will occur.
+        size: Resize to specific dimensions. `None` won't change the size.
+    """
+
+    if image_or_path is None:
+        return None
+    array = None
+    from_color_space = None
+
+    # convert image_or_path to numpy.ndarray
+    match image_or_path:
+        case PathLike() | str():
+            if has_oiio:
+                import OpenImageIO as oiio
+                image_or_path = oiio.ImageInput.open(str(image_or_path))
+                if image_or_path is None:
+                    raise IOError(oiio.geterror())
+                type_desc = image_or_path.spec().format
+                if dtype is not None:
+                    type_desc = _dtype_to_type_desc(dtype)
+                array = image_or_path.read_image(type_desc)
+                from_color_space = image_or_path.spec().get_string_attribute("oiio:ColorSpace", "sRGB")
+            elif has_pil:
+                from PIL import Image
+                array = pil_to_np(Image.open(image_or_path))
+                from_color_space = "sRGB"
+            else:
+                raise _bpy_version_error((3, 5, 0), "read image", "OpenImageIO")
+        case object(__module__="PIL.Image", __class__=type(__name__="Image")):
+            # abnormal class check because PIL cannot be imported on frontend
+            array = pil_to_np(image_or_path)
+            from_color_space = "sRGB"
+        case object(__module__="bpy.types", __class__=type(__name__="Image")):
+            # abnormal class check because bpy cannot be imported on backend
+            array = bpy_to_np(image_or_path, color_space)
+        case np.ndarray():
+            # no way to tell what color space
+            array = image_or_path
+        case _:
+            raise TypeError(f"not an image or path {repr(type(image_or_path))}")
+
+    # apply image requirements
+    if from_color_space is not None and color_space is not None:
+        array = color_transform(array, from_color_space, color_space)
+    if dtype is not None:
+        array = to_dtype(array, dtype)
+    array = _mode(array, mode)
+    if size is not None:
+        array = resize(array, size)
+
+    return array

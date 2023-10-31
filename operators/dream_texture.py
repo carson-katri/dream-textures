@@ -81,12 +81,15 @@ class DreamTexture(bpy.types.Operator):
         except ValueError:
             init_image = None
         if init_image is not None:
-            init_image = image_utils.bpy_to_np(init_image)
+            init_image_color_space = "sRGB"
+            if scene.dream_textures_prompt.use_init_img and scene.dream_textures_prompt.modify_action_source_type in ['depth_map', 'depth']:
+                init_image_color_space = None
+            init_image = image_utils.bpy_to_np(init_image, color_space=init_image_color_space)
         
         control_images = None
         if len(prompt.control_nets) > 0:
             control_images = [
-                image_utils.bpy_to_np(net.control_image)
+                image_utils.bpy_to_np(net.control_image, color_space=None)
                 for net in prompt.control_nets
             ]
 

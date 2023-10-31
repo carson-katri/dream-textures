@@ -1,13 +1,12 @@
 from typing import Union, Generator, Callable, List, Optional
 import os
 from contextlib import nullcontext
-from numpy.typing import NDArray
 import numpy as np
 import random
 from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
-from ...image_utils import height_width, resize, rgb
+from ...image_utils import image_to_np, height_width, resize, rgb, ImageOrPath
 
 def inpaint(
     self,
@@ -18,7 +17,7 @@ def inpaint(
 
     optimizations: Optimizations,
 
-    image: NDArray,
+    image: ImageOrPath,
     fit: bool,
     strength: float,
     prompt: str | list[str],
@@ -45,7 +44,7 @@ def inpaint(
     key: str | None = None,
 
     **kwargs
-) -> Generator[NDArray, None, None]:
+) -> Generator[Future, None, None]:
     future = Future()
     yield future
 
@@ -73,6 +72,7 @@ def inpaint(
         generator = generator[0]
 
     # Init Image
+    image = image_to_np(image)
     if fit:
         height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
         width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor

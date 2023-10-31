@@ -1,7 +1,6 @@
 from typing import Union, Generator, Callable, List, Optional, Dict, Any
 from contextlib import nullcontext
 
-from numpy.typing import NDArray
 import numpy as np
 import logging
 import os
@@ -9,10 +8,7 @@ import random
 from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
-from ...image_utils import pil_to_np, rgb, resize
-
-
-logger = logging.getLogger(__name__)
+from ...image_utils import image_to_np, rgb, resize, ImageOrPath
 
 
 def control_net(
@@ -25,10 +21,10 @@ def control_net(
     optimizations: Optimizations,
 
     control_net: list[str | Checkpoint],
-    control: list[NDArray] | None,
+    control: list[ImageOrPath] | None,
     controlnet_conditioning_scale: list[float],
     
-    image: NDArray | str | None, # image to image
+    image: ImageOrPath | None, # image to image
     # inpaint
     inpaint: bool,
     inpaint_mask_src: str,
@@ -58,7 +54,6 @@ def control_net(
 
     import diffusers
     import torch
-    import PIL.Image
     
     device = self.choose_device(optimizations)
 
@@ -93,8 +88,8 @@ def control_net(
         int(8 * (width // 8)),
     )
     # StableDiffusionControlNetPipeline.check_image() currently fails without adding batch dimension
-    control_image = [resize(rgb(c), rounded_size)[np.newaxis] for c in control] if control is not None else None
-    image = None if image is None else resize(pil_to_np(PIL.Image.open(image)) if isinstance(image, str) else image, rounded_size)
+    control_image = None if control is None else [image_to_np(c, mode="RGB", size=rounded_size)[np.newaxis] for c in control]
+    image = image_to_np(image, size=rounded_size)
     if inpaint:
         match inpaint_mask_src:
             case 'alpha':
@@ -144,8 +139,8 @@ def control_net(
                         image=image,
                         mask_image=mask_image,
                         strength=strength,
-                        width=rounded_size[0],
-                        height=rounded_size[1],
+                        width=rounded_size[1],
+                        height=rounded_size[0],
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         generator=generator,
@@ -160,8 +155,8 @@ def control_net(
                         controlnet_conditioning_scale=controlnet_conditioning_scale,
                         image=image,
                         strength=strength,
-                        width=rounded_size[0],
-                        height=rounded_size[1],
+                        width=rounded_size[1],
+                        height=rounded_size[0],
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         generator=generator,
@@ -174,8 +169,8 @@ def control_net(
                     negative_prompt=negative_prompt if use_negative_prompt else None,
                     image=control_image,
                     controlnet_conditioning_scale=controlnet_conditioning_scale,
-                    width=rounded_size[0],
-                    height=rounded_size[1],
+                    width=rounded_size[1],
+                    height=rounded_size[0],
                     num_inference_steps=steps,
                     guidance_scale=cfg_scale,
                     generator=generator,

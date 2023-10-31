@@ -2,13 +2,12 @@ from typing import Union, Generator, Callable, List, Optional
 import os
 from contextlib import nullcontext
 
-from numpy.typing import NDArray
 import numpy as np
 import random
 from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
-from ...image_utils import resize, rgb
+from ...image_utils import image_to_np, ImageOrPath
 
 def depth_to_image(
     self,
@@ -19,8 +18,8 @@ def depth_to_image(
 
     optimizations: Optimizations,
 
-    depth: NDArray | None,
-    image: NDArray | str | None,
+    depth: ImageOrPath | None,
+    image: ImageOrPath | None,
     strength: float,
     prompt: str | list[str],
     steps: int,
@@ -212,7 +211,8 @@ def depth_to_image(
 
             # 4. Prepare the depth image
             depth = self.prepare_depth(depth_image, image, text_embeddings.dtype, device)
-            image = self.image_processor.preprocess(image)
+            if image is not None:
+                image = self.image_processor.preprocess(image)
 
             # 5. set timesteps
             self.scheduler.set_timesteps(num_inference_steps, device=device)
@@ -348,13 +348,13 @@ def depth_to_image(
         int(8 * (height // 8)),
         int(8 * (width // 8)),
     )
-    depth = resize(depth, rounded_size) if depth is not None else None
-    image = None if image is None else resize(rgb(PIL.Image.open(image) if isinstance(image, str) else image), rounded_size)
+    depth = image_to_np(depth, mode="L", size=rounded_size)
+    image = image_to_np(image, mode="RGB", size=rounded_size)
 
     # Seamless
     if seamless_axes == SeamlessAxes.AUTO:
         init_sa = None if image is None else self.detect_seamless(image)
-        depth_sa = None if depth is None else self.detect_seamless(rgb(depth))
+        depth_sa = None if depth is None else self.detect_seamless(depth)
         if init_sa is not None and depth_sa is not None:
             seamless_axes = init_sa & depth_sa
         elif init_sa is not None:
@@ -377,8 +377,8 @@ def depth_to_image(
                 depth_image=depth,
                 image=image,
                 strength=strength,
-                width=rounded_size[0],
-                height=rounded_size[1],
+                width=rounded_size[1],
+                height=rounded_size[0],
                 num_inference_steps=steps,
                 guidance_scale=cfg_scale,
                 generator=generator,

@@ -137,8 +137,8 @@ def _convert_pipe(cache, model, pipe, model_class, half_precision, scheduler, **
     if model_class.__name__ not in {
         # some tasks are not supported by auto pipeline
         'DreamTexturesDepth2ImgPipeline',
-        'StableDiffusionUpscalePipeline'
-    }:
+        'StableDiffusionUpscalePipeline',
+    } and not 'controlnet' in kwargs: 
         pipe = model_class.from_pipe(pipe, **kwargs)
     scheduler.create(pipe)
     return pipe

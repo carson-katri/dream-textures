@@ -1,4 +1,4 @@
-diffusers==0.20.2
+git+https://github.com/huggingface/diffusers.git@d1222064669a758c476014fb7a09e24a0c907222
 invisible-watermark
 transformers
 accelerate

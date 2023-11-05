@@ -169,9 +169,9 @@ def _configure_model_padding(model, seamless_axes):
     model.seamless_axes = seamless_axes
     for m in model.modules():
         if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, LoRACompatibleConv)):
-            if isinstance(m, LoRACompatibleConv):
-                m.forward = _lora_compatible_conv_forward.__get__(m, LoRACompatibleConv)
             if seamless_axes.x or seamless_axes.y:
+                if isinstance(m, LoRACompatibleConv):
+                    m.forward = _lora_compatible_conv_forward.__get__(m, LoRACompatibleConv)
                 m.asymmetric_padding_mode = (
                     'circular' if seamless_axes.x else 'constant',
                     'circular' if seamless_axes.y else 'constant'
@@ -182,6 +182,8 @@ def _configure_model_padding(model, seamless_axes):
                 )
                 m._conv_forward = _conv_forward_asymmetric.__get__(m, nn.Conv2d)
             else:
+                if isinstance(m, LoRACompatibleConv):
+                    m.forward = LoRACompatibleConv.forward.__get__(m, LoRACompatibleConv)
                 m._conv_forward = nn.Conv2d._conv_forward.__get__(m, nn.Conv2d)
                 if hasattr(m, 'asymmetric_padding_mode'):
                     del m.asymmetric_padding_mode

@@ -152,8 +152,12 @@ def _conv_forward_asymmetric(self, input, weight, bias):
         working = nn.functional.pad(working, self.asymmetric_padding[1], mode=self.asymmetric_padding_mode[1])
     return nn.functional.conv2d(working, weight, bias, self.stride, nn.modules.utils._pair(0), self.dilation, self.groups)
 
+def _lora_compatible_conv_forward(self, hidden_states, scale=1.0):
+    return self._conv_forward(hidden_states, self.weight, self.bias)
+
 def _configure_model_padding(model, seamless_axes):
     import torch.nn as nn
+    from diffusers.models.lora import LoRACompatibleConv
     """
     Modifies the 2D convolution layers to use a circular padding mode based on the `seamless` and `seamless_axes` options.
     """
@@ -164,7 +168,9 @@ def _configure_model_padding(model, seamless_axes):
         return
     model.seamless_axes = seamless_axes
     for m in model.modules():
-        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, LoRACompatibleConv)):
+            if isinstance(m, LoRACompatibleConv):
+                m.forward = _lora_compatible_conv_forward.__get__(m, LoRACompatibleConv)
             if seamless_axes.x or seamless_axes.y:
                 m.asymmetric_padding_mode = (
                     'circular' if seamless_axes.x else 'constant',

@@ -316,7 +316,8 @@ class ProjectDreamTexture(bpy.types.Operator):
         material = bpy.data.materials.new(name="diffused-material")
         material.use_nodes = True
         image_texture_node = material.node_tree.nodes.new("ShaderNodeTexImage")
-        material.node_tree.links.new(image_texture_node.outputs[0], material.node_tree.nodes['Principled BSDF'].inputs[0])
+        principled_node = next((n for n in material.node_tree.nodes if n.type == 'BSDF_PRINCIPLED'))
+        material.node_tree.links.new(image_texture_node.outputs[0], principled_node.inputs[0])
         uv_map_node = material.node_tree.nodes.new("ShaderNodeUVMap")
         uv_map_node.uv_map = bpy.context.selected_objects[0].data.uv_layers.active.name if context.scene.dream_textures_project_bake else "Projected UVs"
         material.node_tree.links.new(uv_map_node.outputs[0], image_texture_node.inputs[0])

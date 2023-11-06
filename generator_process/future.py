@@ -64,7 +64,7 @@ class Future:
     def _run_on_main_thread(self, func):
         try:
             import bpy
-            bpy.app.timers.register(func)
+            bpy.app.timers.register(func, persistent=True)
         except:
             func()
 

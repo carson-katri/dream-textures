@@ -365,6 +365,4 @@ def actions_panel(sub_panel, space_type, get_prompt):
                 for i, line in enumerate(e.args[0].split('\n')):
                     error_box.label(text=line, icon="ERROR" if i == 0 else "NONE")
                 e._draw(prompt, context, error_box)
-            except Exception as e:
-                print(e)
     return ActionsPanel

@@ -123,7 +123,7 @@ class model_lookup:
 
     @classmethod
     def get(cls, item):
-        return cls._models.get(item, item)
+        return cls._models.get(item, None)
 
 def fetch_installed_models(blocking=True):
     def on_done(future):

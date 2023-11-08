@@ -48,6 +48,7 @@ def prompt_to_image(
     import torch
     from PIL import Image, ImageOps
     from diffusers.pipelines.wuerstchen import WuerstchenCombinedPipeline
+    from diffusers.pipelines.latent_consistency_models import LatentConsistencyModelPipeline
 
     device = self.choose_device(optimizations)
 
@@ -112,6 +113,9 @@ def prompt_to_image(
             }
             if isinstance(pipe, WuerstchenCombinedPipeline):
                 pipe_kwargs['prior_guidance_scale'] = pipe_kwargs.pop('guidance_scale')
+                del pipe_kwargs['eta']
+            if isinstance(pipe, LatentConsistencyModelPipeline):
+                del pipe_kwargs['negative_prompt']
                 del pipe_kwargs['eta']
             result = pipe(**pipe_kwargs)
             if is_sdxl and sdxl_refiner_model is not None and refiner is None:

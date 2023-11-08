@@ -113,8 +113,6 @@ def prompt_to_image(
             if isinstance(pipe, WuerstchenCombinedPipeline):
                 pipe_kwargs['prior_guidance_scale'] = pipe_kwargs.pop('guidance_scale')
                 del pipe_kwargs['eta']
-                del pipe_kwargs['callback']
-                del pipe_kwargs['callback_steps']
             result = pipe(**pipe_kwargs)
             if is_sdxl and sdxl_refiner_model is not None and refiner is None:
                 # allow load_model() to garbage collect pipe

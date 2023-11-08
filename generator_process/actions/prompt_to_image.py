@@ -49,6 +49,7 @@ def prompt_to_image(
     from PIL import Image, ImageOps
     from diffusers.pipelines.wuerstchen import WuerstchenCombinedPipeline
     from diffusers.pipelines.latent_consistency_models import LatentConsistencyModelPipeline
+    from diffusers.pipelines.pixart_alpha import PixArtAlphaPipeline
 
     device = self.choose_device(optimizations)
 
@@ -117,6 +118,9 @@ def prompt_to_image(
             if isinstance(pipe, LatentConsistencyModelPipeline):
                 del pipe_kwargs['negative_prompt']
                 del pipe_kwargs['eta']
+            if isinstance(pipe, PixArtAlphaPipeline):
+                pipe_kwargs['prompt'] = pipe_kwargs['prompt'][0]
+                pipe_kwargs['negative_prompt'] = "" if pipe_kwargs['negative_prompt'] is None else pipe_kwargs['negative_prompt'][0]
             result = pipe(**pipe_kwargs)
             if is_sdxl and sdxl_refiner_model is not None and refiner is None:
                 # allow load_model() to garbage collect pipe

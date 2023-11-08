@@ -1,4 +1,4 @@
-git+https://github.com/huggingface/diffusers.git@d1222064669a758c476014fb7a09e24a0c907222
+git+https://github.com/huggingface/diffusers.git@6110d7c95f630479cf01340cc8a8141c1e359f09
 invisible-watermark
 transformers
 accelerate
@@ -14,6 +14,6 @@ omegaconf
 
 scipy # LMSDiscreteScheduler
 
-stability-sdk # DreamStudio
-
 opencolorio==2.1.2 # color management
+
+sentencepiece # PixArt-Alpha

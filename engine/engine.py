@@ -87,7 +87,33 @@ class NewEngineNodeTree(bpy.types.Operator):
     bl_label = "New Node Tree"
 
     def execute(self, context):
-        bpy.ops.node.new_node_tree(type="DreamTexturesNodeTree")
+        # TODO: Get the name of the default node tree from a config file
+        # TODO: type is deprecated https://docs.blender.org/api/current/bpy.types.NodeTree.html 
+        #       When testing the type of the resulting node tree using  bpy.data.node_groups['Dream Textures Node Tree'].type it is '' because of that
+        bpy.ops.node.new_node_tree(type="DreamTexturesNodeTree", name="Dream Textures Node Editor")
+        # Get the newly generated node tree
+        node_trees = []
+        for nt in bpy.data.node_groups:
+            # the correct identifier is bl_idname nowadays
+            if nt.bl_idname == 'DreamTexturesNodeTree' and 'Dream Textures Node Editor' in nt.name:
+                node_trees.append(nt)
+        if node_trees != []:
+            # assume that the newly created node tree is the last one in the list
+            node_tree = node_trees[-1]
+            node_sd = node_tree.nodes.new(type="dream_textures.node_stable_diffusion")
+            node_sd.location = (200, 200)
+            node_out = node_tree.nodes.new(type="NodeGroupOutput")
+            node_out.location = (400, 200)
+            node_tree.links.new(node_sd.outputs['Image'], node_out.inputs[''])
+            node_props = node_tree.nodes.new(type="dream_textures.node_render_properties")
+            node_props.location = (0,200)
+            node_tree.links.new(node_props.outputs['Resolution X'], node_sd.inputs['Width'])
+            node_tree.links.new(node_props.outputs['Resolution Y'], node_sd.inputs['Height'])
+            # in case the node editor is open, synchronize the open node trees:
+            for area in context.screen.areas:
+                if area.type == 'NODE_EDITOR':
+                    if area.spaces.active.tree_type == 'DreamTexturesNodeTree':
+                        area.spaces.active.node_tree = node_tree
         return {'FINISHED'}
 
 def draw_device(self, context):
@@ -112,7 +138,7 @@ def _update_engine_backend(self, context):
 
 class DreamTexturesRenderEngineProperties(bpy.types.PropertyGroup):
     node_tree: bpy.props.PointerProperty(type=DreamTexturesNodeTree, name="Node Tree", poll=_poll_node_tree)
-    backend: bpy.props.EnumProperty(name="Backend", items=backend_options, default=1, description="The backend to use for all pipeline nodes", update=_update_engine_backend)
+    backend: bpy.props.EnumProperty(name="Backend", items=backend_options, default=0, description="The backend to use for all pipeline nodes", update=_update_engine_backend)
 
 def engine_panels():
     bpy.types.RENDER_PT_output.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)

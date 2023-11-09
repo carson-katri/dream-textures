@@ -7,6 +7,8 @@ from typing import Tuple, Literal, Union, TYPE_CHECKING
 import numpy as np
 from numpy.typing import NDArray, DTypeLike
 
+from .generator_process import RunInSubprocess
+
 
 """
 This module allows for simple handling of image data in numpy ndarrays in some common formats.
@@ -220,6 +222,7 @@ def srgb_to_linear(array: NDArray) -> NDArray:
     return linear
 
 
+@RunInSubprocess.when_raised
 def color_transform(array: NDArray, from_color_space: str, to_color_space: str, *, clamp_srgb=True) -> NDArray:
     """
     Args:
@@ -245,7 +248,8 @@ def color_transform(array: NDArray, from_color_space: str, to_color_space: str, 
         return srgb_to_linear(array)
 
     if not has_ocio:
-        raise _bpy_version_error((3, 5, 0), "color transform", "PyOpenColorIO")
+        raise RunInSubprocess
+
     import PyOpenColorIO as OCIO
     config = OCIO.Config.CreateFromFile(OCIO_CONFIG)
     proc = config.getProcessor(from_color_space, to_color_space).getDefaultCPUProcessor()
@@ -267,6 +271,136 @@ def color_transform(array: NDArray, from_color_space: str, to_color_space: str, 
             array = np.clip(array, 0, 1)
         return array
     raise ValueError(f"Can't color transform {c} channels")
+
+
+# inverse=True is often crashing from EXCEPTION_ACCESS_VIOLATION while on frontend.
+# Normally this is caused by not running on the main thread or accessing a deleted
+# object, neither seem to be the issue here. Doesn't matter if the backend imports
+# its own OCIO or the one packaged with Blender.
+# Stack trace:
+# OpenColorIO_2_2.dll :0x00007FFDE8961160  OpenColorIO_v2_2::GradingTone::validate
+# OpenColorIO_2_2.dll :0x00007FFDE8A2BD40  OpenColorIO_v2_2::Processor::isNoOp
+# OpenColorIO_2_2.dll :0x00007FFDE882EA00  OpenColorIO_v2_2::CPUProcessor::apply
+# PyOpenColorIO.pyd   :0x00007FFDEB0F0E40  pybind11::error_already_set::what
+# PyOpenColorIO.pyd   :0x00007FFDEB0F0E40  pybind11::error_already_set::what
+# PyOpenColorIO.pyd   :0x00007FFDEB0F0E40  pybind11::error_already_set::what
+# PyOpenColorIO.pyd   :0x00007FFDEB0E7510  pybind11::error_already_set::discard_as_unraisable
+@RunInSubprocess.when(lambda *_, inverse=False, **__: inverse or not has_ocio)
+def render_color_transform(
+    array: NDArray,
+    exposure: float,
+    gamma: float,
+    view_transform: str,
+    display_device: str,
+    look: str,
+    *,
+    inverse: bool = False,
+    color_space: str | None = None,
+    clamp_srgb: bool = True,
+) -> NDArray:
+    import PyOpenColorIO as OCIO
+
+    ocio_config = OCIO.Config.CreateFromFile(OCIO_CONFIG)
+
+    # A reimplementation of `OCIOImpl::createDisplayProcessor` from the Blender source.
+    # https://github.com/dfelinto/blender/blob/87a0770bb969ce37d9a41a04c1658ea09c63933a/intern/opencolorio/ocio_impl.cc#L643
+    def create_display_processor(
+        config,
+        input_colorspace,
+        view,
+        display,
+        look,
+        scale,  # Exposure
+        exponent,  # Gamma
+        inverse
+    ):
+        group = OCIO.GroupTransform()
+
+        # Exposure
+        if scale != 1:
+            # Always apply exposure in scene linear.
+            color_space_transform = OCIO.ColorSpaceTransform()
+            color_space_transform.setSrc(input_colorspace)
+            color_space_transform.setDst(OCIO.ROLE_SCENE_LINEAR)
+            group.appendTransform(color_space_transform)
+
+            # Make further transforms aware of the color space change
+            input_colorspace = OCIO.ROLE_SCENE_LINEAR
+
+            # Apply scale
+            matrix_transform = OCIO.MatrixTransform(
+                [scale, 0.0, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, 0.0, 1.0])
+            group.appendTransform(matrix_transform)
+
+        # Add look transform
+        use_look = look is not None and len(look) > 0
+        if use_look:
+            look_output = config.getLook(look).getProcessSpace()
+            if look_output is not None and len(look_output) > 0:
+                look_transform = OCIO.LookTransform()
+                look_transform.setSrc(input_colorspace)
+                look_transform.setDst(look_output)
+                look_transform.setLooks(look)
+                group.appendTransform(look_transform)
+                # Make further transforms aware of the color space change.
+                input_colorspace = look_output
+            else:
+                # For empty looks, no output color space is returned.
+                use_look = False
+
+        # Add view and display transform
+        display_view_transform = OCIO.DisplayViewTransform()
+        display_view_transform.setSrc(input_colorspace)
+        display_view_transform.setLooksBypass(True)
+        display_view_transform.setView(view)
+        display_view_transform.setDisplay(display)
+        group.appendTransform(display_view_transform)
+
+        # Gamma
+        if exponent != 1:
+            exponent_transform = OCIO.ExponentTransform([exponent, exponent, exponent, 1.0])
+            group.appendTransform(exponent_transform)
+
+        # Create processor from transform. This is the moment were OCIO validates
+        # the entire transform, no need to check for the validity of inputs above.
+        if inverse:
+            group.setDirection(OCIO.TransformDirection.TRANSFORM_DIR_INVERSE)
+        return config.getProcessor(group)
+
+    # Exposure and gamma transformations derived from Blender source:
+    # https://github.com/dfelinto/blender/blob/87a0770bb969ce37d9a41a04c1658ea09c63933a/source/blender/imbuf/intern/colormanagement.c#L825
+    scale = 2 ** exposure
+    exponent = 1 / max(gamma, np.finfo(np.float32).eps)
+    processor = create_display_processor(ocio_config, OCIO.ROLE_SCENE_LINEAR, view_transform, display_device, look if look != 'None' else None, scale, exponent, inverse)
+    array = rgba(array)
+    processor.getDefaultCPUProcessor().applyRGBA(array)
+    if clamp_srgb and display_device == "sRGB":
+        array = np.clip(array, 0, 1)
+    if color_space is not None:
+        display_color_space = display_device
+        if display_color_space == "None":
+            display_color_space = "Linear"
+        array = color_transform(array, display_color_space, color_space)
+    return array
+
+
+def scene_color_transform(array: NDArray, scene: Union["bpy.types.Scene", None] = None, *, inverse: bool = False, color_space: str | None = None, clamp_srgb=True) -> NDArray:
+    if scene is None:
+        import bpy
+        scene = bpy.context.scene
+    view = scene.view_settings
+    display = scene.display_settings.display_device
+    return render_color_transform(
+        array,
+        view.exposure,
+        view.gamma,
+        view.view_transform,
+        display,
+        view.look,
+        inverse=inverse,
+        clamp_srgb=clamp_srgb,
+        color_space=color_space
+    )
 
 
 def _unsigned(dtype: DTypeLike) -> DTypeLike:
@@ -354,35 +488,48 @@ def to_dtype(array: NDArray, dtype: DTypeLike) -> NDArray:
     return array
 
 
-def resize(array: NDArray, size: Tuple[int, int]):
-    # currently only supported on the backend
-    # frontend could use OpenImageIO for Blender version >= 3.5.0
-
-    import torch
-
+@RunInSubprocess.when(not has_oiio)
+def resize(array: NDArray, size: Tuple[int, int], clamp=True):
     no_channels = array.ndim == 2
     if no_channels:
         array = array[..., np.newaxis]
     no_batch = array.ndim < 4
     if no_batch:
         array = array[np.newaxis, ...]
+    if clamp:
+        c_min = np.min(array, axis=(1, 2), keepdims=True)
+        c_max = np.max(array, axis=(1, 2), keepdims=True)
 
-    original_dtype = array.dtype
-    if np.issubdtype(original_dtype, np.floating):
-        if original_dtype == np.float16:
-            # interpolation not implemented for float16 on CPU
-            array = to_dtype(array, np.float32)
-    elif np.issubdtype(original_dtype, np.integer):
-        # integer interpolation only supported for uint8 nearest, nearest-exact or bilinear
-        bits = np.iinfo(original_dtype).bits
-        array = to_dtype(array, np.float64 if bits >= 32 else np.float32)
+    if has_oiio:
+        import OpenImageIO as oiio
+        resized = []
+        for unbatched in array:
+            # OpenImageIO can have batched images, but doesn't support resizing them
+            image_in = oiio.ImageBuf(unbatched)
+            image_out = oiio.ImageBufAlgo.resize(image_in, roi=oiio.ROI(0, int(size[1]), 0, int(size[0])))
+            if image_out.has_error:
+                raise Exception(image_out.geterror())
+            resized.append(image_out.get_pixels(image_in.spec().format))
+        array = np.stack(resized)
+    else:
+        original_dtype = array.dtype
+        if np.issubdtype(original_dtype, np.floating):
+            if original_dtype == np.float16:
+                # interpolation not implemented for float16 on CPU
+                array = to_dtype(array, np.float32)
+        elif np.issubdtype(original_dtype, np.integer):
+            # integer interpolation only supported for uint8 nearest, nearest-exact or bilinear
+            bits = np.iinfo(original_dtype).bits
+            array = to_dtype(array, np.float64 if bits >= 32 else np.float32)
 
-    array = torch.from_numpy(np.transpose(array, (0, 3, 1, 2)))
-    array = torch.nn.functional.interpolate(array, size=size, mode="bilinear")
-    array = np.transpose(np.array(array), (0, 2, 3, 1))
+        import torch
+        array = torch.from_numpy(np.transpose(array, (0, 3, 1, 2)))
+        array = torch.nn.functional.interpolate(array, size=size, mode="bilinear")
+        array = np.transpose(array, (0, 2, 3, 1)).numpy()
+        array = to_dtype(array, original_dtype)
 
-    array = to_dtype(array, original_dtype)
-
+    if clamp:
+        array = np.clip(array, c_min, c_max)
     if no_batch:
         array = np.squeeze(array, 0)
     if no_channels:
@@ -390,7 +537,7 @@ def resize(array: NDArray, size: Tuple[int, int]):
     return array
 
 
-def bpy_to_np(image: "bpy.types.Image", color_space: str | None = "sRGB") -> NDArray:
+def bpy_to_np(image: "bpy.types.Image", *, color_space: str | None = "sRGB", clamp_srgb=True) -> NDArray:
     """
     Args:
         image: Image to extract pixels values from.
@@ -400,13 +547,19 @@ def bpy_to_np(image: "bpy.types.Image", color_space: str | None = "sRGB") -> NDA
     Returns: A ndarray copy of `image.pixels` in RGBA float32 format.
         The y-axis is flipped to a more common standard of `top=0` to `bottom=height-1`.
     """
+    if image.type == "RENDER_RESULT":
+        # can't get pixels automatically without rendering again and freezing Blender until it finishes, or saving to disk
+        raise ValueError(f"{image.name} image can't be used directly, alternatively use a compositor viewer node")
     array = np.empty((image.size[1], image.size[0], image.channels), dtype=np.float32)
     # foreach_get/set is extremely fast to read/write an entire image compared to alternatives
     # see https://projects.blender.org/blender/blender/commit/9075ec8269e7cb029f4fab6c1289eb2f1ae2858a
     image.pixels.foreach_get(array.ravel())
-    # TODO check for image.type == "RENDER_RESULT" or "COMPOSITING"
     if color_space is not None:
-        array = color_transform(array, image.colorspace_settings.name, color_space)
+        if image.type == "COMPOSITING":
+            # Viewer Node
+            array = scene_color_transform(array, color_space=color_space, clamp_srgb=clamp_srgb)
+        else:
+            array = color_transform(array, image.colorspace_settings.name, color_space, clamp_srgb=clamp_srgb)
     return rgba(np.flipud(array))
 
 
@@ -486,7 +639,7 @@ def _mode(array, mode):
     elif mode == "L":
         return grayscale(array)
     elif mode == "LA":
-        return _passthrough_alpha(array, grayscale(array))
+        return ensure_alpha(_passthrough_alpha(array, grayscale(array)))
     raise ValueError(f"mode expected one of {['RGB', 'RGBA', 'L', 'LA', None]}, got {repr(mode)}")
 
 

@@ -20,7 +20,8 @@ def _load_dependencies():
         python3_path = os.path.abspath(os.path.join(sys.executable, "..\\..\\..\\..\\python3.dll"))
         if os.path.exists(python3_path):
             os.add_dll_directory(os.path.dirname(python3_path))
-if current_process().name == "__actor__":
+is_actor_process = current_process().name == "__actor__"
+if is_actor_process:
     _load_dependencies()
 
 class ActorContext(enum.IntEnum):

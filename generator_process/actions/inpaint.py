@@ -6,7 +6,7 @@ import random
 from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
-from ...image_utils import image_to_np, height_width, resize, rgb, ImageOrPath
+from ...image_utils import image_to_np, size, resize, rgb, ImageOrPath
 
 def inpaint(
     self,
@@ -76,9 +76,9 @@ def inpaint(
     if fit:
         height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
         width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
-        image = resize(image, (height, width))
+        image = resize(image, (width, height))
     else:
-        height, width = height_width(image)
+        width, height = size(image)
     
     # Seamless
     if seamless_axes == SeamlessAxes.AUTO:
@@ -101,7 +101,7 @@ def inpaint(
                 inputs = processor(text=[text_mask], images=[image], return_tensors="pt", padding=True)
                 outputs = clipseg(**inputs)
                 mask_image = (torch.sigmoid(outputs.logits) >= text_mask_confidence).detach().numpy().astype(np.float32)
-                mask_image = resize(mask_image, (height, width))
+                mask_image = resize(mask_image, (width, height))
         
         def callback(step, timestep, latents):
             if future.check_cancelled():

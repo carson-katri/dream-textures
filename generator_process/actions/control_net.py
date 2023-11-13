@@ -84,8 +84,8 @@ def control_net(
     height = height or 512
     width = width or 512
     rounded_size = (
-        int(8 * (height // 8)),
         int(8 * (width // 8)),
+        int(8 * (height // 8)),
     )
     # StableDiffusionControlNetPipeline.check_image() currently fails without adding batch dimension
     control_image = None if control is None else [image_to_np(c, mode="RGB", size=rounded_size)[np.newaxis] for c in control]
@@ -104,7 +104,7 @@ def control_net(
                 inputs = processor(text=[text_mask], images=[image], return_tensors="pt", padding=True)
                 outputs = clipseg(**inputs)
                 mask_image = (torch.sigmoid(outputs.logits) >= text_mask_confidence).detach().numpy().astype(np.float32)
-                mask_image = resize(mask_image, (height, width))
+                mask_image = resize(mask_image, (width, height))
     else:
         mask_image = None
 
@@ -139,8 +139,8 @@ def control_net(
                         image=image,
                         mask_image=mask_image,
                         strength=strength,
-                        width=rounded_size[1],
-                        height=rounded_size[0],
+                        width=rounded_size[0],
+                        height=rounded_size[1],
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         generator=generator,
@@ -155,8 +155,8 @@ def control_net(
                         controlnet_conditioning_scale=controlnet_conditioning_scale,
                         image=image,
                         strength=strength,
-                        width=rounded_size[1],
-                        height=rounded_size[0],
+                        width=rounded_size[0],
+                        height=rounded_size[1],
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         generator=generator,
@@ -169,8 +169,8 @@ def control_net(
                     negative_prompt=negative_prompt if use_negative_prompt else None,
                     image=control_image,
                     controlnet_conditioning_scale=controlnet_conditioning_scale,
-                    width=rounded_size[1],
-                    height=rounded_size[0],
+                    width=rounded_size[0],
+                    height=rounded_size[1],
                     num_inference_steps=steps,
                     guidance_scale=cfg_scale,
                     generator=generator,

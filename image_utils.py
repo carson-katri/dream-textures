@@ -60,11 +60,11 @@ def _bpy_version_error(required_version, feature, module):
     return Exception(f"{feature} requires Blender {version_str(required_version)} or higher, you are using {version_str(BLENDER_VERSION)}")
 
 
-def height_width(array: NDArray) -> Tuple[int, int]:
+def size(array: NDArray) -> Tuple[int, int]:
     if array.ndim == 2:
-        return array.shape[0:2]
+        return array.shape[1], array.shape[0]
     if array.ndim in [3, 4]:
-        return array.shape[-3:-1]
+        return array.shape[-2], array.shape[-3]
     raise ValueError(f"Can't determine height and width from {array.ndim} dimensions")
 
 
@@ -303,7 +303,8 @@ def render_color_transform(
     ocio_config = OCIO.Config.CreateFromFile(OCIO_CONFIG)
 
     # A reimplementation of `OCIOImpl::createDisplayProcessor` from the Blender source.
-    # https://github.com/dfelinto/blender/blob/87a0770bb969ce37d9a41a04c1658ea09c63933a/intern/opencolorio/ocio_impl.cc#L643
+    # https://github.com/blender/blender/blob/3816fcd8611bc2836ee8b2a5225b378a02141ce4/intern/opencolorio/ocio_impl.cc#L666
+    # Modified to support a final color space transform.
     def create_display_processor(
         config,
         input_colorspace,
@@ -312,7 +313,8 @@ def render_color_transform(
         look,
         scale,  # Exposure
         exponent,  # Gamma
-        inverse
+        inverse,
+        color_space
     ):
         group = OCIO.GroupTransform()
 
@@ -351,36 +353,43 @@ def render_color_transform(
         # Add view and display transform
         display_view_transform = OCIO.DisplayViewTransform()
         display_view_transform.setSrc(input_colorspace)
-        display_view_transform.setLooksBypass(True)
+        display_view_transform.setLooksBypass(use_look)
         display_view_transform.setView(view)
         display_view_transform.setDisplay(display)
         group.appendTransform(display_view_transform)
+
+        if color_space is not None:
+            group.appendTransform(OCIO.ColorSpaceTransform(input_colorspace if display == "None" else display, color_space))
 
         # Gamma
         if exponent != 1:
             exponent_transform = OCIO.ExponentTransform([exponent, exponent, exponent, 1.0])
             group.appendTransform(exponent_transform)
 
-        # Create processor from transform. This is the moment were OCIO validates
-        # the entire transform, no need to check for the validity of inputs above.
         if inverse:
             group.setDirection(OCIO.TransformDirection.TRANSFORM_DIR_INVERSE)
+
+        # Create processor from transform. This is the moment were OCIO validates
+        # the entire transform, no need to check for the validity of inputs above.
         return config.getProcessor(group)
 
     # Exposure and gamma transformations derived from Blender source:
-    # https://github.com/dfelinto/blender/blob/87a0770bb969ce37d9a41a04c1658ea09c63933a/source/blender/imbuf/intern/colormanagement.c#L825
+    # https://github.com/blender/blender/blob/3816fcd8611bc2836ee8b2a5225b378a02141ce4/source/blender/imbuf/intern/colormanagement.cc#L867
     scale = 2 ** exposure
     exponent = 1 / max(gamma, np.finfo(np.float32).eps)
-    processor = create_display_processor(ocio_config, OCIO.ROLE_SCENE_LINEAR, view_transform, display_device, look if look != 'None' else None, scale, exponent, inverse)
-    array = rgba(array)
-    processor.getDefaultCPUProcessor().applyRGBA(array)
-    if clamp_srgb and display_device == "sRGB":
+    processor = create_display_processor(ocio_config, OCIO.ROLE_SCENE_LINEAR, view_transform, display_device, look if look != 'None' else None, scale, exponent, inverse, color_space)
+    array = to_dtype(array, np.float32)
+    c = channels(array)
+    if c in [1, 3]:
+        array = rgb(array)
+        processor.getDefaultCPUProcessor().applyRGB(array)
+    elif c in [2, 4]:
+        array = rgba(array)
+        processor.getDefaultCPUProcessor().applyRGBA(array)
+    else:
+        raise ValueError(f"Can't color transform {c} channels")
+    if clamp_srgb and (color_space == "sRGB" or (display_device == "sRGB" and color_space is None)) and not inverse:
         array = np.clip(array, 0, 1)
-    if color_space is not None:
-        display_color_space = display_device
-        if display_color_space == "None":
-            display_color_space = "Linear"
-        array = color_transform(array, display_color_space, color_space)
     return array
 
 
@@ -506,7 +515,7 @@ def resize(array: NDArray, size: Tuple[int, int], clamp=True):
         for unbatched in array:
             # OpenImageIO can have batched images, but doesn't support resizing them
             image_in = oiio.ImageBuf(unbatched)
-            image_out = oiio.ImageBufAlgo.resize(image_in, roi=oiio.ROI(0, int(size[1]), 0, int(size[0])))
+            image_out = oiio.ImageBufAlgo.resize(image_in, roi=oiio.ROI(0, int(size[0]), 0, int(size[1])))
             if image_out.has_error:
                 raise Exception(image_out.geterror())
             resized.append(image_out.get_pixels(image_in.spec().format))
@@ -524,7 +533,7 @@ def resize(array: NDArray, size: Tuple[int, int], clamp=True):
 
         import torch
         array = torch.from_numpy(np.transpose(array, (0, 3, 1, 2)))
-        array = torch.nn.functional.interpolate(array, size=size, mode="bilinear")
+        array = torch.nn.functional.interpolate(array, size=(size[1], size[0]), mode="bilinear")
         array = np.transpose(array, (0, 2, 3, 1)).numpy()
         array = to_dtype(array, original_dtype)
 
@@ -581,7 +590,7 @@ def np_to_bpy(array: NDArray, name=None, existing_image=None, float_buffer=None,
 
     # create or replace image
     import bpy
-    height, width = height_width(array)
+    width, height = size(array)
     if name is None:
         name = "Untitled" if existing_image is None else existing_image.name
     if existing_image is not None and existing_image.type in ["RENDER_RESULT", "COMPOSITING"]:
@@ -627,6 +636,50 @@ def np_to_bpy(array: NDArray, name=None, existing_image=None, float_buffer=None,
     image.pack()
     image.update()
     return image
+
+
+def render_pass_to_np(
+    render_pass: "bpy.types.RenderPass",
+    size: Tuple[int, int],
+    *,
+    color_management: bool = False,
+    color_space: str | None = None,
+    clamp_srgb: bool = True
+):
+    array = np.empty((*reversed(size), render_pass.channels), dtype=np.float32)
+    render_pass.rect.foreach_get(array.reshape((-1, render_pass.channels)))
+    if color_management:
+        array = scene_color_transform(array, color_space=color_space, clamp_srgb=clamp_srgb)
+    elif color_space is not None:
+        array = color_transform(array, "Linear", color_space, clamp_srgb=clamp_srgb)
+    return np.flipud(array)
+
+
+def np_to_render_pass(
+    array: NDArray,
+    render_pass: "bpy.types.RenderPass",
+    *,
+    inverse_color_management: bool = False,
+    color_space: str | None = None,
+    dtype: DTypeLike = np.float32
+):
+    if inverse_color_management:
+        array = scene_color_transform(array, inverse=True, color_space=color_space)
+    elif color_space is not None:
+        array = color_transform(color_space, "Linear")
+    if channels(array) != render_pass.channels:
+        match render_pass.channels:
+            case 1:
+                array = grayscale(array)
+            case 3:
+                array = rgb(array)
+            case 4:
+                array = rgba(array)
+            case _:
+                raise NotImplementedError(f"Render pass {render_pass.name} unexpectedly requires {render_pass.channels} channels")
+    if dtype is not None:
+        array = to_dtype(array, dtype)
+    render_pass.rect.foreach_set(np.flipud(array).reshape(-1, render_pass.channels))
 
 
 def _mode(array, mode):

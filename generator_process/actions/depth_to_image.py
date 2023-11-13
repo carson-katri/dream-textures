@@ -345,8 +345,8 @@ def depth_to_image(
     height = height or 512
     width = width or 512
     rounded_size = (
-        int(8 * (height // 8)),
         int(8 * (width // 8)),
+        int(8 * (height // 8)),
     )
     depth = image_to_np(depth, mode="L", size=rounded_size, color_space=None)
     image = image_to_np(image, mode="RGB", size=rounded_size)
@@ -377,8 +377,8 @@ def depth_to_image(
                 depth_image=depth,
                 image=image,
                 strength=strength,
-                width=rounded_size[1],
-                height=rounded_size[0],
+                width=rounded_size[0],
+                height=rounded_size[1],
                 num_inference_steps=steps,
                 guidance_scale=cfg_scale,
                 generator=generator,

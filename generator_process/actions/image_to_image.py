@@ -8,7 +8,7 @@ import random
 from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
-from ...image_utils import image_to_np, height_width, resize, ImageOrPath
+from ...image_utils import image_to_np, size, resize, ImageOrPath
 
 
 def image_to_image(
@@ -71,9 +71,9 @@ def image_to_image(
     if fit:
         height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
         width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
-        image = resize(image, (height, width))
+        image = resize(image, (width, height))
     else:
-        height, width = height_width(image)
+        width, height = size(image)
     
     # Seamless
     if seamless_axes == SeamlessAxes.AUTO:

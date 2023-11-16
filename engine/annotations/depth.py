@@ -74,7 +74,7 @@ def render_depth_map(context, collection=None, invert=True, width=None, height=N
         offscreen.free()
         result = depth
         e.set()
-    if main_thread:
+    if main_thread or threading.current_thread() == threading.main_thread():
         _execute()
         return result
     else:

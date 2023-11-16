@@ -20,8 +20,18 @@ def _load_dependencies():
         python3_path = os.path.abspath(os.path.join(sys.executable, "..\\..\\..\\..\\python3.dll"))
         if os.path.exists(python3_path):
             os.add_dll_directory(os.path.dirname(python3_path))
+
+main_thread_rendering = False
 if current_process().name == "__actor__":
     _load_dependencies()
+elif {"-b", "-f", "-a"}.intersection(sys.argv):
+    main_thread_rendering = True
+    import bpy
+    def main_thread_rendering_finished():
+        # starting without -b will allow Blender to continue running with UI after rendering is complete
+        global main_thread_rendering
+        main_thread_rendering = False
+    bpy.app.timers.register(main_thread_rendering_finished, persistent=True)
 
 class ActorContext(enum.IntEnum):
     """
@@ -117,7 +127,18 @@ class Actor:
         match self.context:
             case ActorContext.FRONTEND:
                 self.process = get_context('spawn').Process(target=_start_backend, args=(self.__class__, self._message_queue, self._response_queue), name="__actor__", daemon=True)
-                self.process.start()
+                main_module = sys.modules["__main__"]
+                main_file = getattr(main_module, "__file__", None)
+                if sys.platform == "win32" and main_file == "<blender string>":
+                    # Fix for Blender 4.0 not being able to start a subprocess
+                    # while previously installed addons are being initialized.
+                    try:
+                        main_module.__file__ = None
+                        self.process.start()
+                    finally:
+                        main_module.__file__ = main_file
+                else:
+                    self.process.start()
             case ActorContext.BACKEND:
                 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
                 self._backend_loop()
@@ -198,6 +219,8 @@ class Actor:
 
     def _send(self, name):
         def _send(*args, _block=False, **kwargs):
+            if main_thread_rendering:
+                _block = True
             future = Future()
             def _send_thread(future: Future):
                 self._lock.acquire()

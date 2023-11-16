@@ -84,9 +84,13 @@ def render_ade20k_map(context, collection=None, invert=True):
         gpu.state.depth_test_set('NONE')
         offscreen.free()
         e.set()
-    bpy.app.timers.register(_execute, first_interval=0)
-    e.wait()
-    return result
+    if threading.current_thread() == threading.main_thread():
+        _execute()
+        return result
+    else:
+        bpy.app.timers.register(_execute, first_interval=0)
+        e.wait()
+        return result
 
 def draw_annotation(vertices, indices, color):
     shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')

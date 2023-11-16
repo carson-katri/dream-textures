@@ -215,9 +215,13 @@ def render_openpose_map(context, collection=None):
         offscreen.free()
         result = depth
         e.set()
-    bpy.app.timers.register(_execute, first_interval=0)
-    e.wait()
-    return result
+    if threading.current_thread() == threading.main_thread():
+        _execute()
+        return result
+    else:
+        bpy.app.timers.register(_execute, first_interval=0)
+        e.wait()
+        return result
 
 def draw_circle_2d(center, radius, segments, color):
     m = (1.0 / (segments - 1)) * (math.pi * 2)

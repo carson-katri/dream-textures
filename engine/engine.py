@@ -10,6 +10,7 @@ from ..engine import node_executor
 from .annotations import depth
 from ..property_groups.dream_prompt import backend_options
 from .nodes.pipeline_nodes import NodeStableDiffusion
+from ..generator_process import actor
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -18,6 +19,7 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     bl_label = "Dream Textures"
     bl_use_preview = False
     bl_use_postprocess = True
+    bl_use_gpu_context = actor.main_thread_rendering
 
     def __init__(self):
         pass
@@ -112,7 +114,7 @@ def _update_engine_backend(self, context):
 
 class DreamTexturesRenderEngineProperties(bpy.types.PropertyGroup):
     node_tree: bpy.props.PointerProperty(type=DreamTexturesNodeTree, name="Node Tree", poll=_poll_node_tree)
-    backend: bpy.props.EnumProperty(name="Backend", items=backend_options, default=1, description="The backend to use for all pipeline nodes", update=_update_engine_backend)
+    backend: bpy.props.EnumProperty(name="Backend", items=backend_options, description="The backend to use for all pipeline nodes", update=_update_engine_backend)
 
 def engine_panels():
     bpy.types.RENDER_PT_output.COMPAT_ENGINES.add(DreamTexturesRenderEngine.bl_idname)
@@ -152,8 +154,9 @@ def engine_panels():
             layout = self.layout
             layout.use_property_split = True
 
-            if context.scene.dream_textures_render_engine.node_tree is not None:
-                for input in context.scene.dream_textures_render_engine.node_tree.inputs:
+            node_tree = context.scene.dream_textures_render_engine.node_tree
+            if node_tree is not None and hasattr(node_tree, "inputs"):
+                for input in node_tree.inputs:
                     layout.prop(input, "default_value", text=input.name)
     yield NodeTreeInputsPanel
 

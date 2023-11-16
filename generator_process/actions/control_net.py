@@ -5,7 +5,7 @@ import numpy as np
 import logging
 import os
 import random
-from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, step_latents, step_images, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
 from ...image_utils import image_to_np, rgb, resize, ImageOrPath
@@ -127,7 +127,7 @@ def control_net(
         def callback(step, timestep, latents):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
+            future.add_response(step_latents(pipe, step_preview_mode, latents, generator, step, steps))
         try:
             if image is not None:
                 if mask_image is not None:
@@ -178,12 +178,7 @@ def control_net(
                     output_type="np"
                 )
 
-            future.add_response(ImageGenerationResult(
-                list(result.images),
-                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-                steps,
-                True
-            ))
+            future.add_response(step_images(result.images, generator, steps, steps))
         except InterruptedError:
             pass
     

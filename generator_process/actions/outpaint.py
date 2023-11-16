@@ -1,7 +1,7 @@
 from typing import Tuple, Generator
 import numpy as np
-from .prompt_to_image import ImageGenerationResult
 from ..future import Future
+from ...api.models.generation_result import GenerationResult
 from ...image_utils import image_to_np, rgba, ImageOrPath
 
 def outpaint(
@@ -51,9 +51,9 @@ def outpaint(
     # Crop out the area to generate
     inpaint_tile = outpaint_bounds[offset_origin[0]:offset_origin[0]+height, offset_origin[1]:offset_origin[1]+width]
 
-    def process(_, step: ImageGenerationResult):
-        for i, result_image in enumerate(step.images):
-            step.images[i] = paste(outpaint_bounds.copy(), rgba(result_image), offset_origin)
+    def process(_, step: [GenerationResult]):
+        for res in step:
+            res.image = paste(outpaint_bounds.copy(), rgba(res.image), offset_origin)
         future.add_response(step)
 
     inpaint_generator = self.inpaint(

@@ -7,7 +7,7 @@ import random
 from ...api.models.seamless_axes import SeamlessAxes
 from ...api.models.step_preview_mode import StepPreviewMode
 from ..models import Checkpoint, Optimizations, Scheduler
-from ..models.image_generation_result import ImageGenerationResult
+from ..models.image_generation_result import step_latents, step_images
 from ..future import Future
 
 def prompt_to_image(
@@ -83,7 +83,7 @@ def prompt_to_image(
         def callback(pipe, step, timestep, latents):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(ImageGenerationResult.step_preview(pipe, step_preview_mode, width, height, latents, generator, step))
+            future.add_response(step_latents(pipe, step_preview_mode, latents, generator, step, steps))
         try:
             result = pipe(
                 prompt=prompt,
@@ -118,12 +118,7 @@ def prompt_to_image(
                     output_type="np"
                 )
 
-            future.add_response(ImageGenerationResult(
-                list(result.images),
-                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-                steps,
-                True
-            ))
+            future.add_response(step_images(result.images, generator, steps, steps))
         except InterruptedError:
             pass
     

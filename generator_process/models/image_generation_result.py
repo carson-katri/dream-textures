@@ -1,63 +1,74 @@
-from typing import List
-from dataclasses import dataclass
-from numpy.typing import NDArray
 from ...api.models.step_preview_mode import StepPreviewMode
+from ...api.models.generation_result import GenerationResult
 
-# TODO: replace class use with lists of api.models.generation_result.GenerationResult, keep step_preview() and decoding here
-@dataclass
-class ImageGenerationResult:
-    images: List[NDArray]
-    seeds: List[int]
-    step: int
-    final: bool
-    total: int | None = None
-
-    @staticmethod
-    def step_preview(pipe, mode, width, height, latents, generator, iteration):
-        seeds = [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()]
-        match mode:
-            case StepPreviewMode.FAST:
-                return ImageGenerationResult(
-                    [approximate_decoded_latents(latents[-1:], (height, width))],
-                    seeds[-1:],
-                    iteration,
-                    False
+def step_latents(pipe, mode, latents, generator, iteration, steps):
+    seeds = [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()]
+    scale = 2 ** (len(pipe.vae.config.block_out_channels) - 1)
+    match mode:
+        case StepPreviewMode.FAST:
+            return [
+                GenerationResult(
+                    progress=iteration,
+                    total=steps,
+                    seed=seeds[-1],
+                    image=approximate_decoded_latents(latents[-1:], scale)
                 )
-            case StepPreviewMode.FAST_BATCH:
-                return ImageGenerationResult(
-                    [
-                        approximate_decoded_latents(latents[i:i + 1], (height, width))
-                        for i in range(latents.size(0))
-                    ],
-                    seeds,
-                    iteration,
-                    False
+            ]
+        case StepPreviewMode.FAST_BATCH:
+            return [
+                GenerationResult(
+                    progress=iteration,
+                    total=steps,
+                    seed=seed,
+                    image=approximate_decoded_latents(latent, scale)
                 )
-            case StepPreviewMode.ACCURATE:
-                return ImageGenerationResult(
-                    list(decode_latents(pipe, latents[-1:])),
-                    seeds[-1:],
-                    iteration,
-                    False
+                for latent, seed in zip(latents[:, None], seeds)
+            ]
+        case StepPreviewMode.ACCURATE:
+            return [
+                GenerationResult(
+                    progress=iteration,
+                    total=steps,
+                    seed=seeds[-1],
+                    image=decode_latents(pipe, latents[-1:])
                 )
-            case StepPreviewMode.ACCURATE_BATCH:
-                return ImageGenerationResult(
-                    list(decode_latents(pipe, latents)),
-                    seeds,
-                    iteration,
-                    False
+            ]
+        case StepPreviewMode.ACCURATE_BATCH:
+            return [
+                GenerationResult(
+                    progress=iteration,
+                    total=steps,
+                    seed=seed,
+                    image=decode_latents(pipe, latent)
                 )
-        return ImageGenerationResult(
-            [],
-            seeds,
-            iteration,
-            False
+                for latent, seed in zip(latents[:, None], seeds)
+            ]
+    return [
+        GenerationResult(
+            progress=iteration,
+            total=steps,
+            seed=seeds[-1]
         )
+    ]
+
+def step_images(images, generator, iteration, steps):
+    if not isinstance(images, list) and images.ndim == 3:
+        images = images[None]
+    seeds = [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()]
+    return [
+        GenerationResult(
+            progress=iteration,
+            total=steps,
+            seed=seed,
+            image=image
+        )
+        for image, seed in zip(images, seeds)
+    ]
 
 def decode_latents(pipe, latents):
     return pipe.image_processor.postprocess(pipe.vae.decode(latents / pipe.vae.config.scaling_factor).sample, output_type="np")
 
-def approximate_decoded_latents(latents, size=None):
+def approximate_decoded_latents(latents, scale=None):
     """
     Approximate the decoded latents without using the VAE.
     """
@@ -75,9 +86,9 @@ def approximate_decoded_latents(latents, size=None):
     ], dtype=latents.dtype, device=latents.device)
 
     latent_image = latents[0].permute(1, 2, 0) @ v1_5_latent_rgb_factors
-    if size is not None:
+    if scale is not None:
         latent_image = torch.nn.functional.interpolate(
-            latent_image.permute(2, 0, 1).unsqueeze(0), size=size, mode="nearest"
+            latent_image.permute(2, 0, 1).unsqueeze(0), scale_factor=scale, mode="nearest"
         ).squeeze(0).permute(1, 2, 0)
     latent_image = ((latent_image + 1) / 2).clamp(0, 1).cpu()
     return latent_image.numpy()

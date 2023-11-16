@@ -3,7 +3,7 @@ from .prompt_to_image import Optimizations, Scheduler, StepPreviewMode, _configu
 from ...api.models.seamless_axes import SeamlessAxes
 import random
 from numpy.typing import NDArray
-from ..models import Checkpoint, Optimizations, Scheduler, UpscaleTiler, ImageGenerationResult
+from ..models import Checkpoint, Optimizations, Scheduler, UpscaleTiler, step_images
 from ..future import Future
 from contextlib import nullcontext
 from ...image_utils import rgb, rgba
@@ -80,19 +80,17 @@ def upscale(
             tiler[id] = rgba(tile)
 
         if step_preview_mode != StepPreviewMode.NONE:
-            future.add_response(ImageGenerationResult(
+            future.add_response(step_images(
                 [tiler.combined()],
-                [seed],
+                generator,
                 i + batch_size,
-                (i + batch_size) == len(tiler),
-                total=len(tiler)
+                len(tiler),
             ))
     if step_preview_mode == StepPreviewMode.NONE:
-        future.add_response(ImageGenerationResult(
+        future.add_response(step_images(
             [tiler.combined()],
             [seed],
             len(tiler),
-            True,
-            total=len(tiler)
+            len(tiler)
         ))
     future.set_done()

@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, step_latents, step_images, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
 from ...image_utils import image_to_np, size, resize, ImageOrPath
@@ -86,7 +86,7 @@ def image_to_image(
         def callback(step, timestep, latents):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(ImageGenerationResult.step_preview(pipe, step_preview_mode, width, height, latents, generator, step))
+            future.add_response(step_latents(pipe, step_preview_mode, latents, generator, step, steps))
         try:
             result = pipe(
                 prompt=prompt,
@@ -99,12 +99,7 @@ def image_to_image(
                 callback=callback,
                 output_type="np"
             )
-            future.add_response(ImageGenerationResult(
-                list(result.images),
-                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-                steps,
-                True
-            ))
+            future.add_response(step_images(result.images, generator, steps, steps))
         except InterruptedError:
             pass
     

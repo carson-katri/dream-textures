@@ -7,6 +7,7 @@ import numpy as np
 import enum
 import math
 import threading
+from .compat import UNIFORM_COLOR
 
 class Side(enum.IntEnum):
     HEAD = 0
@@ -183,7 +184,7 @@ def render_openpose_map(context, collection=None):
                         (y - 0.5) * 2
                     )
 
-                shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
+                shader = gpu.shader.from_builtin(UNIFORM_COLOR)
                 batch = batch_for_shader(shader, 'TRI_STRIP', {"pos": [(-ratio, -1, 0), (-ratio, 1, 0), (ratio, -1, 0), (ratio, 1, 0)]})
                 shader.bind()
                 shader.uniform_float("color", (0, 0, 0, 1))
@@ -235,7 +236,7 @@ def draw_circle_2d(center, radius, segments, color):
         for p in range(segments)
     ]
 
-    shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
+    shader = gpu.shader.from_builtin(UNIFORM_COLOR)
     batch = batch_for_shader(shader, 'TRI_FAN', {"pos": coords})
     shader.uniform_float("color", color)
     batch.draw(shader)
@@ -259,7 +260,7 @@ def draw_ellipse_2d(start, end, thickness, segments, color):
         for p in range(segments)
     ]
 
-    shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
+    shader = gpu.shader.from_builtin(UNIFORM_COLOR)
     batch = batch_for_shader(shader, 'TRI_FAN', {"pos": coords})
     shader.uniform_float("color", color)
     batch.draw(shader)

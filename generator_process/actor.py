@@ -129,7 +129,7 @@ class Actor:
                 self.process = get_context('spawn').Process(target=_start_backend, args=(self.__class__, self._message_queue, self._response_queue), name="__actor__", daemon=True)
                 main_module = sys.modules["__main__"]
                 main_file = getattr(main_module, "__file__", None)
-                if sys.platform == "win32" and main_file == "<blender string>":
+                if main_file == "<blender string>":
                     # Fix for Blender 4.0 not being able to start a subprocess
                     # while previously installed addons are being initialized.
                     try:

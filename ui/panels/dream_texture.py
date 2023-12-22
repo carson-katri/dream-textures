@@ -342,10 +342,15 @@ def actions_panel(sub_panel, space_type, get_prompt):
                 else:
                     row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
             else:
-                disabled_row = row.row(align=True)
-                disabled_row.use_property_split = True
-                disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
-                disabled_row.enabled = False
+                if bpy.app.version[0] >= 4:
+                    progress = context.scene.dream_textures_progress
+                    progress_max = bpy.types.Scene.dream_textures_progress.keywords['max']
+                    row.progress(text=f"{progress} / {progress_max}", factor=progress / progress_max)
+                else:
+                    disabled_row = row.row(align=True)
+                    disabled_row.use_property_split = True
+                    disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
+                    disabled_row.enabled = False
             row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
 
             if context.scene.dream_textures_last_execution_time != "":

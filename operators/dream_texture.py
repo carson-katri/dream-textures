@@ -4,12 +4,28 @@ import numpy as np
 from typing import List, Literal
 
 from .notify_result import NotifyResult
+from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..generator_process import Generator
+from ..generator_process.models.optimizations import Optimizations
+from ..diffusers_backend import DiffusersBackend
 from .. import api
-from .. import image_utils
 import time
 import math
+
+def bpy_image(name, width, height, pixels, existing_image):
+    if existing_image is not None and (existing_image.size[0] != width or existing_image.size[1] != height):
+        bpy.data.images.remove(existing_image)
+        existing_image = None
+    if existing_image is None:
+        image = bpy.data.images.new(name, width=width, height=height)
+    else:
+        image = existing_image
+        image.name = name
+    image.pixels.foreach_set(pixels)
+    image.pack()
+    image.update()
+    return image
 
 def get_source_image(context, source: Literal['file', 'open_editor']):
     match source:
@@ -71,126 +87,157 @@ class DreamTexture(bpy.types.Operator):
         context.scene.seamless_result.update_args(generated_args)
         context.scene.seamless_result.update_args(history_template, as_id=True)
 
-        # Setup the progress indicator
-        bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args.steps)
-        scene.dream_textures_info = "Starting..."
-
         # Get any init images
         try:
             init_image = get_source_image(context, prompt.init_img_src)
         except ValueError:
             init_image = None
         if init_image is not None:
-            init_image_color_space = "sRGB"
-            if scene.dream_textures_prompt.use_init_img and scene.dream_textures_prompt.modify_action_source_type in ['depth_map', 'depth']:
-                init_image_color_space = None
-            init_image = image_utils.bpy_to_np(init_image, color_space=init_image_color_space)
-        
-        control_images = None
-        if len(prompt.control_nets) > 0:
-            control_images = [
-                image_utils.bpy_to_np(net.control_image, color_space=None)
-                for net in prompt.control_nets
-            ]
+            init_image = np.flipud(
+                (np.array(init_image.pixels) * 255)
+                    .astype(np.uint8)
+                    .reshape((init_image.size[1], init_image.size[0], init_image.channels))
+            )
 
-        # Callbacks
-        last_data_block = None
-        execution_start = time.time()
-        def step_callback(progress: List[api.GenerationResult]) -> bool:
-            nonlocal last_data_block
-            scene.dream_textures_last_execution_time = f"{time.time() - execution_start:.2f} seconds"
-            scene.dream_textures_progress = progress[-1].progress
-            for area in context.screen.areas:
-                for region in area.regions:
-                    if region.type == "UI":
-                        region.tag_redraw()
-            image = api.GenerationResult.tile_images(progress)
-            if image is None:
-                return CancelGenerator.should_continue
-            last_data_block = image_utils.np_to_bpy(image, f"Step {progress[-1].progress}/{progress[-1].total}", last_data_block)
-            for area in screen.areas:
-                if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
-                    area.spaces.active.image = last_data_block
-            return CancelGenerator.should_continue
+        def execute_backend(control_images):
+            # Setup the progress indicator
+            bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args.steps)
+            scene.dream_textures_info = "Starting..."
+            context.scene.dream_textures_progress = 0
 
-        iteration = 0
-        iteration_limit = len(file_batch_lines) if is_file_batch else generated_args.iterations
-        iteration_square = math.ceil(math.sqrt(iteration_limit))
-        node_pad = np.array((20, 20))
-        node_size = np.array((240, 277)) + node_pad
-        if node_tree is not None:
-            # keep image nodes grid centered but don't go beyond top and left sides of nodes editor
-            node_anchor = node_tree_center + node_size * 0.5 * (-iteration_square, (iteration_limit-1) // iteration_square + 1)
-            node_anchor = np.array((np.maximum(node_tree_top_left[0], node_anchor[0]), np.minimum(node_tree_top_left[1], node_anchor[1]))) + node_pad * (0.5, -0.5)
-        
-        def callback(results: List[api.GenerationResult] | Exception):
-            if isinstance(results, Exception):
-                scene.dream_textures_info = ""
-                scene.dream_textures_progress = 0
-                CancelGenerator.should_continue = None
-                if not isinstance(results, InterruptedError): # this is a user-initiated cancellation
-                    eval('bpy.ops.' + NotifyResult.bl_idname)('INVOKE_DEFAULT', exception=repr(results))
-                raise results
-            else:
+            # Callbacks
+            last_data_block = None
+            execution_start = time.time()
+            def step_callback(progress: List[api.GenerationResult]) -> bool:
                 nonlocal last_data_block
-                nonlocal iteration
-                for result in results:
-                    if result.image is None or result.seed is None:
-                        continue
-                    
-                    # Create a trimmed image name
-                    prompt_string = context.scene.dream_textures_prompt.prompt_structure_token_subject
-                    seed_str_length = len(str(result.seed))
-                    trim_aware_name = (prompt_string[:54 - seed_str_length] + '..') if len(prompt_string) > 54 else prompt_string
-                    name_with_trimmed_prompt = f"{trim_aware_name} ({result.seed})"
-                    image = image_utils.np_to_bpy(result.image, name_with_trimmed_prompt, last_data_block)
-                    last_data_block = None
-                    if node_tree is not None:
-                        nodes = node_tree.nodes
-                        texture_node = nodes.new("ShaderNodeTexImage")
-                        texture_node.image = image
-                        texture_node.location = node_anchor + node_size * ((iteration % iteration_square), -(iteration // iteration_square))
-                        nodes.active = texture_node
-                    for area in screen.areas:
-                        if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
-                            area.spaces.active.image = image
-                    scene.dream_textures_prompt.seed = str(result.seed) # update property in case seed was sourced randomly or from hash
-                    # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
-                    # and as custom property of the image. Needs to be a string because the int from the hash function is too large
-                    image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
-                    image['dream_textures_hash'] = image_hash
-                    scene.dream_textures_prompt.hash = image_hash
-                    history_entry = context.scene.dream_textures_history.add()
-                    for key, value in history_template.items():
-                        match key:
-                            case 'control_nets':
-                                for net in value:
-                                    n = history_entry.control_nets.add()
-                                    for prop in n.__annotations__.keys():
-                                        setattr(n, prop, getattr(net, prop))
-                            case _:
-                                setattr(history_entry, key, value)
-                    history_entry.seed = str(result.seed)
-                    history_entry.hash = image_hash
-                    history_entry.width = result.image.shape[1]
-                    history_entry.height = result.image.shape[0]
-                    if is_file_batch:
-                        history_entry.prompt_structure_token_subject = file_batch_lines[iteration]
-                    iteration += 1
-                if iteration < iteration_limit:
-                    generate_next()
-                else:
+                scene.dream_textures_last_execution_time = f"{time.time() - execution_start:.2f} seconds"
+                scene.dream_textures_progress = progress[-1].progress
+                for area in context.screen.areas:
+                    for region in area.regions:
+                        if region.type == "UI":
+                            region.tag_redraw()
+                image = api.GenerationResult.tile_images(progress)
+                if image is None:
+                    return CancelGenerator.should_continue
+                last_data_block = bpy_image(f"Step {progress[-1].progress}/{progress[-1].total}", image.shape[1], image.shape[0], image.ravel(), last_data_block)
+                for area in screen.areas:
+                    if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
+                        area.spaces.active.image = last_data_block
+                return CancelGenerator.should_continue
+
+            iteration = 0
+            iteration_limit = len(file_batch_lines) if is_file_batch else generated_args.iterations
+            iteration_square = math.ceil(math.sqrt(iteration_limit))
+            node_pad = np.array((20, 20))
+            node_size = np.array((240, 277)) + node_pad
+            if node_tree is not None:
+                # keep image nodes grid centered but don't go beyond top and left sides of nodes editor
+                node_anchor = node_tree_center + node_size * 0.5 * (-iteration_square, (iteration_limit-1) // iteration_square + 1)
+                node_anchor = np.array((np.maximum(node_tree_top_left[0], node_anchor[0]), np.minimum(node_tree_top_left[1], node_anchor[1]))) + node_pad * (0.5, -0.5)
+            
+            def callback(results: List[api.GenerationResult] | Exception):
+                if isinstance(results, Exception):
                     scene.dream_textures_info = ""
                     scene.dream_textures_progress = 0
                     CancelGenerator.should_continue = None
+                    if not isinstance(results, InterruptedError): # this is a user-initiated cancellation
+                        eval('bpy.ops.' + NotifyResult.bl_idname)('INVOKE_DEFAULT', exception=repr(results))
+                    raise results
+                else:
+                    nonlocal last_data_block
+                    nonlocal iteration
+                    for result in results:
+                        if result.image is None or result.seed is None:
+                            continue
+                        
+                        # Create a trimmed image name
+                        prompt_string = context.scene.dream_textures_prompt.prompt_structure_token_subject
+                        seed_str_length = len(str(result.seed))
+                        trim_aware_name = (prompt_string[:54 - seed_str_length] + '..') if len(prompt_string) > 54 else prompt_string
+                        name_with_trimmed_prompt = f"{trim_aware_name} ({result.seed})"
+                        image = bpy_image(name_with_trimmed_prompt, result.image.shape[1], result.image.shape[0], result.image.ravel(), last_data_block)
+                        last_data_block = None
+                        if node_tree is not None:
+                            nodes = node_tree.nodes
+                            texture_node = nodes.new("ShaderNodeTexImage")
+                            texture_node.image = image
+                            texture_node.location = node_anchor + node_size * ((iteration % iteration_square), -(iteration // iteration_square))
+                            nodes.active = texture_node
+                        for area in screen.areas:
+                            if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
+                                area.spaces.active.image = image
+                        scene.dream_textures_prompt.seed = str(result.seed) # update property in case seed was sourced randomly or from hash
+                        # create a hash from the Blender image datablock to use as unique ID of said image and store it in the prompt history
+                        # and as custom property of the image. Needs to be a string because the int from the hash function is too large
+                        image_hash = hashlib.sha256((np.array(image.pixels) * 255).tobytes()).hexdigest()
+                        image['dream_textures_hash'] = image_hash
+                        scene.dream_textures_prompt.hash = image_hash
+                        history_entry = context.scene.dream_textures_history.add()
+                        for key, value in history_template.items():
+                            match key:
+                                case 'control_nets':
+                                    for net in value:
+                                        n = history_entry.control_nets.add()
+                                        for prop in n.__annotations__.keys():
+                                            setattr(n, prop, getattr(net, prop))
+                                case _:
+                                    setattr(history_entry, key, value)
+                        history_entry.seed = str(result.seed)
+                        history_entry.hash = image_hash
+                        history_entry.width = result.image.shape[1]
+                        history_entry.height = result.image.shape[0]
+                        if is_file_batch:
+                            history_entry.prompt_structure_token_subject = file_batch_lines[iteration]
+                        iteration += 1
+                    if iteration < iteration_limit:
+                        generate_next()
+                    else:
+                        scene.dream_textures_info = ""
+                        scene.dream_textures_progress = 0
+                        CancelGenerator.should_continue = None
+            
+            # Call the backend
+            CancelGenerator.should_continue = True # reset global cancellation state
+            def generate_next():
+                args = prompt.generate_args(context, iteration=iteration, init_image=init_image, control_images=control_images)
+                backend.generate(args, step_callback=step_callback, callback=callback)
+            
+            generate_next()
         
-        # Call the backend
-        CancelGenerator.should_continue = True # reset global cancellation state
-        def generate_next():
-            args = prompt.generate_args(context, iteration=iteration, init_image=init_image, control_images=control_images)
-            backend.generate(args, step_callback=step_callback, callback=callback)
-        
-        generate_next()
+        # Prepare ControlNet images
+        if len(prompt.control_nets) > 0:
+            bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=len(prompt.control_nets))
+            scene.dream_textures_info = "Processing Control Images..."
+            context.scene.dream_textures_progress = 0
+            
+            gen = Generator.shared()
+            optimizations = backend.optimizations() if isinstance(backend, DiffusersBackend) else Optimizations()
+            
+            control_images = []
+            def process_next(i):
+                if i >= len(prompt.control_nets):
+                    execute_backend(control_images)
+                    return
+                net = prompt.control_nets[i]
+                future = gen.controlnet_aux(
+                    processor_id=net.processor_id,
+                    image=np.array(
+                        np.flipud(
+                            np.array(net.control_image.pixels)
+                                .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
+                        ) * 255,
+                        np.uint8
+                    ),
+                    optimizations=optimizations
+                )
+                def on_response(future):
+                    control_images.append(future.result(last_only=True))
+                    context.scene.dream_textures_progress = i + 1
+                    process_next(i + 1)
+                future.add_done_callback(on_response)
+            process_next(0)
+        else:
+            execute_backend(None)
 
         return {"FINISHED"}
 

@@ -2,7 +2,8 @@ git+https://github.com/huggingface/diffusers.git@d1222064669a758c476014fb7a09e24
 invisible-watermark
 transformers
 accelerate
-huggingface_hub
+huggingface_hub>=0.19.3
+controlnet-aux==0.0.7
 
 torch>=2.0
 

@@ -92,29 +92,22 @@ class NewEngineNodeTree(bpy.types.Operator):
         #       When testing the type of the resulting node tree using  bpy.data.node_groups['Dream Textures Node Tree'].type it is '' because of that
         bpy.ops.node.new_node_tree(type="DreamTexturesNodeTree", name="Dream Textures Node Editor")
         # Get the newly generated node tree
-        node_trees = []
-        for nt in bpy.data.node_groups:
-            # the correct identifier is bl_idname nowadays
-            if nt.bl_idname == 'DreamTexturesNodeTree' and 'Dream Textures Node Editor' in nt.name:
-                node_trees.append(nt)
-        if node_trees != []:
-            # assume that the newly created node tree is the last one in the list
-            node_tree = node_trees[-1]
-            node_sd = node_tree.nodes.new(type="dream_textures.node_stable_diffusion")
-            node_sd.location = (200, 200)
-            node_out = node_tree.nodes.new(type="NodeGroupOutput")
-            node_tree.outputs.new('NodeSocketColor','Image')
-            node_out.location = (400, 200)
-            node_tree.links.new(node_sd.outputs['Image'], node_out.inputs['Image'])
-            node_props = node_tree.nodes.new(type="dream_textures.node_render_properties")
-            node_props.location = (0,200)
-            node_tree.links.new(node_props.outputs['Resolution X'], node_sd.inputs['Width'])
-            node_tree.links.new(node_props.outputs['Resolution Y'], node_sd.inputs['Height'])
-            # in case the node editor is open, synchronize the open node trees:
-            for area in context.screen.areas:
-                if area.type == 'NODE_EDITOR':
-                    if area.spaces.active.tree_type == 'DreamTexturesNodeTree':
-                        area.spaces.active.node_tree = node_tree
+        node_tree = bpy.data.node_groups[-1]
+        node_sd = node_tree.nodes.new(type="dream_textures.node_stable_diffusion")
+        node_sd.location = (200, 200)
+        node_out = node_tree.nodes.new(type="NodeGroupOutput")
+        node_tree.outputs.new('NodeSocketColor','Image')
+        node_out.location = (400, 200)
+        node_tree.links.new(node_sd.outputs['Image'], node_out.inputs['Image'])
+        node_props = node_tree.nodes.new(type="dream_textures.node_render_properties")
+        node_props.location = (0,200)
+        node_tree.links.new(node_props.outputs['Resolution X'], node_sd.inputs['Width'])
+        node_tree.links.new(node_props.outputs['Resolution Y'], node_sd.inputs['Height'])
+        # in case the node editor is open, synchronize the open node trees:
+        for area in context.screen.areas:
+            if area.type == 'NODE_EDITOR':
+                if area.spaces.active.tree_type == 'DreamTexturesNodeTree':
+                    area.spaces.active.node_tree = node_tree
         return {'FINISHED'}
 
 def draw_device(self, context):

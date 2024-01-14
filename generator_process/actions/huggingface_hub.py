@@ -63,6 +63,7 @@ def hf_list_installed_models(self) -> list[Model]:
         def detect_model_type(snapshot_folder):
             unet_config = os.path.join(snapshot_folder, 'unet', 'config.json')
             config = os.path.join(snapshot_folder, 'config.json')
+            model_index = os.path.join(snapshot_folder, 'model_index.json')
             if os.path.exists(unet_config):
                 with open(unet_config, 'r') as f:
                     return ModelType(json.load(f)['in_channels'])
@@ -71,6 +72,13 @@ def hf_list_installed_models(self) -> list[Model]:
                     config_dict = json.load(f)
                     if '_class_name' in config_dict and config_dict['_class_name'] == 'ControlNetModel':
                         return ModelType.CONTROL_NET
+                    else:
+                        return ModelType.UNKNOWN
+            elif os.path.exists(model_index):
+                with open(model_index, 'r') as f:
+                    model_index_dict = json.load(f)
+                    if '_class_name' in model_index_dict and model_index_dict['_class_name'] in {'WuerstchenDecoderPipeline', 'PixArtAlphaPipeline'}:
+                        return ModelType.PROMPT_TO_IMAGE
                     else:
                         return ModelType.UNKNOWN
             else:

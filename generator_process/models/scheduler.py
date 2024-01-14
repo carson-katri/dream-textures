@@ -19,6 +19,7 @@ class Scheduler(enum.Enum):
     LMS_DISCRETE_KARRAS = "LMS Discrete Karras"
     PNDM = "PNDM"
     UNIPC_MULTISTEP = "UniPC Multistep"
+    LCM = "LCM Multistep"
 
     def create(self, pipeline):
         import diffusers
@@ -50,6 +51,8 @@ class Scheduler(enum.Enum):
                     return diffusers.schedulers.PNDMScheduler
                 case Scheduler.UNIPC_MULTISTEP:
                     return diffusers.schedulers.UniPCMultistepScheduler
+                case Scheduler.LCM:
+                    return diffusers.schedulers.LCMScheduler
         original_config = getattr(pipeline.scheduler, "_original_config", pipeline.scheduler.config)
         scheduler = scheduler_class().from_config(original_config, use_karras_sigmas=self.name.endswith("KARRAS"))
         scheduler._original_config = original_config

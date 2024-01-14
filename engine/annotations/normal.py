@@ -119,7 +119,7 @@ void main()
         offscreen.free()
         result = normal_map
         e.set()
-    if main_thread:
+    if main_thread or threading.current_thread() == threading.main_thread():
         _execute()
         return result
     else:

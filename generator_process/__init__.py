@@ -18,3 +18,4 @@ class Generator(Actor):
     from .actions.ocio_transform import ocio_transform
     from .actions.convert_original_stable_diffusion_to_diffusers import convert_original_stable_diffusion_to_diffusers
     from .actions.detect_seamless import detect_seamless
+    from .actions.controlnet_aux import controlnet_aux

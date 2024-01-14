@@ -3,6 +3,7 @@ invisible-watermark
 transformers
 accelerate
 huggingface_hub
+controlnet-aux==0.0.7
 
 torch-directml
 torch>=2.0

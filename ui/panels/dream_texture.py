@@ -241,11 +241,23 @@ def control_net_panel(sub_panel, space_type, get_prompt):
             layout = self.layout
             prompt = get_prompt(context)
             
-            row = layout.row()
-            row.template_list("SCENE_UL_ControlNetList", "", prompt, "control_nets", prompt, "active_control_net")
-            col = row.column(align=True)
-            col.operator("dream_textures.control_nets_add", icon='ADD', text="")
-            col.operator("dream_textures.control_nets_remove", icon='REMOVE', text="")
+            layout.operator("wm.call_menu", text="Add ControlNet", icon='ADD').name = "DREAM_MT_control_nets_add"
+            for i, control_net in enumerate(prompt.control_nets):
+                box = layout.box()
+                box.use_property_split = False
+                box.use_property_decorate = False
+                
+                row = box.row()
+                row.prop(control_net, "enabled", icon="MODIFIER_ON" if control_net.enabled else "MODIFIER_OFF", icon_only=True, emboss=False)
+                row.prop(control_net, "control_net", text="")
+                row.operator("dream_textures.control_nets_remove", icon='X', emboss=False, text="").index = i
+
+                col = box.column()
+                col.use_property_split = True
+                col.template_ID(control_net, "control_image", open="image.open", text="Image")
+                col.prop(control_net, "processor_id")
+                col.prop(control_net, "conditioning_scale")
+                
     return ControlNetPanel
 
 def advanced_panel(sub_panel, space_type, get_prompt):
@@ -343,10 +355,15 @@ def actions_panel(sub_panel, space_type, get_prompt):
                 else:
                     row.operator(DreamTexture.bl_idname, icon="PLAY", text="Generate")
             else:
-                disabled_row = row.row(align=True)
-                disabled_row.use_property_split = True
-                disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
-                disabled_row.enabled = False
+                if bpy.app.version[0] >= 4:
+                    progress = context.scene.dream_textures_progress
+                    progress_max = bpy.types.Scene.dream_textures_progress.keywords['max']
+                    row.progress(text=f"{progress} / {progress_max}", factor=progress / progress_max)
+                else:
+                    disabled_row = row.row(align=True)
+                    disabled_row.use_property_split = True
+                    disabled_row.prop(context.scene, 'dream_textures_progress', slider=True)
+                    disabled_row.enabled = False
             row.operator(ReleaseGenerator.bl_idname, icon="X", text="")
 
             if context.scene.dream_textures_last_execution_time != "":

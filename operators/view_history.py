@@ -38,6 +38,12 @@ class RecallHistoryEntry(bpy.types.Operator):
                             n = context.scene.dream_textures_prompt.control_nets.add()
                             for k in n.__annotations__.keys():
                                 setattr(n, k, getattr(net, k))
+                    case 'loras':
+                        context.scene.dream_textures_prompt.loras.clear()
+                        for net in selection.loras:
+                            n = context.scene.dream_textures_prompt.loras.add()
+                            for k in n.__annotations__.keys():
+                                setattr(n, k, getattr(net, k))
                     case _:
                         setattr(context.scene.dream_textures_prompt, prop, getattr(selection, prop))
             # when the seed of the promt is found in the available image datablocks, use that one in the open image editor

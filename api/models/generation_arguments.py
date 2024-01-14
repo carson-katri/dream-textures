@@ -6,6 +6,7 @@ from ..models.prompt import Prompt
 from ..models.seamless_axes import SeamlessAxes
 from ..models.step_preview_mode import StepPreviewMode
 from ..models.control_net import ControlNet
+from ..models.lora import Lora
 
 @dataclass
 class GenerationArguments:
@@ -74,6 +75,8 @@ class GenerationArguments:
     """
 
     control_nets: List[ControlNet]
+
+    loras: List[Lora]
 
     @staticmethod
     def _map_property_name(name: str) -> str | List[str] | None:

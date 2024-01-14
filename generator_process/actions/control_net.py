@@ -65,11 +65,11 @@ def control_net(
     # StableDiffusionPipeline w/ caching
     if image is not None:
         if inpaint:
-            pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, optimizations, scheduler, controlnet=control_net)
+            pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, optimizations, scheduler, controlnet=control_net, **kwargs)
         else:
-            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, model, optimizations, scheduler, controlnet=control_net)
+            pipe = self.load_model(diffusers.AutoPipelineForImage2Image, model, optimizations, scheduler, controlnet=control_net, **kwargs)
     else:
-        pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler, controlnet=control_net)
+        pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler, controlnet=control_net, **kwargs)
 
     # Optimizations
     pipe = optimizations.apply(pipe, device)

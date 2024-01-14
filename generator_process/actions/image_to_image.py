@@ -52,7 +52,7 @@ def image_to_image(
     device = self.choose_device(optimizations)
 
     # Stable Diffusion pipeline w/ caching
-    pipe = self.load_model(diffusers.AutoPipelineForImage2Image, model, optimizations, scheduler)
+    pipe = self.load_model(diffusers.AutoPipelineForImage2Image, model, optimizations, scheduler, **kwargs)
 
     # Optimizations
     pipe = optimizations.apply(pipe, device)

@@ -7,6 +7,7 @@ from .operators.upscale import Upscale
 from .operators.project import ProjectDreamTexture, dream_texture_projection_panels
 from .operators.notify_result import NotifyResult
 from .property_groups.control_net import ControlNet, ControlNetsAdd, ControlNetsRemove, ControlNetsAddMenu
+from .property_groups.lora import Lora, LorasAdd, LorasRemove, LorasAddMenu
 from .property_groups.dream_prompt import DreamPrompt
 from .property_groups.seamless_result import SeamlessResult
 from .ui.panels import dream_texture, history, upscaling, render_properties
@@ -38,6 +39,10 @@ CLASSES = (
     ControlNetsAddMenu,
     ControlNetsAdd,
     ControlNetsRemove,
+    
+    LorasAddMenu,
+    LorasAdd,
+    LorasRemove,
 
     DREAM_PT_AdvancedPresets,
     DREAM_MT_AdvancedPresets,
@@ -63,6 +68,7 @@ PREFERENCE_CLASSES = (
     InstallModel,
     Model,
     ControlNet,
+    Lora,
     DreamPrompt,
     SeamlessResult,
     UninstallDependencies,

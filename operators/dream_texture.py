@@ -180,6 +180,11 @@ class DreamTexture(bpy.types.Operator):
                                         n = history_entry.control_nets.add()
                                         for prop in n.__annotations__.keys():
                                             setattr(n, prop, getattr(net, prop))
+                                case 'loras':
+                                    for net in value:
+                                        n = history_entry.loras.add()
+                                        for prop in n.__annotations__.keys():
+                                            setattr(n, prop, getattr(net, prop))
                                 case _:
                                     setattr(history_entry, key, value)
                         history_entry.seed = str(result.seed)

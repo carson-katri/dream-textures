@@ -52,9 +52,9 @@ def prompt_to_image(
 
     # Stable Diffusion pipeline w/ caching
     if sdxl_refiner_model is not None and device == "cuda" and (optimizations.cpu_offloading(device) or torch.cuda.mem_get_info()[1] > 20 * 1024**3 * (1 if optimizations.can_use_half(device) else 2)):
-        pipe, refiner = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler, sdxl_refiner_model=sdxl_refiner_model)
+        pipe, refiner = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler, sdxl_refiner_model=sdxl_refiner_model, **kwargs)
     else:
-        pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler)
+        pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler, **kwargs)
         refiner = None
     height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
     width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor

@@ -72,6 +72,7 @@ def dream_texture_panels():
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, size_panel, get_prompt)
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, init_image_panels, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, control_net_panel, get_prompt)
+        yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, lora_panel, get_prompt)
         yield from create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, advanced_panel, get_prompt)
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, actions_panel, get_prompt)
 
@@ -259,6 +260,34 @@ def control_net_panel(sub_panel, space_type, get_prompt):
                 col.prop(control_net, "conditioning_scale")
                 
     return ControlNetPanel
+
+def lora_panel(sub_panel, space_type, get_prompt):
+    class LoraPanel(sub_panel):
+        """Create a subpanel for LoRA options"""
+        bl_idname = f"DREAM_PT_dream_panel_lora_{space_type}"
+        bl_label = "LoRA"
+        bl_options = {'DEFAULT_CLOSED'}
+
+        def draw(self, context):
+            layout = self.layout
+            prompt = get_prompt(context)
+            
+            layout.operator("wm.call_menu", text="Add LoRA", icon='ADD').name = "DREAM_MT_loras_add"
+            for i, lora in enumerate(prompt.loras):
+                box = layout.box()
+                box.use_property_split = False
+                box.use_property_decorate = False
+                
+                row = box.row()
+                row.prop(lora, "enabled", icon="MODIFIER_ON" if lora.enabled else "MODIFIER_OFF", icon_only=True, emboss=False)
+                row.prop(lora, "lora", text="")
+                row.operator("dream_textures.loras_remove", icon='X', emboss=False, text="").index = i
+
+                col = box.column()
+                col.use_property_split = True
+                col.prop(lora, "weight")
+                
+    return LoraPanel
 
 def advanced_panel(sub_panel, space_type, get_prompt):
     class AdvancedPanel(sub_panel):

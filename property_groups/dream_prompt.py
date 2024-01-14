@@ -1,14 +1,11 @@
 import bpy
 from bpy.props import FloatProperty, IntProperty, EnumProperty, BoolProperty, StringProperty, IntVectorProperty, CollectionProperty
-import os
-import sys
-from typing import _AnnotatedAlias
 
 from ..generator_process.actions.detect_seamless import SeamlessAxes
-from ..generator_process.actions.prompt_to_image import Optimizations, Scheduler, StepPreviewMode
+from ..generator_process.actions.prompt_to_image import StepPreviewMode
 from ..prompt_engineering import *
-from ..preferences import StableDiffusionPreferences
 from .control_net import ControlNet
+from .lora import Lora
 
 import numpy as np
 
@@ -103,7 +100,8 @@ attributes = {
     "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference", update=_model_update),
     
     "control_nets": CollectionProperty(type=ControlNet),
-    "active_control_net": IntProperty(name="Active ControlNet"),
+    
+    "loras": CollectionProperty(type=Lora),
 
     # Prompt
     "prompt_structure": EnumProperty(name="Preset", items=prompt_structures_items, description="Fill in a few simple options to create interesting images quickly"),
@@ -285,6 +283,14 @@ def generate_args(self, context, iteration=0, init_image=None, control_images=No
                 net.conditioning_scale
             )
             for i, net in enumerate(self.control_nets)
+            if net.enabled
+        ],
+        loras=[
+            api.models.lora.Lora(
+                net.lora,
+                net.weight
+            )
+            for net in self.loras
             if net.enabled
         ]
     )

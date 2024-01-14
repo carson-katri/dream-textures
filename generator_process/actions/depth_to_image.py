@@ -327,7 +327,7 @@ def depth_to_image(
     device = self.choose_device(optimizations)
 
     # StableDiffusionPipeline w/ caching
-    pipe = self.load_model(DreamTexturesDepth2ImgPipeline, model, optimizations, scheduler)
+    pipe = self.load_model(DreamTexturesDepth2ImgPipeline, model, optimizations, scheduler, **kwargs)
 
     # Optimizations
     pipe = optimizations.apply(pipe, device)

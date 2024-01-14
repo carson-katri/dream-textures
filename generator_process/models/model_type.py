@@ -16,6 +16,7 @@ class ModelType(enum.IntEnum):
 
     CONTROL_NET = -1
     UNSPECIFIED_CHECKPOINT = -2
+    LORA = -3
 
     @classmethod
     def _missing_(cls, _):

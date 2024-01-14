@@ -69,8 +69,12 @@ def hf_list_installed_models(self) -> list[Model]:
             elif os.path.exists(config):
                 with open(config, 'r') as f:
                     config_dict = json.load(f)
-                    if '_class_name' in config_dict and config_dict['_class_name'] == 'ControlNetModel':
-                        return ModelType.CONTROL_NET
+                    if '_class_name' in config_dict:
+                        match config_dict['_class_name']:
+                            case 'ControlNetModel':
+                                return ModelType.CONTROL_NET
+                            case _:
+                                return ModelType.UNKNOWN
                     else:
                         return ModelType.UNKNOWN
             else:

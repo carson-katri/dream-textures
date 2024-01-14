@@ -89,7 +89,7 @@ class DiffusersBackend(Backend):
             )
         models = {}
         for i, model in enumerate(context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models):
-            if model.model_type in {ModelType.CONTROL_NET.name, ModelType.UNKNOWN.name}:
+            if model.model_type in {ModelType.CONTROL_NET.name, ModelType.LORA.name, ModelType.UNKNOWN.name}:
                 continue
             if model.model_type not in models:
                 models[model.model_type] = [model_case(model, i)]
@@ -113,6 +113,17 @@ class DiffusersBackend(Backend):
             )
             for model in context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
             if model.model_type == ModelType.CONTROL_NET.name
+        ]
+    
+    def list_lora_models(self, context):
+        return [
+            Model(
+                name=model.model_base.replace('models--', '').replace('--', '/'),
+                description="LoRA",
+                id=model.model_base.replace('models--', '').replace('--', '/')
+            )
+            for model in context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.installed_models
+            if model.model_type == ModelType.LORA.name or model.model_type == ModelType.UNKNOWN.name
         ]
 
     def list_schedulers(self, context) -> List[str]:
@@ -150,6 +161,9 @@ class DiffusersBackend(Backend):
             'step_preview_mode': arguments.step_preview_mode,
             
             'sdxl_refiner_model': (checkpoint_lookup.get(self.sdxl_refiner_model) if self.use_sdxl_refiner else None),
+
+            'loras': [checkpoint_lookup.get(c.model) for c in arguments.loras],
+            'lora_weights': [c.weight for c in arguments.loras]
         }
         future: Future
         match arguments.task:

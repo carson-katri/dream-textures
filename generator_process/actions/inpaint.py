@@ -56,7 +56,7 @@ def inpaint(
     device = self.choose_device(optimizations)
 
     # StableDiffusionPipeline w/ caching
-    pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, optimizations, scheduler)
+    pipe = self.load_model(diffusers.AutoPipelineForInpainting, model, optimizations, scheduler, **kwargs)
     height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
     width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
 

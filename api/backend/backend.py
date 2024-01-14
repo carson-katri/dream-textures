@@ -68,6 +68,13 @@ try:
             """
             return []
         
+        def list_lora_models(self, context) -> List[Model]:
+            """Provide a list of available LoRA models.
+
+            The `id` of the model will be provided.
+            """
+            return []
+        
         def list_schedulers(self, context) -> List[str]:
             """Provide a list of available schedulers."""
             ...

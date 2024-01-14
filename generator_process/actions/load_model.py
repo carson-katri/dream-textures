@@ -182,14 +182,14 @@ def _load_pipeline(cache, model, model_class, half_precision, scheduler, **kwarg
     raise exc
 
 
-def load_model(self, model_class, model, optimizations, scheduler, controlnet=None, sdxl_refiner_model=None, **kwargs):
+def load_model(self, model_class, model, optimizations, scheduler, controlnet=None, sdxl_refiner_model=None, loras=[], lora_weights=[], **kwargs):
     import torch
     from diffusers import StableDiffusionXLPipeline, AutoPipelineForImage2Image
     from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
 
     device = self.choose_device(optimizations)
     half_precision = optimizations.can_use_half(device)
-    invalidation_properties = (device, half_precision, optimizations.cpu_offloading(device), controlnet is not None)
+    invalidation_properties = (device, half_precision, optimizations.cpu_offloading(device), controlnet is not None, loras, lora_weights)
 
     # determine models to be removed from cache
     if not hasattr(self, "_pipe") or self._pipe is None or self._pipe[0] != invalidation_properties:
@@ -227,6 +227,17 @@ def load_model(self, model_class, model, optimizations, scheduler, controlnet=No
         except KeyError:
             raise ValueError(f"scheduler expected one of {[s.name for s in Scheduler]}, got {repr(scheduler)}")
     pipe = _load_pipeline(model_cache, model, model_class, half_precision, scheduler, **kwargs)
+
+    # load loras
+    if len(loras) <= 0:
+        return
+    for i, lora in enumerate(loras):
+        pipe.load_lora_weights(lora, adapter_name=str(i))
+    pipe.set_adapters(
+        [str(i) for i in range(len(loras))],
+        adapter_weights=[weight for weight in lora_weights]
+    )
+
     if isinstance(pipe, StableDiffusionXLPipeline) and sdxl_refiner_model is not None:
         return pipe, _load_pipeline(model_cache, sdxl_refiner_model, AutoPipelineForImage2Image, half_precision, scheduler, **kwargs)
     elif sdxl_refiner_model is not None:

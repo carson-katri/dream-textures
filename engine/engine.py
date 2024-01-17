@@ -20,6 +20,7 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     bl_label = "Dream Textures"
     bl_use_preview = False
     bl_use_postprocess = True
+    bl_use_gpu_context = actor.main_thread_rendering
 
     def __init__(self):
         pass
@@ -178,8 +179,9 @@ def engine_panels():
             layout = self.layout
             layout.use_property_split = True
 
-            if context.scene.dream_textures_render_engine.node_tree is not None:
-                for input in context.scene.dream_textures_render_engine.node_tree.inputs:
+            node_tree = context.scene.dream_textures_render_engine.node_tree
+            if node_tree is not None and hasattr(node_tree, "inputs"):
+                for input in node_tree.inputs:
                     layout.prop(input, "default_value", text=input.name)
     yield NodeTreeInputsPanel
 

@@ -10,6 +10,7 @@ from ..engine import node_executor
 from .annotations import depth
 from ..property_groups.dream_prompt import backend_options
 from .nodes.pipeline_nodes import NodeStableDiffusion
+from .nodes.input_nodes import NodeRenderProperties
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -90,23 +91,27 @@ class NewEngineNodeTree(bpy.types.Operator):
         # TODO: Get the name of the default node tree from a config file
         # TODO: type is deprecated https://docs.blender.org/api/current/bpy.types.NodeTree.html 
         #       When testing the type of the resulting node tree using  bpy.data.node_groups['Dream Textures Node Tree'].type it is '' because of that
-        bpy.ops.node.new_node_tree(type="DreamTexturesNodeTree", name="Dream Textures Node Editor")
+        bpy.ops.node.new_node_tree(type=DreamTexturesNodeTree.bl_idname, name="Dream Textures Node Editor")
         # Get the newly generated node tree
         node_tree = bpy.data.node_groups[-1]
-        node_sd = node_tree.nodes.new(type="dream_textures.node_stable_diffusion")
+        node_sd = node_tree.nodes.new(type=NodeStableDiffusion.bl_idname)
         node_sd.location = (200, 200)
         node_out = node_tree.nodes.new(type="NodeGroupOutput")
-        node_tree.outputs.new('NodeSocketColor','Image')
+        # Blender 4.0 uses a new API for in- and outputs
+        if bpy.app.version[0] > 3:
+            node_tree.interface.new_socket('Image', description="Output of the final image.", in_out='OUTPUT', type='NodeSocketColor')
+        else:
+            node_tree.outputs.new('NodeSocketColor','Image')
         node_out.location = (400, 200)
         node_tree.links.new(node_sd.outputs['Image'], node_out.inputs['Image'])
-        node_props = node_tree.nodes.new(type="dream_textures.node_render_properties")
+        node_props = node_tree.nodes.new(type=NodeRenderProperties.bl_idname)
         node_props.location = (0,200)
         node_tree.links.new(node_props.outputs['Resolution X'], node_sd.inputs['Width'])
         node_tree.links.new(node_props.outputs['Resolution Y'], node_sd.inputs['Height'])
         # in case the node editor is open, synchronize the open node trees:
         for area in context.screen.areas:
             if area.type == 'NODE_EDITOR':
-                if area.spaces.active.tree_type == 'DreamTexturesNodeTree':
+                if area.spaces.active.tree_type == DreamTexturesNodeTree.bl_idname:
                     area.spaces.active.node_tree = node_tree
         return {'FINISHED'}
 

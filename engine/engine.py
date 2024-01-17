@@ -11,6 +11,7 @@ from .annotations import depth
 from ..property_groups.dream_prompt import backend_options
 from .nodes.pipeline_nodes import NodeStableDiffusion
 from .nodes.input_nodes import NodeRenderProperties
+from ..generator_process import actor
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""

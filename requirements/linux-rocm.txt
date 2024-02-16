@@ -1,11 +1,11 @@
-diffusers==0.20.2
+git+https://github.com/huggingface/diffusers.git@d1222064669a758c476014fb7a09e24a0c907222
 invisible-watermark
 transformers
 accelerate
 huggingface_hub
 
---extra-index-url https://download.pytorch.org/whl/rocm5.4.2/
-torch>=2.0
+--extra-index-url https://download.pytorch.org/whl/rocm5.6/
+torch>=2.1
 
 # Original SD checkpoint conversion
 pytorch-lightning

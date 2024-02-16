@@ -3,6 +3,7 @@ import gpu
 from gpu_extras.batch import batch_for_shader
 import numpy as np
 import threading
+from .compat import UNIFORM_COLOR
 
 def render_depth_map(context, collection=None, invert=True, width=None, height=None, matrix=None, projection_matrix=None, main_thread=False):
     e = threading.Event()
@@ -29,7 +30,7 @@ def render_depth_map(context, collection=None, invert=True, width=None, height=N
                 gpu.matrix.load_matrix(matrix)
                 gpu.matrix.load_projection_matrix(projection_matrix)
                 
-                shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
+                shader = gpu.shader.from_builtin(UNIFORM_COLOR)
 
                 def render_mesh(mesh, transform):
                     mesh.transform(transform)
@@ -74,7 +75,7 @@ def render_depth_map(context, collection=None, invert=True, width=None, height=N
         offscreen.free()
         result = depth
         e.set()
-    if main_thread:
+    if main_thread or threading.current_thread() == threading.main_thread():
         _execute()
         return result
     else:

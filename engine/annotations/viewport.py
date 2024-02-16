@@ -42,7 +42,7 @@ def render_viewport_color(context, width=None, height=None, matrix=None, project
         offscreen.free()
         result = color
         e.set()
-    if main_thread:
+    if main_thread or threading.current_thread() == threading.main_thread():
         _execute()
         return result
     else:

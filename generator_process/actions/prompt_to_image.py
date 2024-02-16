@@ -51,7 +51,7 @@ def prompt_to_image(
     device = self.choose_device(optimizations)
 
     # Stable Diffusion pipeline w/ caching
-    if device == "cuda" and (optimizations.cpu_offloading(device) or torch.cuda.mem_get_info()[1] > 20 * 1024**3 * (1 if optimizations.can_use_half(device) else 2)):
+    if sdxl_refiner_model is not None and device == "cuda" and (optimizations.cpu_offloading(device) or torch.cuda.mem_get_info()[1] > 20 * 1024**3 * (1 if optimizations.can_use_half(device) else 2)):
         pipe, refiner = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler, sdxl_refiner_model=sdxl_refiner_model)
     else:
         pipe = self.load_model(diffusers.AutoPipelineForText2Image, model, optimizations, scheduler)
@@ -147,8 +147,12 @@ def _conv_forward_asymmetric(self, input, weight, bias):
         working = nn.functional.pad(working, self.asymmetric_padding[1], mode=self.asymmetric_padding_mode[1])
     return nn.functional.conv2d(working, weight, bias, self.stride, nn.modules.utils._pair(0), self.dilation, self.groups)
 
+def _lora_compatible_conv_forward(self, hidden_states, scale=1.0):
+    return self._conv_forward(hidden_states, self.weight, self.bias)
+
 def _configure_model_padding(model, seamless_axes):
     import torch.nn as nn
+    from diffusers.models.lora import LoRACompatibleConv
     """
     Modifies the 2D convolution layers to use a circular padding mode based on the `seamless` and `seamless_axes` options.
     """
@@ -159,8 +163,10 @@ def _configure_model_padding(model, seamless_axes):
         return
     model.seamless_axes = seamless_axes
     for m in model.modules():
-        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+        if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, LoRACompatibleConv)):
             if seamless_axes.x or seamless_axes.y:
+                if isinstance(m, LoRACompatibleConv):
+                    m.forward = _lora_compatible_conv_forward.__get__(m, LoRACompatibleConv)
                 m.asymmetric_padding_mode = (
                     'circular' if seamless_axes.x else 'constant',
                     'circular' if seamless_axes.y else 'constant'
@@ -171,6 +177,8 @@ def _configure_model_padding(model, seamless_axes):
                 )
                 m._conv_forward = _conv_forward_asymmetric.__get__(m, nn.Conv2d)
             else:
+                if isinstance(m, LoRACompatibleConv):
+                    m.forward = LoRACompatibleConv.forward.__get__(m, LoRACompatibleConv)
                 m._conv_forward = nn.Conv2d._conv_forward.__get__(m, nn.Conv2d)
                 if hasattr(m, 'asymmetric_padding_mode'):
                     del m.asymmetric_padding_mode

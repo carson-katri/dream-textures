@@ -100,7 +100,7 @@ def seed_clamp(self, ctx):
         pass # will get hashed once generated
 
 attributes = {
-    "backend": EnumProperty(name="Backend", items=backend_options, default=1, description="Specify which generation backend to use"),
+    "backend": EnumProperty(name="Backend", items=backend_options, description="Specify which generation backend to use"),
     "model": EnumProperty(name="Model", items=model_options, description="Specify which model to use for inference", update=_model_update),
     
     "control_nets": CollectionProperty(type=ControlNet),

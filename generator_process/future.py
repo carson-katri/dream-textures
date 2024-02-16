@@ -1,3 +1,4 @@
+import functools
 import threading
 from typing import Callable, Any, MutableSet
 
@@ -62,9 +63,12 @@ class Future:
         self.cancelled = True
 
     def _run_on_main_thread(self, func):
+        if threading.current_thread() == threading.main_thread():
+            func()
+            return
         try:
             import bpy
-            bpy.app.timers.register(func)
+            bpy.app.timers.register(func, persistent=True)
         except:
             func()
 
@@ -114,6 +118,8 @@ class Future:
         Will only be called once at the first exception.
         """
         self._exception_callbacks.add(callback)
+        if self._exception is not None:
+            self._run_on_main_thread(functools.partial(callback, self, self._exception))
 
     def add_done_callback(self, callback: Callable[['Future'], None]):
         """
@@ -121,3 +127,5 @@ class Future:
         Will only be called once.
         """
         self._done_callbacks.add(callback)
+        if self.done:
+            self._run_on_main_thread(functools.partial(callback, self))

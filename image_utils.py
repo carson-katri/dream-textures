@@ -546,15 +546,16 @@ def resize(array: NDArray, size: Tuple[int, int], clamp=True):
     return array
 
 
-def bpy_to_np(image: "bpy.types.Image", *, color_space: str | None = "sRGB", clamp_srgb=True) -> NDArray:
+def bpy_to_np(image: "bpy.types.Image", *, color_space: str | None = "sRGB", clamp_srgb=True, top_to_bottom=True) -> NDArray:
     """
     Args:
         image: Image to extract pixels values from.
         color_space: The color space to convert to. `None` will apply no color transform.
             Keep in mind that Raw/Non-Color images are handled as if they were in Linear color space.
+        clamp_srgb: Restrict values inside the standard range when converting to sRGB.
+        top_to_bottom: The y-axis is flipped to a more common standard of `top=0` to `bottom=height-1`.
 
     Returns: A ndarray copy of `image.pixels` in RGBA float32 format.
-        The y-axis is flipped to a more common standard of `top=0` to `bottom=height-1`.
     """
     if image.type == "RENDER_RESULT":
         # can't get pixels automatically without rendering again and freezing Blender until it finishes, or saving to disk
@@ -569,10 +570,12 @@ def bpy_to_np(image: "bpy.types.Image", *, color_space: str | None = "sRGB", cla
             array = scene_color_transform(array, color_space=color_space, clamp_srgb=clamp_srgb)
         else:
             array = color_transform(array, image.colorspace_settings.name, color_space, clamp_srgb=clamp_srgb)
-    return rgba(np.flipud(array))
+    if top_to_bottom:
+        array = np.flipud(array)
+    return rgba(array)
 
 
-def np_to_bpy(array: NDArray, name=None, existing_image=None, float_buffer=None, color_space: str = "sRGB") -> "bpy.types.Image":
+def np_to_bpy(array: NDArray, name=None, existing_image=None, float_buffer=None, color_space: str = "sRGB", top_to_bottom=True) -> "bpy.types.Image":
     """
     Args:
         array: Image pixel values. The y-axis is expected to be ordered `top=0` to `bottom=height-1`.
@@ -619,7 +622,8 @@ def np_to_bpy(array: NDArray, name=None, existing_image=None, float_buffer=None,
     # adjust array pixels to fit into image
     if array.ndim == 4:
         array = array[0]
-    array = np.flipud(array)
+    if top_to_bottom:
+        array = np.flipud(array)
     array = to_dtype(array, np.float32)
     if image.channels == 4:
         array = rgba(array)
@@ -644,7 +648,8 @@ def render_pass_to_np(
     *,
     color_management: bool = False,
     color_space: str | None = None,
-    clamp_srgb: bool = True
+    clamp_srgb: bool = True,
+    top_to_bottom: bool = True
 ):
     array = np.empty((*reversed(size), render_pass.channels), dtype=np.float32)
     render_pass.rect.foreach_get(array.reshape((-1, render_pass.channels)))
@@ -652,7 +657,9 @@ def render_pass_to_np(
         array = scene_color_transform(array, color_space=color_space, clamp_srgb=clamp_srgb)
     elif color_space is not None:
         array = color_transform(array, "Linear", color_space, clamp_srgb=clamp_srgb)
-    return np.flipud(array)
+    if top_to_bottom:
+        array = np.flipud(array)
+    return array
 
 
 def np_to_render_pass(
@@ -661,7 +668,8 @@ def np_to_render_pass(
     *,
     inverse_color_management: bool = False,
     color_space: str | None = None,
-    dtype: DTypeLike = np.float32
+    dtype: DTypeLike = np.float32,
+    top_to_bottom: bool = True
 ):
     if inverse_color_management:
         array = scene_color_transform(array, inverse=True, color_space=color_space)
@@ -679,7 +687,9 @@ def np_to_render_pass(
                 raise NotImplementedError(f"Render pass {render_pass.name} unexpectedly requires {render_pass.channels} channels")
     if dtype is not None:
         array = to_dtype(array, dtype)
-    render_pass.rect.foreach_set(np.flipud(array).reshape(-1, render_pass.channels))
+    if top_to_bottom:
+        array = np.flipud(array)
+    render_pass.rect.foreach_set(array.reshape(-1, render_pass.channels))
 
 
 def _mode(array, mode):
@@ -744,7 +754,7 @@ def _dtype_to_type_desc(dtype):
             return oiio.TypeInt64
         case np.float16:
             return oiio.TypeHalf
-        case np.float32 | np.float64:
+        case np.float32:
             return oiio.TypeFloat
         case np.float64:
             # no oiio.TypeDouble
@@ -762,7 +772,8 @@ def image_to_np(
         dtype: DTypeLike | None = np.float32,
         mode: Literal["RGB", "RGBA", "L", "LA"] | None = "RGBA",
         color_space: str | None = "sRGB",
-        size: Tuple[int, int] | None = None
+        size: Tuple[int, int] | None = None,
+        top_to_bottom: bool = True
 ) -> NDArray:
     """
     Opens an image from disk or takes an image object and converts it to `numpy.ndarray`.
@@ -774,6 +785,7 @@ def image_to_np(
         mode: Channel mode of the returned array. `None` won't change the mode. The mode may still change if a color transform occurs.
         color_space: Color space of the returned array. `None` won't apply a color transform. If `image_or_path` is of type `numpy.ndarray` no color transform will occur.
         size: Resize to specific dimensions. `None` won't change the size.
+        top_to_bottom: Flips the image like `bpy_to_np(top_to_bottom=True)` does when `True` and `image_or_path` is a Blender image. Other image sources will only be flipped when `False`.
     """
 
     if image_or_path is None:
@@ -794,6 +806,7 @@ def image_to_np(
                     type_desc = _dtype_to_type_desc(dtype)
                 array = image_or_path.read_image(type_desc)
                 from_color_space = image_or_path.spec().get_string_attribute("oiio:ColorSpace", "sRGB")
+                image_or_path.close()
             elif has_pil:
                 from PIL import Image
                 array = pil_to_np(Image.open(image_or_path))
@@ -814,6 +827,8 @@ def image_to_np(
             raise TypeError(f"not an image or path {repr(type(image_or_path))}")
 
     # apply image requirements
+    if not top_to_bottom:
+        array = np.flipud(array)
     if from_color_space is not None and color_space is not None:
         array = color_transform(array, from_color_space, color_space)
     if dtype is not None:

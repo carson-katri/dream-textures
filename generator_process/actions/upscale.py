@@ -89,7 +89,7 @@ def upscale(
     if step_preview_mode == StepPreviewMode.NONE:
         future.add_response(step_images(
             [tiler.combined()],
-            [seed],
+            generator,
             len(tiler),
             len(tiler)
         ))

@@ -3,6 +3,7 @@ import numpy as np
 import random
 from ..node import DreamTexturesNode
 from ...property_groups.dream_prompt import seed_clamp
+from ... import image_utils
 
 class NodeMath(DreamTexturesNode):
     bl_idname = "dream_textures.node_math"
@@ -173,8 +174,7 @@ class NodeResizeImage(DreamTexturesNode):
         pass
 
     def execute(self, context, image, width, height):
-        import OpenImageIO as oiio
-        result = oiio.ImageBufAlgo.resize(oiio.ImageBuf(image), roi=oiio.ROI(0, int(width), 0, int(height))).get_pixels()
+        result = image_utils.resize(image, (width, height))
         context.update(result)
         return {
             'Resized Image': result,

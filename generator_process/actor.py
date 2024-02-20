@@ -20,6 +20,7 @@ def _load_dependencies():
         python3_path = os.path.abspath(os.path.join(sys.executable, "..\\..\\..\\..\\python3.dll"))
         if os.path.exists(python3_path):
             os.add_dll_directory(os.path.dirname(python3_path))
+
 main_thread_rendering = False
 is_actor_process = current_process().name == "__actor__"
 if is_actor_process:

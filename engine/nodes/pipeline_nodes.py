@@ -14,6 +14,7 @@ from ..annotations import ade20k
 from ... import api
 from ...property_groups.seamless_result import SeamlessAxes
 import threading
+from ... import image_utils
 
 class NodeSocketControlNet(bpy.types.NodeSocket):
     bl_idname = "NodeSocketControlNet"
@@ -109,6 +110,12 @@ class NodeStableDiffusion(DreamTexturesNode):
     def execute(self, context, prompt, negative_prompt, width, height, steps, seed, cfg_scale, controlnets, depth_map, source_image, noise_strength):
         backend: api.Backend = self.prompt.get_backend()
 
+        if np.array(source_image).shape == (4,):
+            # the source image is a default color, ignore it.
+            source_image = None
+        else:
+            source_image = image_utils.color_transform(np.flipud(source_image), "Linear", "sRGB")
+
         def get_task():
             match self.task:
                 case 'prompt_to_image':
@@ -140,16 +147,12 @@ class NodeStableDiffusion(DreamTexturesNode):
             iterations=1,
             control_nets=[map_controlnet(c) for c in controlnets] if isinstance(controlnets, list) else ([map_controlnet(controlnets)] if controlnets is not None else [])
         )
-
-        # the source image is a default color, ignore it.
-        if np.array(source_image).shape == (4,):
-            source_image = None
         
         event = threading.Event()
         result = None
         exception = None
         def step_callback(progress: List[api.GenerationResult]) -> bool:
-            context.update(progress[-1].image)
+            context.update(image_utils.image_to_np(progress[-1].image, color_space=None, top_to_bottom=False))
             return True
             # if context.test_break():
             #     nonlocal result
@@ -163,7 +166,8 @@ class NodeStableDiffusion(DreamTexturesNode):
                 event.set()
             else:
                 nonlocal result
-                result = results[-1].image
+                result = image_utils.image_to_np(results[-1].image, color_space=None, top_to_bottom=False)
+                result = image_utils.color_transform(result, "sRGB", "Linear")
                 event.set()
         
         backend = self.prompt.get_backend()

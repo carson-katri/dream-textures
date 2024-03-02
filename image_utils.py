@@ -762,6 +762,43 @@ def _dtype_to_type_desc(dtype):
     raise TypeError(f"can't convert {dtype} to OpenImageIO.TypeDesc")
 
 
+@RunInSubprocess.when(not has_oiio)
+def path_to_np(
+        path: str | PathLike,
+        *,
+        dtype: DTypeLike | None = np.float32,
+        default_color_space: str | None = None,
+        to_color_space: str | None = "sRGB"
+) -> NDArray:
+    """
+    Args:
+        path: Path to an image file.
+        dtype: Data type of the returned array. `None` won't change the data type. The data type may still change if a color transform occurs.
+        default_color_space: The color space that `image_or_path` will be handled as when it can't be determined automatically.
+        to_color_space: Color space of the returned array. `None` won't apply a color transform.
+    """
+    if has_oiio:
+        import OpenImageIO as oiio
+        image_or_path = oiio.ImageInput.open(str(path))
+        if image_or_path is None:
+            raise IOError(oiio.geterror())
+        type_desc = image_or_path.spec().format
+        if dtype is not None:
+            type_desc = _dtype_to_type_desc(dtype)
+        array = image_or_path.read_image(type_desc)
+        from_color_space = image_or_path.spec().get_string_attribute("oiio:ColorSpace", default_color_space)
+        image_or_path.close()
+    else:
+        from PIL import Image
+        array = pil_to_np(Image.open(path))
+        if dtype is not None:
+            array = to_dtype(array, dtype)
+        from_color_space = "sRGB"
+    if from_color_space is not None and to_color_space is not None:
+        array = color_transform(array, from_color_space, to_color_space)
+    return array
+
+
 ImageOrPath = Union[NDArray, "PIL.Image.Image", str, PathLike]
 """Backend compatible image types"""
 
@@ -792,29 +829,12 @@ def image_to_np(
 
     if image_or_path is None:
         return None
-    array = None
-    from_color_space = default_color_space
 
     # convert image_or_path to numpy.ndarray
     match image_or_path:
         case PathLike() | str():
-            if has_oiio:
-                import OpenImageIO as oiio
-                image_or_path = oiio.ImageInput.open(str(image_or_path))
-                if image_or_path is None:
-                    raise IOError(oiio.geterror())
-                type_desc = image_or_path.spec().format
-                if dtype is not None:
-                    type_desc = _dtype_to_type_desc(dtype)
-                array = image_or_path.read_image(type_desc)
-                from_color_space = image_or_path.spec().get_string_attribute("oiio:ColorSpace", default_color_space)
-                image_or_path.close()
-            elif has_pil:
-                from PIL import Image
-                array = pil_to_np(Image.open(image_or_path))
-                from_color_space = "sRGB"
-            else:
-                raise _bpy_version_error((3, 5, 0), "read image", "OpenImageIO")
+            array = path_to_np(image_or_path, dtype=dtype, default_color_space=default_color_space, to_color_space=to_color_space)
+            from_color_space = None
         case object(__module__="PIL.Image", __class__=type(__name__="Image")):
             # abnormal class check because PIL cannot be imported on frontend
             array = pil_to_np(image_or_path)
@@ -824,8 +844,8 @@ def image_to_np(
             array = bpy_to_np(image_or_path, color_space=to_color_space)
             from_color_space = None
         case np.ndarray():
-            # no way to tell what color space
             array = image_or_path
+            from_color_space = default_color_space
         case _:
             raise TypeError(f"not an image or path {repr(type(image_or_path))}")
 

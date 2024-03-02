@@ -771,7 +771,8 @@ def image_to_np(
         *,
         dtype: DTypeLike | None = np.float32,
         mode: Literal["RGB", "RGBA", "L", "LA"] | None = "RGBA",
-        color_space: str | None = "sRGB",
+        default_color_space: str | None = None,
+        to_color_space: str | None = "sRGB",
         size: Tuple[int, int] | None = None,
         top_to_bottom: bool = True
 ) -> NDArray:
@@ -783,7 +784,8 @@ def image_to_np(
         image_or_path: Either a file path or an instance of `bpy.types.Image`, `PIL.Image.Image`, or `numpy.ndarray`. `None` will return `None`.
         dtype: Data type of the returned array. `None` won't change the data type. The data type may still change if a color transform occurs.
         mode: Channel mode of the returned array. `None` won't change the mode. The mode may still change if a color transform occurs.
-        color_space: Color space of the returned array. `None` won't apply a color transform. If `image_or_path` is of type `numpy.ndarray` no color transform will occur.
+        default_color_space: The color space that `image_or_path` will be handled as when it can't be determined automatically.
+        to_color_space: Color space of the returned array. `None` won't apply a color transform.
         size: Resize to specific dimensions. `None` won't change the size.
         top_to_bottom: Flips the image like `bpy_to_np(top_to_bottom=True)` does when `True` and `image_or_path` is a Blender image. Other image sources will only be flipped when `False`.
     """
@@ -791,7 +793,7 @@ def image_to_np(
     if image_or_path is None:
         return None
     array = None
-    from_color_space = None
+    from_color_space = default_color_space
 
     # convert image_or_path to numpy.ndarray
     match image_or_path:
@@ -805,7 +807,7 @@ def image_to_np(
                 if dtype is not None:
                     type_desc = _dtype_to_type_desc(dtype)
                 array = image_or_path.read_image(type_desc)
-                from_color_space = image_or_path.spec().get_string_attribute("oiio:ColorSpace", "sRGB")
+                from_color_space = image_or_path.spec().get_string_attribute("oiio:ColorSpace", default_color_space)
                 image_or_path.close()
             elif has_pil:
                 from PIL import Image
@@ -819,7 +821,8 @@ def image_to_np(
             from_color_space = "sRGB"
         case object(__module__="bpy.types", __class__=type(__name__="Image")):
             # abnormal class check because bpy cannot be imported on backend
-            array = bpy_to_np(image_or_path, color_space)
+            array = bpy_to_np(image_or_path, color_space=to_color_space)
+            from_color_space = None
         case np.ndarray():
             # no way to tell what color space
             array = image_or_path
@@ -829,8 +832,8 @@ def image_to_np(
     # apply image requirements
     if not top_to_bottom:
         array = np.flipud(array)
-    if from_color_space is not None and color_space is not None:
-        array = color_transform(array, from_color_space, color_space)
+    if from_color_space is not None and to_color_space is not None:
+        array = color_transform(array, from_color_space, to_color_space)
     if dtype is not None:
         array = to_dtype(array, dtype)
     array = _mode(array, mode)

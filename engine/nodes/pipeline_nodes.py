@@ -152,7 +152,7 @@ class NodeStableDiffusion(DreamTexturesNode):
         result = None
         exception = None
         def step_callback(progress: List[api.GenerationResult]) -> bool:
-            context.update(image_utils.image_to_np(progress[-1].image, color_space=None, top_to_bottom=False))
+            context.update(image_utils.image_to_np(progress[-1].image, default_color_space="sRGB", to_color_space="Linear", top_to_bottom=False))
             return True
             # if context.test_break():
             #     nonlocal result
@@ -166,8 +166,7 @@ class NodeStableDiffusion(DreamTexturesNode):
                 event.set()
             else:
                 nonlocal result
-                result = image_utils.image_to_np(results[-1].image, color_space=None, top_to_bottom=False)
-                result = image_utils.color_transform(result, "sRGB", "Linear")
+                result = image_utils.image_to_np(results[-1].image, default_color_space="sRGB", to_color_space="Linear", top_to_bottom=False)
                 event.set()
         
         backend = self.prompt.get_backend()

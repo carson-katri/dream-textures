@@ -348,7 +348,7 @@ def depth_to_image(
         int(8 * (width // 8)),
         int(8 * (height // 8)),
     )
-    depth = image_to_np(depth, mode="L", size=rounded_size, color_space=None)
+    depth = image_to_np(depth, mode="L", size=rounded_size, to_color_space=None)
     image = image_to_np(image, mode="RGB", size=rounded_size)
 
     # Seamless

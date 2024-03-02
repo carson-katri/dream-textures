@@ -92,7 +92,7 @@ class NodeImageFile(DreamTexturesNode):
         pass
 
     def execute(self, context, path):
-        pixels = image_utils.image_to_np(path, color_space="Linear", top_to_bottom=False)
+        pixels = image_utils.image_to_np(path, to_color_space="Linear", top_to_bottom=False)
         context.update(pixels)
         return {
             'Image': pixels

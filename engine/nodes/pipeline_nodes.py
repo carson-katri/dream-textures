@@ -58,12 +58,13 @@ class ControlNet:
                     return np.flipud(ade20k.render_ade20k_map(context, collection=self.collection))
 
 def _update_stable_diffusion_sockets(self, context):
-    self.inputs['Source Image'].enabled = self.task in {'image_to_image', 'depth_to_image', 'inpaint'}
-    self.inputs['Noise Strength'].enabled = self.task in {'image_to_image', 'depth_to_image'}
+    inputs = {socket.name: socket for socket in self.inputs}
+    inputs['Source Image'].enabled = self.task in {'image_to_image', 'depth_to_image', 'inpaint'}
+    inputs['Noise Strength'].enabled = self.task in {'image_to_image', 'depth_to_image'}
     if self.task == 'depth_to_image':
-        self.inputs['Noise Strength'].default_value = 1.0
-    self.inputs['Depth Map'].enabled = self.task == 'depth_to_image'
-    self.inputs['ControlNets'].enabled = self.task != 'depth_to_image'
+        inputs['Noise Strength'].default_value = 1.0
+    inputs['Depth Map'].enabled = self.task == 'depth_to_image'
+    inputs['ControlNets'].enabled = self.task != 'depth_to_image'
 class NodeStableDiffusion(DreamTexturesNode):
     bl_idname = "dream_textures.node_stable_diffusion"
     bl_label = "Stable Diffusion"
@@ -123,7 +124,7 @@ class NodeStableDiffusion(DreamTexturesNode):
                 case 'image_to_image':
                     return api.ImageToImage(source_image, noise_strength, fit=False)
                 case 'depth_to_image':
-                    return api.DepthToImage(depth_map, source_image, noise_strength)
+                    return api.DepthToImage(image_utils.grayscale(depth_map), source_image, noise_strength)
                 case 'inpaint':
                     return api.Inpaint(source_image, noise_strength, fit=False, mask_source=api.Inpaint.MaskSource.ALPHA, mask_prompt="", confidence=0)
         
@@ -180,8 +181,9 @@ class NodeStableDiffusion(DreamTexturesNode):
         }
 
 def _update_control_net_sockets(self, context):
-    self.inputs['Collection'].enabled = self.input_type == 'collection'
-    self.inputs['Image'].enabled = self.input_type == 'image'
+    inputs = {socket.name: socket for socket in self.inputs}
+    inputs['Collection'].enabled = self.input_type == 'collection'
+    inputs['Image'].enabled = self.input_type == 'image'
 class NodeControlNet(DreamTexturesNode):
     bl_idname = "dream_textures.node_control_net"
     bl_label = "ControlNet"

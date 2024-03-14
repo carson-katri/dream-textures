@@ -65,7 +65,7 @@ def size(array: NDArray) -> Tuple[int, int]:
         return array.shape[1], array.shape[0]
     if array.ndim in [3, 4]:
         return array.shape[-2], array.shape[-3]
-    raise ValueError(f"Can't determine height and width from {array.ndim} dimensions")
+    raise ValueError(f"Can't determine size from {array.ndim} dimensions")
 
 
 def channels(array: NDArray) -> int:
@@ -779,15 +779,15 @@ def path_to_np(
     """
     if has_oiio:
         import OpenImageIO as oiio
-        image_or_path = oiio.ImageInput.open(str(path))
-        if image_or_path is None:
+        image = oiio.ImageInput.open(str(path))
+        if image is None:
             raise IOError(oiio.geterror())
-        type_desc = image_or_path.spec().format
+        type_desc = image.spec().format
         if dtype is not None:
             type_desc = _dtype_to_type_desc(dtype)
-        array = image_or_path.read_image(type_desc)
-        from_color_space = image_or_path.spec().get_string_attribute("oiio:ColorSpace", default_color_space)
-        image_or_path.close()
+        array = image.read_image(type_desc)
+        from_color_space = image.spec().get_string_attribute("oiio:ColorSpace", default_color_space)
+        image.close()
     else:
         from PIL import Image
         array = pil_to_np(Image.open(path))

@@ -22,7 +22,8 @@ def _load_dependencies():
             os.add_dll_directory(os.path.dirname(python3_path))
 
 main_thread_rendering = False
-if current_process().name == "__actor__":
+is_actor_process = current_process().name == "__actor__"
+if is_actor_process:
     _load_dependencies()
 elif {"-b", "-f", "-a"}.intersection(sys.argv):
     main_thread_rendering = True

@@ -1,5 +1,4 @@
 from bpy.types import Panel
-from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.upscale import Upscale, get_source_image
 from ...operators.dream_texture import CancelGenerator, ReleaseGenerator

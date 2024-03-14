@@ -58,14 +58,15 @@ class GenerationResult:
         height = images[0].shape[0]
         tiles_x = math.ceil(math.sqrt(len(images)))
         tiles_y = math.ceil(len(images) / tiles_x)
-        tiles = np.zeros((height * tiles_y, width * tiles_x, 4), dtype=np.float32)
+        tiles = np.zeros((height * tiles_y, width * tiles_x, images[0].shape[2]), dtype=images[0].dtype)
         bottom_offset = (tiles_x*tiles_y-len(images)) * width // 2
+        bottom = (tiles_y - 1) * height
         for i, image in enumerate(images):
             x = i % tiles_x
-            y = tiles_y - 1 - int((i - x) / tiles_x)
+            y = int((i - x) / tiles_x)
             x *= width
             y *= height
-            if y == 0:
+            if y == bottom:
                 x += bottom_offset
             tiles[y: y + height, x: x + width] = image
         return tiles

@@ -4,8 +4,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ....api.models.seamless_axes import SeamlessAxes
+from .... import image_utils
 
-def detect_seamless(self, image: NDArray) -> SeamlessAxes:
+def detect_seamless(self, image: image_utils.ImageOrPath) -> SeamlessAxes:
     import os
     import torch
     from torch import nn
@@ -58,9 +59,7 @@ def detect_seamless(self, image: NDArray) -> SeamlessAxes:
     else:
         device = 'cpu'
 
-    if image.shape[2] == 4:
-        # only trained on RGB channels, not alpha
-        image = image[:, :, :3]
+    image = image_utils.image_to_np(image, mode="RGB")
 
     # slice 8 pixels off each edge and combine opposing sides where the seam/seamless portion is in the middle
     # may trim up to 3 pixels off the length of each edge to make them a multiple of 4

@@ -5,6 +5,7 @@ import numpy as np
 from ..node import DreamTexturesNode
 from ..annotations import openpose
 from ..annotations import depth
+from ... import image_utils
 
 class NodeString(DreamTexturesNode):
     bl_idname = "dream_textures.node_string"
@@ -68,16 +69,17 @@ class NodeImage(DreamTexturesNode):
 
     def draw_buttons(self, context, layout):
         layout.template_ID(self, "value", open="image.open")
+        if self.value is not None:
+            layout.prop(self.value.colorspace_settings, "name", text="Color Space")
 
     def execute(self, context):
-        result = np.array(self.value.pixels).reshape((*self.value.size, self.value.channels))
+        result = image_utils.bpy_to_np(self.value, color_space="Linear", top_to_bottom=False)
         context.update(result)
         return {
             'Image': result
         }
 
 class NodeImageFile(DreamTexturesNode):
-    """Requires Blender 3.5+ for OpenImageIO"""
     bl_idname = "dream_textures.node_image_file"
     bl_label = "Image File"
 
@@ -90,10 +92,7 @@ class NodeImageFile(DreamTexturesNode):
         pass
 
     def execute(self, context, path):
-        import OpenImageIO as oiio
-        image = oiio.ImageInput.open(path)
-        pixels = np.flipud(image.read_image('float'))
-        image.close()
+        pixels = image_utils.image_to_np(path, default_color_space="sRGB", to_color_space="Linear", top_to_bottom=False)
         context.update(pixels)
         return {
             'Image': pixels

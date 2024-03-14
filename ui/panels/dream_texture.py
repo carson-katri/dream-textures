@@ -7,7 +7,6 @@ import shutil
 
 from ...absolute_path import CLIPSEG_WEIGHTS_PATH
 from ..presets import DREAM_PT_AdvancedPresets
-from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGenerator, get_source_image
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
@@ -76,7 +75,7 @@ def dream_texture_panels():
         yield create_panel(space_type, 'UI', DreamTexturePanel.bl_idname, actions_panel, get_prompt)
 
 def create_panel(space_type, region_type, parent_id, ctor, get_prompt, use_property_decorate=False, **kwargs):
-    class BasePanel(bpy.types.Panel):
+    class BasePanel(Panel):
         bl_category = "Dream"
         bl_space_type = space_type
         bl_region_type = region_type

@@ -1,12 +1,12 @@
 from typing import Union, Generator, Callable, List, Optional
 import os
 from contextlib import nullcontext
-from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, step_latents, step_images, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
+from ...image_utils import image_to_np, size, resize, rgb, ImageOrPath
 
 def inpaint(
     self,
@@ -17,7 +17,7 @@ def inpaint(
 
     optimizations: Optimizations,
 
-    image: NDArray,
+    image: ImageOrPath,
     fit: bool,
     strength: float,
     prompt: str | list[str],
@@ -44,14 +44,12 @@ def inpaint(
     key: str | None = None,
 
     **kwargs
-) -> Generator[NDArray, None, None]:
+) -> Generator[Future, None, None]:
     future = Future()
     yield future
 
     import diffusers
     import torch
-    from PIL import Image, ImageOps
-    import PIL.Image
     
     device = self.choose_device(optimizations)
 
@@ -74,11 +72,17 @@ def inpaint(
         generator = generator[0]
 
     # Init Image
-    init_image = Image.fromarray(image)
+    image = image_to_np(image)
+    if fit:
+        height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
+        width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
+        image = resize(image, (width, height))
+    else:
+        width, height = size(image)
     
     # Seamless
     if seamless_axes == SeamlessAxes.AUTO:
-        seamless_axes = self.detect_seamless(np.array(init_image) / 255)
+        seamless_axes = self.detect_seamless(image)
     _configure_model_padding(pipe.unet, seamless_axes)
     _configure_model_padding(pipe.vae, seamless_axes)
 
@@ -86,42 +90,40 @@ def inpaint(
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
         match inpaint_mask_src:
             case 'alpha':
-                mask_image = ImageOps.invert(init_image.getchannel('A'))
+                mask_image = 1-image[..., -1]
+                image = rgb(image)
             case 'prompt':
+                image = rgb(image)
                 from transformers import AutoProcessor, CLIPSegForImageSegmentation
 
-                processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+                processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined", do_rescale=False)
                 clipseg = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
-                inputs = processor(text=[text_mask], images=[init_image.convert('RGB')], return_tensors="pt", padding=True)
+                inputs = processor(text=[text_mask], images=[image], return_tensors="pt", padding=True)
                 outputs = clipseg(**inputs)
-                mask_image = Image.fromarray(np.uint8((1 - torch.sigmoid(outputs.logits).lt(text_mask_confidence).int().detach().numpy()) * 255), 'L').resize(init_image.size)
+                mask_image = (torch.sigmoid(outputs.logits) >= text_mask_confidence).detach().numpy().astype(np.float32)
+                mask_image = resize(mask_image, (width, height))
         
         def callback(step, timestep, latents):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
+            future.add_response(step_latents(pipe, step_preview_mode, latents, generator, step, steps))
         try:
             result = pipe(
                 prompt=prompt,
                 negative_prompt=negative_prompt if use_negative_prompt else None,
-                image=[init_image.convert('RGB')] * batch_size,
+                image=[image] * batch_size,
                 mask_image=[mask_image] * batch_size,
                 strength=strength,
-                height=init_image.size[1] if fit else height,
-                width=init_image.size[0] if fit else width,
+                height=height,
+                width=width,
                 num_inference_steps=steps,
                 guidance_scale=cfg_scale,
                 generator=generator,
-                callback=callback
+                callback=callback,
+                output_type="np"
             )
             
-            future.add_response(ImageGenerationResult(
-                [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                    for image in result.images],
-                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-                steps,
-                True
-            ))
+            future.add_response(step_images(result.images, generator, steps, steps))
         except InterruptedError:
             pass
     

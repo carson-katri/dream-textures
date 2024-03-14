@@ -8,7 +8,6 @@ from .api.models.task import PromptToImage, ImageToImage, Inpaint, DepthToImage,
 from .api.models.fix_it_error import FixItError
 
 from .generator_process import Generator
-from .generator_process.actions.prompt_to_image import ImageGenerationResult
 from .generator_process.future import Future
 from .generator_process.models import CPUOffload, ModelType, Optimizations, Scheduler
 
@@ -236,24 +235,13 @@ class DiffusersBackend(Backend):
                 )
             case _:
                 raise NotImplementedError()
-        def on_step(future: Future, step_image: ImageGenerationResult):
-            if len(step_image.images) == 0:
-                results = [(GenerationResult(progress=step_image.step, total=step_image.total or arguments.steps, seed=step_image.seeds[-1]))]
-            else:
-                results = [
-                    GenerationResult(progress=step_image.step, total=step_image.total or arguments.steps, image=step_image.images[i], seed=step_image.seeds[i])
-                    for i in range(len(step_image.images))
-                ]
-            should_continue = step_callback(results)
+        def on_step(future: Future, step_image: [GenerationResult]):
+            should_continue = step_callback(step_image)
             if not should_continue:
                 future.cancel()
                 callback(InterruptedError())
         def on_done(future: Future):
-            result: ImageGenerationResult = future.result(last_only=True)
-            callback([
-                GenerationResult(progress=result.step, total=arguments.steps, image=result.images[i], seed=result.seeds[i])
-                for i in range(len(result.images))
-            ])
+            callback(future.result(last_only=True))
         def on_exception(_, exception):
             callback(exception)
         future.add_response_callback(on_step)

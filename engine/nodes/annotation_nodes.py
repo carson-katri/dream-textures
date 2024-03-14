@@ -13,7 +13,8 @@ annotation_src = (
 )
 
 def _update_annotation_inputs(self, context):
-    self.inputs['Collection'].enabled = self.src == 'collection'
+    inputs = {socket.name: socket for socket in self.inputs}
+    inputs['Collection'].enabled = self.src == 'collection'
 
 class NodeAnnotationDepth(DreamTexturesNode):
     bl_idname = "dream_textures.node_annotation_depth"

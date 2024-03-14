@@ -6,6 +6,7 @@ from typing import List
 import threading
 from .generator_process import Generator
 from . import api
+from . import image_utils
 
 pass_inputs = [
     ('color', 'Color', 'Provide the scene color as input'),
@@ -84,70 +85,53 @@ def unregister_render_pass():
     # cycles.CyclesRender.__del__ = del_original
 
 def _render_dream_textures_pass(self, layer, size, scene, render_pass, render_result):
+    def combined():
+        self.update_stats("Dream Textures", "Applying color management transforms")
+        return image_utils.render_pass_to_np(layer.passes["Combined"], size, color_management=True, color_space="sRGB")
+
+    def depth():
+        d = image_utils.render_pass_to_np(layer.passes["Depth"], size).squeeze(2)
+        return (1 - np.interp(d, [0, np.ma.masked_equal(d, d.max(), copy=False).max()], [0, 1]))
+
     self.update_stats("Dream Textures", "Starting")
-    
-    rect = layer.passes["Combined"].rect
-
-    match scene.dream_textures_render_properties_pass_inputs:
-        case 'color': pass
-        case 'depth' | 'color_depth':
-            depth = np.empty((size[0] * size[1], 1), dtype=np.float32)
-            layer.passes["Depth"].rect.foreach_get(depth)
-            depth = (1 - np.interp(depth, [0, np.ma.masked_equal(depth, depth.max(), copy=False).max()], [0, 1])).reshape((size[1], size[0]))
-    
-    combined_pixels = np.empty((size[0] * size[1], 4), dtype=np.float32)
-    rect.foreach_get(combined_pixels)
-
-    gen = Generator.shared()
-    self.update_stats("Dream Textures", "Applying color management transforms")
-    combined_pixels = gen.ocio_transform(
-        combined_pixels,
-        config_path=os.path.join(bpy.utils.resource_path('LOCAL'), 'datafiles/colormanagement/config.ocio'),
-        exposure=scene.view_settings.exposure,
-        gamma=scene.view_settings.gamma,
-        view_transform=scene.view_settings.view_transform,
-        display_device=scene.display_settings.display_device,
-        look=scene.view_settings.look,
-        inverse=False
-    ).result()
-
-    self.update_stats("Dream Textures", "Generating...")
     
     prompt = scene.dream_textures_render_properties_prompt
     match scene.dream_textures_render_properties_pass_inputs:
         case 'color':
             task = api.ImageToImage(
-                np.flipud(combined_pixels.reshape((size[1], size[0], 4)) * 255).astype(np.uint8),
+                combined(),
                 prompt.strength,
                 True
             )
         case 'depth':
             task = api.DepthToImage(
-                depth,
+                depth(),
                 None,
                 prompt.strength
             )
         case 'color_depth':
             task = api.DepthToImage(
-                depth,
-                np.flipud(combined_pixels.reshape((size[1], size[0], 4)) * 255).astype(np.uint8),
+                depth(),
+                combined(),
                 prompt.strength
             )
     event = threading.Event()
+    dream_pixels = None
     def step_callback(progress: List[api.GenerationResult]) -> bool:
         self.update_progress(progress[-1].progress / progress[-1].total)
-        render_pass.rect.foreach_set(progress[-1].image.reshape((size[0] * size[1], 4)))
+        image_utils.np_to_render_pass(progress[-1].image, render_pass)
         self.update_result(render_result) # This does not seem to have an effect.
         return True
     def callback(results: List[api.GenerationResult] | Exception):
-        nonlocal combined_pixels
-        combined_pixels = results[-1].image
+        nonlocal dream_pixels
+        dream_pixels = results[-1].image
         event.set()
     
     backend: api.Backend = prompt.get_backend()
     generated_args: api.GenerationArguments = prompt.generate_args(bpy.context)
     generated_args.task = task
     generated_args.size = size
+    self.update_stats("Dream Textures", "Generating...")
     backend.generate(
         generated_args,
         step_callback=step_callback,
@@ -158,18 +142,6 @@ def _render_dream_textures_pass(self, layer, size, scene, render_pass, render_re
 
     # Perform an inverse transform so when Blender applies its transform everything looks correct.
     self.update_stats("Dream Textures", "Applying inverse color management transforms")
-    combined_pixels = gen.ocio_transform(
-        combined_pixels.reshape((size[0] * size[1], 4)),
-        config_path=os.path.join(bpy.utils.resource_path('LOCAL'), 'datafiles/colormanagement/config.ocio'),
-        exposure=scene.view_settings.exposure,
-        gamma=scene.view_settings.gamma,
-        view_transform=scene.view_settings.view_transform,
-        display_device=scene.display_settings.display_device,
-        look=scene.view_settings.look,
-        inverse=True
-    ).result()
-
-    combined_pixels = combined_pixels.reshape((size[0] * size[1], 4))
-    render_pass.rect.foreach_set(combined_pixels)
+    image_utils.np_to_render_pass(dream_pixels, render_pass, inverse_color_management=True, color_space="sRGB")
 
     self.update_stats("Dream Textures", "Finished")

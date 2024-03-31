@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.typing import NDArray
 from ..models.optimizations import Optimizations
+from ...image_utils import np_to_pil
 
 def controlnet_aux(
     self,
@@ -20,5 +21,5 @@ def controlnet_aux(
     device = self.choose_device(optimizations)
     processor.processor.to(device)
     
-    processed_image = processor(image)
+    processed_image = processor(np_to_pil(image))
     return np.array(processed_image) / 255.0

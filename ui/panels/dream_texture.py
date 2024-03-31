@@ -1,21 +1,14 @@
+import bpy
 from bpy.types import Panel
-from bpy_extras.io_utils import ImportHelper
-
-import webbrowser
-import os
-import shutil
-
-from ...absolute_path import CLIPSEG_WEIGHTS_PATH
 from ..presets import DREAM_PT_AdvancedPresets
 from ...prompt_engineering import *
 from ...operators.dream_texture import DreamTexture, ReleaseGenerator, CancelGenerator, get_source_image
 from ...operators.open_latest_version import OpenLatestVersion, is_force_show_download, new_version_available
 from ...operators.view_history import ImportPromptFile
 from ..space_types import SPACE_TYPES
-from ...property_groups.dream_prompt import DreamPrompt, backend_options
-from ...generator_process.actions.prompt_to_image import Optimizations
 from ...generator_process.actions.detect_seamless import SeamlessAxes
 from ...api.models import FixItError
+from ...property_groups.dream_prompt import DreamPrompt
 from ... import api
 
 def dream_texture_panels():

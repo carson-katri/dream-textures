@@ -249,7 +249,7 @@ class DiffusersBackend(Backend):
         future.add_done_callback(on_done)
 
     def validate(self, arguments: GenerationArguments):
-        model = model_lookup.get(arguments.model.id)
+        model = None if arguments.model is None else model_lookup.get(arguments.model.id)
         if model is None:
             raise FixItError("No model selected.", FixItError.ChangeProperty("model"))
         else:

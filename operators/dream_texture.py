@@ -4,28 +4,14 @@ import numpy as np
 from typing import List, Literal
 
 from .notify_result import NotifyResult
-from ..pil_to_image import *
 from ..prompt_engineering import *
 from ..generator_process import Generator
+from .. import api
+from .. import image_utils
 from ..generator_process.models.optimizations import Optimizations
 from ..diffusers_backend import DiffusersBackend
-from .. import api
 import time
 import math
-
-def bpy_image(name, width, height, pixels, existing_image):
-    if existing_image is not None and (existing_image.size[0] != width or existing_image.size[1] != height):
-        bpy.data.images.remove(existing_image)
-        existing_image = None
-    if existing_image is None:
-        image = bpy.data.images.new(name, width=width, height=height)
-    else:
-        image = existing_image
-        image.name = name
-    image.pixels.foreach_set(pixels)
-    image.pack()
-    image.update()
-    return image
 
 def get_source_image(context, source: Literal['file', 'open_editor']):
     match source:
@@ -87,23 +73,21 @@ class DreamTexture(bpy.types.Operator):
         context.scene.seamless_result.update_args(generated_args)
         context.scene.seamless_result.update_args(history_template, as_id=True)
 
-        # Get any init images
-        try:
-            init_image = get_source_image(context, prompt.init_img_src)
-        except ValueError:
-            init_image = None
-        if init_image is not None:
-            init_image = np.flipud(
-                (np.array(init_image.pixels) * 255)
-                    .astype(np.uint8)
-                    .reshape((init_image.size[1], init_image.size[0], init_image.channels))
-            )
-
         def execute_backend(control_images):
             # Setup the progress indicator
             bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=generated_args.steps)
             scene.dream_textures_info = "Starting..."
-            context.scene.dream_textures_progress = 0
+
+            # Get any init images
+            try:
+                init_image = get_source_image(context, prompt.init_img_src)
+            except ValueError:
+                init_image = None
+            if init_image is not None:
+                init_image_color_space = "sRGB"
+                if scene.dream_textures_prompt.use_init_img and scene.dream_textures_prompt.modify_action_source_type in ['depth_map', 'depth']:
+                    init_image_color_space = None
+                init_image = image_utils.bpy_to_np(init_image, color_space=init_image_color_space)
 
             # Callbacks
             last_data_block = None
@@ -119,7 +103,7 @@ class DreamTexture(bpy.types.Operator):
                 image = api.GenerationResult.tile_images(progress)
                 if image is None:
                     return CancelGenerator.should_continue
-                last_data_block = bpy_image(f"Step {progress[-1].progress}/{progress[-1].total}", image.shape[1], image.shape[0], image.ravel(), last_data_block)
+                last_data_block = image_utils.np_to_bpy(image, f"Step {progress[-1].progress}/{progress[-1].total}", last_data_block)
                 for area in screen.areas:
                     if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                         area.spaces.active.image = last_data_block
@@ -155,7 +139,7 @@ class DreamTexture(bpy.types.Operator):
                         seed_str_length = len(str(result.seed))
                         trim_aware_name = (prompt_string[:54 - seed_str_length] + '..') if len(prompt_string) > 54 else prompt_string
                         name_with_trimmed_prompt = f"{trim_aware_name} ({result.seed})"
-                        image = bpy_image(name_with_trimmed_prompt, result.image.shape[1], result.image.shape[0], result.image.ravel(), last_data_block)
+                        image = image_utils.np_to_bpy(result.image, name_with_trimmed_prompt, last_data_block)
                         last_data_block = None
                         if node_tree is not None:
                             nodes = node_tree.nodes
@@ -195,7 +179,7 @@ class DreamTexture(bpy.types.Operator):
                         scene.dream_textures_info = ""
                         scene.dream_textures_progress = 0
                         CancelGenerator.should_continue = None
-            
+        
             # Call the backend
             CancelGenerator.should_continue = True # reset global cancellation state
             def generate_next():
@@ -209,10 +193,10 @@ class DreamTexture(bpy.types.Operator):
             bpy.types.Scene.dream_textures_progress = bpy.props.IntProperty(name="", default=0, min=0, max=len(prompt.control_nets))
             scene.dream_textures_info = "Processing Control Images..."
             context.scene.dream_textures_progress = 0
-            
+
             gen = Generator.shared()
             optimizations = backend.optimizations() if isinstance(backend, DiffusersBackend) else Optimizations()
-            
+
             control_images = []
             def process_next(i):
                 if i >= len(prompt.control_nets):
@@ -221,13 +205,7 @@ class DreamTexture(bpy.types.Operator):
                 net = prompt.control_nets[i]
                 future = gen.controlnet_aux(
                     processor_id=net.processor_id,
-                    image=np.array(
-                        np.flipud(
-                            np.array(net.control_image.pixels)
-                                .reshape((net.control_image.size[1], net.control_image.size[0], net.control_image.channels))
-                        ) * 255,
-                        np.uint8
-                    ),
+                    image=image_utils.bpy_to_np(net.control_image, color_space=None),
                     optimizations=optimizations
                 )
                 def on_response(future):

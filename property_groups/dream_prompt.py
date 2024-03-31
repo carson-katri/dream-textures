@@ -264,7 +264,7 @@ def generate_args(self, context, iteration=0, init_image=None, control_images=No
 
     return api.GenerationArguments(
         task=task,
-        model=next(model for model in self.get_backend().list_models(context) if model is not None and model.id == self.model),
+        model=next((model for model in self.get_backend().list_models(context) if model is not None and model.id == self.model), None),
         prompt=api.Prompt(
             file_batch_lines[iteration:iteration+batch_size] if is_file_batch else [self.generate_prompt()] * batch_size,
             file_batch_lines_negative[iteration:iteration+batch_size] if is_file_batch else ([self.negative_prompt] * batch_size if self.use_negative_prompt else None)

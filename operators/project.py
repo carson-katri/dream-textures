@@ -23,6 +23,7 @@ import tempfile
 from ..engine.annotations.depth import render_depth_map
 
 from .. import api
+from .. import image_utils
 
 framebuffer_arguments = [
     ('depth', 'Depth', 'Only provide the scene depth as input'),
@@ -357,7 +358,7 @@ class ProjectDreamTexture(bpy.types.Operator):
 
         context.scene.dream_textures_info = "Rendering viewport depth..."
 
-        depth = render_depth_map(
+        depth = np.flipud(render_depth_map(
             context.evaluated_depsgraph_get(),
             collection=None,
             width=region_width,
@@ -365,7 +366,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             matrix=context.space_data.region_3d.view_matrix,
             projection_matrix=context.space_data.region_3d.window_matrix,
             main_thread=True
-        )
+        ))
         
         texture = None
 
@@ -373,11 +374,7 @@ class ProjectDreamTexture(bpy.types.Operator):
             nonlocal texture
             context.scene.dream_textures_progress = progress[-1].progress
             image = api.GenerationResult.tile_images(progress)
-            if texture is None:
-                texture = bpy.data.images.new(name="Step", width=image.shape[1], height=image.shape[0])
-            texture.name = f"Step {progress[-1].progress}/{progress[-1].total}"
-            texture.pixels[:] = image.ravel()
-            texture.update()
+            texture = image_utils.np_to_bpy(image, f"Step {progress[-1].progress}/{progress[-1].total}", texture)
             image_texture_node.image = texture
             return CancelGenerator.should_continue
 
@@ -399,13 +396,7 @@ class ProjectDreamTexture(bpy.types.Operator):
                 trim_aware_name = (prompt_subject[:54 - seed_str_length] + '..') if len(prompt_subject) > 54 else prompt_subject
                 name_with_trimmed_prompt = f"{trim_aware_name} ({result.seed})"
 
-                if texture is None:
-                    texture = bpy.data.images.new(name=name_with_trimmed_prompt, width=result.image.shape[1], height=result.image.shape[0])
-                texture.name = name_with_trimmed_prompt
-                material.name = name_with_trimmed_prompt
-                texture.pixels[:] = result.image.ravel()
-                texture.update()
-                texture.pack()
+                texture = image_utils.np_to_bpy(result.image, name_with_trimmed_prompt, texture)
                 image_texture_node.image = texture
                 if context.scene.dream_textures_project_bake:
                     for bm, src_uv_layer in target_objects:
@@ -430,7 +421,7 @@ class ProjectDreamTexture(bpy.types.Operator):
         image_data = bpy.data.images.load(init_img_path) if init_img_path is not None else None
         image = np.asarray(image_data.pixels).reshape((*depth.shape, image_data.channels)) if image_data is not None else None
         if context.scene.dream_textures_project_use_control_net:
-            generated_args: api.GenerationArguments = context.scene.dream_textures_project_prompt.generate_args(context, init_image=image, control_images=[np.flipud(depth)])
+            generated_args: api.GenerationArguments = context.scene.dream_textures_project_prompt.generate_args(context, init_image=image, control_images=[image_utils.rgba(depth)])
             backend.generate(generated_args, step_callback=step_callback, callback=callback)
         else:
             generated_args: api.GenerationArguments = context.scene.dream_textures_project_prompt.generate_args(context)

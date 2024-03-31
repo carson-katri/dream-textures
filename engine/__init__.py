@@ -101,8 +101,7 @@ def register():
     bpy.utils.register_class(NodeString)
     bpy.utils.register_class(NodeCollection)
     bpy.utils.register_class(NodeImage)
-    if bpy.app.version >= (3, 5, 0):
-        bpy.utils.register_class(NodeImageFile)
+    bpy.utils.register_class(NodeImageFile)
     bpy.utils.register_class(NodeRenderProperties)
     
     bpy.utils.register_class(NodeAnnotationDepth)
@@ -118,8 +117,7 @@ def register():
     bpy.utils.register_class(NodeClamp)
     bpy.utils.register_class(NodeFramePath)
     bpy.utils.register_class(NodeCropImage)
-    if bpy.app.version >= (3, 5, 0):
-        bpy.utils.register_class(NodeResizeImage)
+    bpy.utils.register_class(NodeResizeImage)
     bpy.utils.register_class(NodeJoinImages)
     bpy.utils.register_class(NodeColorCorrect)
     bpy.utils.register_class(NodeSeparateColor)
@@ -152,8 +150,7 @@ def unregister():
     bpy.utils.unregister_class(NodeString)
     bpy.utils.unregister_class(NodeCollection)
     bpy.utils.unregister_class(NodeImage)
-    if bpy.app.version >= (3, 5, 0):
-        bpy.utils.unregister_class(NodeImageFile)
+    bpy.utils.unregister_class(NodeImageFile)
     bpy.utils.unregister_class(NodeRenderProperties)
 
     bpy.utils.unregister_class(NodeAnnotationDepth)
@@ -169,8 +166,7 @@ def unregister():
     bpy.utils.unregister_class(NodeClamp)
     bpy.utils.unregister_class(NodeFramePath)
     bpy.utils.unregister_class(NodeCropImage)
-    if bpy.app.version >= (3, 5, 0):
-        bpy.utils.unregister_class(NodeResizeImage)
+    bpy.utils.unregister_class(NodeResizeImage)
     bpy.utils.unregister_class(NodeJoinImages)
     bpy.utils.unregister_class(NodeColorCorrect)
     bpy.utils.unregister_class(NodeSeparateColor)

@@ -3,9 +3,10 @@ from .prompt_to_image import Optimizations, Scheduler, StepPreviewMode, _configu
 from ...api.models.seamless_axes import SeamlessAxes
 import random
 from numpy.typing import NDArray
-from ..models import Checkpoint, Optimizations, Scheduler, UpscaleTiler, ImageGenerationResult
+from ..models import Checkpoint, Optimizations, Scheduler, UpscaleTiler, step_images
 from ..future import Future
 from contextlib import nullcontext
+from ...image_utils import rgb, rgba
 
 def upscale(
     self,
@@ -32,7 +33,6 @@ def upscale(
     future = Future()
     yield future
 
-    from PIL import Image, ImageOps
     import torch
     import diffusers
 
@@ -58,15 +58,13 @@ def upscale(
     _configure_model_padding(pipe.unet, seamless_axes & ~tiler.seamless_axes)
     _configure_model_padding(pipe.vae, seamless_axes & ~tiler.seamless_axes)
 
-    if image.shape[2] == 4:
-        image = image[:, :, :3]
     for i in range(0, len(tiler), optimizations.batch_size):
         if future.check_cancelled():
             future.set_done()
             return
         batch_size = min(len(tiler)-i, optimizations.batch_size)
         ids = list(range(i, i+batch_size))
-        low_res_tiles = [Image.fromarray(tiler[id]).convert('RGB') for id in ids]
+        low_res_tiles = [rgb(tiler[id]) for id in ids]
         # Inference
         with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
             high_res_tiles = pipe(
@@ -75,28 +73,24 @@ def upscale(
                 num_inference_steps=steps,
                 generator=generator,
                 guidance_scale=cfg_scale,
+                output_type="np"
             ).images
 
-
         for id, tile in zip(ids, high_res_tiles):
-            tiler[id] = np.array(tile.convert('RGBA'))
-        step = None
+            tiler[id] = rgba(tile)
+
         if step_preview_mode != StepPreviewMode.NONE:
-            step = Image.fromarray(tiler.combined().astype(np.uint8))
-            future.add_response(ImageGenerationResult(
-                [(np.asarray(ImageOps.flip(step).convert('RGBA'), dtype=np.float32) / 255.)],
-                [seed],
+            future.add_response(step_images(
+                [tiler.combined()],
+                generator,
                 i + batch_size,
-                (i + batch_size) == len(tiler),
-                total=len(tiler)
+                len(tiler),
             ))
     if step_preview_mode == StepPreviewMode.NONE:
-        final = Image.fromarray(tiler.combined().astype(np.uint8))
-        future.add_response(ImageGenerationResult(
-            [np.asarray(ImageOps.flip(final).convert('RGBA'), dtype=np.float32) / 255.],
-            [seed],
+        future.add_response(step_images(
+            [tiler.combined()],
+            generator,
             len(tiler),
-            True,
-            total=len(tiler)
+            len(tiler)
         ))
     future.set_done()

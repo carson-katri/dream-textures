@@ -11,6 +11,7 @@ from .annotations import depth
 from ..property_groups.dream_prompt import backend_options
 from .nodes.pipeline_nodes import NodeStableDiffusion
 from ..generator_process import actor
+from .. import image_utils
 
 class DreamTexturesRenderEngine(bpy.types.RenderEngine):
     """A custom Dream Textures render engine, that uses Stable Diffusion and scene data to render images, instead of as a pass on top of Cycles."""
@@ -29,19 +30,6 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
 
     def render(self, depsgraph):
         scene = depsgraph.scene
-
-        def prepare_result(result):
-            if len(result.shape) == 2:
-                return np.concatenate(
-                    (
-                        np.stack((result,)*3, axis=-1),
-                        np.ones((*result.shape, 1))
-                    ),
-                    axis=-1
-                )
-            else:
-                return result
-        
         result = self.begin_result(0, 0, scene.render.resolution_x, scene.render.resolution_y)
         layer = result.layers[0].passes["Combined"]
         self.update_result(result)
@@ -53,8 +41,7 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
             def node_update(response):
                 if isinstance(response, np.ndarray):
                     try:
-                        node_result = prepare_result(response)
-                        layer.rect = node_result.reshape(-1, node_result.shape[-1])
+                        image_utils.np_to_render_pass(response, layer, top_to_bottom=False)
                         self.update_result(result)
                     except:
                         pass
@@ -67,16 +54,15 @@ class DreamTexturesRenderEngine(bpy.types.RenderEngine):
             for k, v in group_outputs:
                 if type(v) == int or type(v) == str or type(v) == float:
                     self.get_result().stamp_data_add_field(k, str(v))
-            node_result = prepare_result(node_result)
         except Exception as error:
             self.report({'ERROR'}, str(error))
             raise error
 
-        layer.rect = node_result.reshape(-1, node_result.shape[-1])
+        image_utils.np_to_render_pass(node_result, layer, top_to_bottom=False)
 
         if "Depth" in result.layers[0].passes:
             z = depth.render_depth_map(depsgraph, invert=True)
-            result.layers[0].passes["Depth"].rect = z.reshape((scene.render.resolution_x * scene.render.resolution_y, 1))
+            image_utils.np_to_render_pass(z, result.layers[0].passes["Depth"], top_to_bottom=False)
         
         self.end_result(result)
     

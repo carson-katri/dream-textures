@@ -1,6 +1,5 @@
 import bpy
 from bpy.types import Panel
-from ...pil_to_image import *
 from ...prompt_engineering import *
 from ...operators.dream_texture import DreamTexture, ReleaseGenerator
 from ...operators.view_history import ExportHistorySelection, ImportPromptFile, RecallHistoryEntry, ClearHistory, RemoveHistorySelection

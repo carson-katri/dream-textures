@@ -5,9 +5,10 @@ from contextlib import nullcontext
 from numpy.typing import NDArray
 import numpy as np
 import random
-from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, step_latents, step_images, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
+from ...image_utils import image_to_np, size, resize, ImageOrPath
 
 
 def image_to_image(
@@ -19,7 +20,7 @@ def image_to_image(
 
     optimizations: Optimizations,
 
-    image: NDArray,
+    image: ImageOrPath,
     fit: bool,
     strength: float,
     prompt: str | list[str],
@@ -46,8 +47,6 @@ def image_to_image(
 
     import diffusers
     import torch
-    from PIL import Image, ImageOps
-    import PIL.Image
     
     device = self.choose_device(optimizations)
 
@@ -68,19 +67,17 @@ def image_to_image(
         generator = generator[0]
 
     # Init Image
-    init_image = Image.fromarray(image).convert('RGB')
-
+    image = image_to_np(image, mode="RGB")
     if fit:
         height = height or pipe.unet.config.sample_size * pipe.vae_scale_factor
         width = width or pipe.unet.config.sample_size * pipe.vae_scale_factor
-        init_image = init_image.resize((width, height))
+        image = resize(image, (width, height))
     else:
-        width = init_image.width
-        height = init_image.height
+        width, height = size(image)
     
     # Seamless
     if seamless_axes == SeamlessAxes.AUTO:
-        seamless_axes = self.detect_seamless(np.array(init_image) / 255)
+        seamless_axes = self.detect_seamless(image)
     _configure_model_padding(pipe.unet, seamless_axes)
     _configure_model_padding(pipe.vae, seamless_axes)
 
@@ -89,25 +86,20 @@ def image_to_image(
         def callback(step, timestep, latents):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
+            future.add_response(step_latents(pipe, step_preview_mode, latents, generator, step, steps))
         try:
             result = pipe(
                 prompt=prompt,
                 negative_prompt=negative_prompt if use_negative_prompt else None,
-                image=[init_image] * batch_size,
+                image=[image] * batch_size,
                 strength=strength,
                 num_inference_steps=steps,
                 guidance_scale=cfg_scale,
                 generator=generator,
-                callback=callback
+                callback=callback,
+                output_type="np"
             )
-            future.add_response(ImageGenerationResult(
-                [np.asarray(ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                    for image in result.images],
-                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-                steps,
-                True
-            ))
+            future.add_response(step_images(result.images, generator, steps, steps))
         except InterruptedError:
             pass
     

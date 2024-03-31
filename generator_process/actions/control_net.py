@@ -1,17 +1,14 @@
 from typing import Union, Generator, Callable, List, Optional, Dict, Any
 from contextlib import nullcontext
 
-from numpy.typing import NDArray
 import numpy as np
 import logging
 import os
 import random
-from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, ImageGenerationResult, _configure_model_padding
+from .prompt_to_image import Checkpoint, Scheduler, Optimizations, StepPreviewMode, step_latents, step_images, _configure_model_padding
 from ...api.models.seamless_axes import SeamlessAxes
 from ..future import Future
-
-
-logger = logging.getLogger(__name__)
+from ...image_utils import image_to_np, rgb, resize, ImageOrPath
 
 
 def control_net(
@@ -24,10 +21,10 @@ def control_net(
     optimizations: Optimizations,
 
     control_net: list[str | Checkpoint],
-    control: list[NDArray] | None,
+    control: list[ImageOrPath] | None,
     controlnet_conditioning_scale: list[float],
     
-    image: NDArray | str | None, # image to image
+    image: ImageOrPath | None, # image to image
     # inpaint
     inpaint: bool,
     inpaint_mask_src: str,
@@ -57,8 +54,6 @@ def control_net(
 
     import diffusers
     import torch
-    import PIL.Image
-    import PIL.ImageOps
     
     device = self.choose_device(optimizations)
 
@@ -92,29 +87,33 @@ def control_net(
         int(8 * (width // 8)),
         int(8 * (height // 8)),
     )
-    control_image = [PIL.Image.fromarray(np.uint8(c * 255)).convert('RGB').resize(rounded_size) for c in control] if control is not None else None
-    init_image = None if image is None else (PIL.Image.open(image) if isinstance(image, str) else PIL.Image.fromarray(image.astype(np.uint8))).resize(rounded_size)
+    # StableDiffusionControlNetPipeline.check_image() currently fails without adding batch dimension
+    control_image = None if control is None else [image_to_np(c, mode="RGB", size=rounded_size)[np.newaxis] for c in control]
+    image = image_to_np(image, size=rounded_size)
     if inpaint:
         match inpaint_mask_src:
             case 'alpha':
-                mask_image = PIL.ImageOps.invert(init_image.getchannel('A'))
+                mask_image = 1-image[..., -1]
+                image = rgb(image)
             case 'prompt':
+                image = rgb(image)
                 from transformers import AutoProcessor, CLIPSegForImageSegmentation
 
-                processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
+                processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined", do_rescale=False)
                 clipseg = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
-                inputs = processor(text=[text_mask], images=[init_image.convert('RGB')], return_tensors="pt", padding=True)
+                inputs = processor(text=[text_mask], images=[image], return_tensors="pt", padding=True)
                 outputs = clipseg(**inputs)
-                mask_image = PIL.Image.fromarray(np.uint8((1 - torch.sigmoid(outputs.logits).lt(text_mask_confidence).int().detach().numpy()) * 255), 'L').resize(init_image.size)
+                mask_image = (torch.sigmoid(outputs.logits) >= text_mask_confidence).detach().numpy().astype(np.float32)
+                mask_image = resize(mask_image, (width, height))
     else:
         mask_image = None
 
     # Seamless
     if seamless_axes == SeamlessAxes.AUTO:
-        init_sa = None if init_image is None else self.detect_seamless(np.array(init_image) / 255)
-        control_sa = None if control_image is None else self.detect_seamless(np.array(control_image[0]) / 255)
+        init_sa = None if image is None else self.detect_seamless(image)
+        control_sa = None if control_image is None else self.detect_seamless(control_image[0][0])
         if init_sa is not None and control_sa is not None:
-            seamless_axes = SeamlessAxes((init_sa.x and control_sa.x, init_sa.y and control_sa.y))
+            seamless_axes = init_sa & control_sa
         elif init_sa is not None:
             seamless_axes = init_sa
         elif control_sa is not None:
@@ -128,16 +127,16 @@ def control_net(
         def callback(step, timestep, latents):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(ImageGenerationResult.step_preview(self, step_preview_mode, width, height, latents, generator, step))
+            future.add_response(step_latents(pipe, step_preview_mode, latents, generator, step, steps))
         try:
-            if init_image is not None:
+            if image is not None:
                 if mask_image is not None:
                     result = pipe(
                         prompt=prompt,
                         negative_prompt=negative_prompt if use_negative_prompt else None,
                         control_image=control_image,
                         controlnet_conditioning_scale=controlnet_conditioning_scale,
-                        image=init_image.convert('RGB'),
+                        image=image,
                         mask_image=mask_image,
                         strength=strength,
                         width=rounded_size[0],
@@ -145,7 +144,8 @@ def control_net(
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         generator=generator,
-                        callback=callback
+                        callback=callback,
+                        output_type="np"
                     )
                 else:
                     result = pipe(
@@ -153,14 +153,15 @@ def control_net(
                         negative_prompt=negative_prompt if use_negative_prompt else None,
                         control_image=control_image,
                         controlnet_conditioning_scale=controlnet_conditioning_scale,
-                        image=init_image.convert('RGB'),
+                        image=image,
                         strength=strength,
                         width=rounded_size[0],
                         height=rounded_size[1],
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         generator=generator,
-                        callback=callback
+                        callback=callback,
+                        output_type="np"
                     )
             else:
                 result = pipe(
@@ -173,16 +174,11 @@ def control_net(
                     num_inference_steps=steps,
                     guidance_scale=cfg_scale,
                     generator=generator,
-                    callback=callback
+                    callback=callback,
+                    output_type="np"
                 )
 
-            future.add_response(ImageGenerationResult(
-                [np.asarray(PIL.ImageOps.flip(image).convert('RGBA'), dtype=np.float32) / 255.
-                    for image in result.images],
-                [gen.initial_seed() for gen in generator] if isinstance(generator, list) else [generator.initial_seed()],
-                steps,
-                True
-            ))
+            future.add_response(step_images(result.images, generator, steps, steps))
         except InterruptedError:
             pass
     

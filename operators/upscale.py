@@ -5,26 +5,13 @@ from .. import api
 from ..prompt_engineering import custom_structure
 from ..generator_process import Generator
 from .dream_texture import CancelGenerator
+from .. import image_utils
 
 upscale_options = [
     ("2", "2x", "", 2),
     ("4", "4x", "", 4),
     ("8", "8x", "", 8),
 ]
-
-def bpy_image(name, width, height, pixels, existing_image):
-    if existing_image is not None and (existing_image.size[0] != width or existing_image.size[1] != height):
-        bpy.data.images.remove(existing_image)
-        existing_image = None
-    if existing_image is None:
-        image = bpy.data.images.new(name, width=width, height=height)
-    else:
-        image = existing_image
-        image.name = name
-    image.pixels.foreach_set(pixels)
-    image.pack()
-    image.update()
-    return image
 
 def get_source_image(context):
     node_tree = context.material.node_tree if hasattr(context, 'material') else None
@@ -70,11 +57,7 @@ class Upscale(bpy.types.Operator):
         if input_image is None:
             self.report({"ERROR"}, "No open image in the Image Editor space, or selected Image Texture node.")
             return {"FINISHED"}
-        image_pixels = np.flipud(
-            (np.array(input_image.pixels) * 255)
-                .astype(np.uint8)
-                .reshape((input_image.size[1], input_image.size[0], input_image.channels))
-        )
+        image_pixels = image_utils.bpy_to_np(input_image)
 
         generated_args = context.scene.dream_textures_upscale_prompt.generate_args(context)
         context.scene.dream_textures_upscale_seamless_result.update_args(generated_args)
@@ -97,7 +80,7 @@ class Upscale(bpy.types.Operator):
             
             scene.dream_textures_progress = progress[-1].progress
             if progress[-1].image is not None:
-                last_data_block = bpy_image(f"Tile {progress[-1].progress}/{progress[-1].total}", progress[-1].image.shape[1], progress[-1].image.shape[0], progress[-1].image.ravel(), last_data_block)
+                last_data_block = image_utils.np_to_bpy(progress[-1].image, f"Tile {progress[-1].progress}/{progress[-1].total}", last_data_block)
             for area in screen.areas:
                 if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                     area.spaces.active.image = last_data_block
@@ -115,7 +98,7 @@ class Upscale(bpy.types.Operator):
                     last_data_block = None
                 if results[-1].image is None:
                     return
-                image = bpy_image(f"{input_image.name} (Upscaled)", results[-1].image.shape[1], results[-1].image.shape[0], results[-1].image.ravel(), last_data_block)
+                image = image_utils.np_to_bpy(results[-1].image, f"{input_image.name} (Upscaled)", last_data_block)
                 for area in screen.areas:
                     if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
                         area.spaces.active.image = image

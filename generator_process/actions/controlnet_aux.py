@@ -19,7 +19,11 @@ def controlnet_aux(
     from controlnet_aux.processor import Processor
     processor = Processor(processor_id)
     device = self.choose_device(optimizations)
-    processor.processor.to(device)
+    try:
+        processor.processor.to(device)
+    except:
+        # not all processors can run on the GPU
+        pass
     
     processed_image = processor(np_to_pil(image))
     return np.array(processed_image) / 255.0

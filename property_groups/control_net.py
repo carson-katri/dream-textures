@@ -1,6 +1,11 @@
 import bpy
 from bpy.props import FloatProperty, EnumProperty, PointerProperty, IntProperty, BoolProperty
 
+from .. import api, image_utils
+from ..diffusers_backend import DiffusersBackend
+from ..generator_process import Generator
+from ..generator_process.models.optimizations import Optimizations
+
 def control_net_options(self, context):
     return [
         None if model is None else (model.id, model.name, model.description)
@@ -85,4 +90,40 @@ class ControlNetsRemove(bpy.types.Operator):
 
     def execute(self, context):
         context.scene.dream_textures_prompt.control_nets.remove(self.index)
+        return {'FINISHED'}
+
+class BakeControlNetImage(bpy.types.Operator):
+    bl_idname = "dream_textures.control_net_bake"
+    bl_label = "Bake Control Image"
+    bl_description = "Runs the selected processor, and bakes the result to an image datablock"
+
+    index: IntProperty(name="Index")
+
+    def execute(self, context):
+        prompt = context.scene.dream_textures_prompt
+
+        net = prompt.control_nets[self.index]
+
+        gen = Generator.shared()
+        backend: api.Backend = prompt.get_backend()
+        optimizations = backend.optimizations() if isinstance(backend, DiffusersBackend) else Optimizations()
+
+        future = gen.controlnet_aux(
+            processor_id=net.processor_id,
+            image=image_utils.bpy_to_np(net.control_image, color_space=None),
+            optimizations=optimizations
+        )
+        
+        control_image = image_utils.np_to_bpy(
+            future.result(last_only=True),
+            f"{net.control_image.name} ({next(processor[1] for processor in PROCESSOR_IDS if processor != None and processor[0] == net.processor_id)})",
+        )
+        
+        net.control_image = control_image
+        net.processor_id = "none"
+
+        for area in context.screen.areas:
+            if area.type == 'IMAGE_EDITOR' and not area.spaces.active.use_image_pin:
+                area.spaces.active.image = control_image
+
         return {'FINISHED'}

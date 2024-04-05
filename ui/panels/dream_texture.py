@@ -9,6 +9,7 @@ from ..space_types import SPACE_TYPES
 from ...generator_process.actions.detect_seamless import SeamlessAxes
 from ...api.models import FixItError
 from ...property_groups.dream_prompt import DreamPrompt
+from ...property_groups.control_net import BakeControlNetImage
 from ... import api
 
 def dream_texture_panels():
@@ -247,7 +248,10 @@ def control_net_panel(sub_panel, space_type, get_prompt):
                 col = box.column()
                 col.use_property_split = True
                 col.template_ID(control_net, "control_image", open="image.open", text="Image")
-                col.prop(control_net, "processor_id")
+                processor_row = col.row()
+                processor_row.prop(control_net, "processor_id")
+                if control_net.processor_id != "none":
+                    processor_row.operator(BakeControlNetImage.bl_idname, icon='RENDER_STILL', text='').index = i
                 col.prop(control_net, "conditioning_scale")
                 
     return ControlNetPanel

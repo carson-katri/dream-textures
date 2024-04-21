@@ -10,6 +10,19 @@ import os
 from ..absolute_path import absolute_path
 from .future import Future
 
+def _patch_zip_direct_transformers_import():
+    # direct_transformers_import() implementation doesn't work when transformers is in a zip archive
+    # since it relies on existing file paths. The function appears to ensure the correct root module
+    # is obtained when there could be another loadable transformers module or it isn't in any sys.path
+    # directory during development testing, both not being a concern in this environment.
+    def direct_transformers_import(*_, **__):
+        import transformers
+        return transformers
+    from transformers.utils import import_utils
+    import_utils.direct_transformers_import = direct_transformers_import
+    from transformers import utils
+    utils.direct_transformers_import = direct_transformers_import
+
 def _load_dependencies():
     site.addsitedir(absolute_path(".python_dependencies"))
     deps = sys.path.pop(-1)
@@ -20,6 +33,9 @@ def _load_dependencies():
         python3_path = os.path.abspath(os.path.join(sys.executable, "..\\..\\..\\..\\python3.dll"))
         if os.path.exists(python3_path):
             os.add_dll_directory(os.path.dirname(python3_path))
+    if os.path.exists(absolute_path(".python_dependencies.zip")):
+        sys.path.insert(1, absolute_path(".python_dependencies.zip"))
+        _patch_zip_direct_transformers_import()
 
 main_thread_rendering = False
 is_actor_process = current_process().name == "__actor__"

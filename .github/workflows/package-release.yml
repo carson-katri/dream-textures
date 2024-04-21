@@ -45,6 +45,9 @@ jobs:
         shell: bash
         run: 'python -m pip install -r requirements/win-linux-cuda.txt --no-cache-dir --target .python_dependencies'
         working-directory: dream_textures
+      - name: Zip dependencies with long paths
+        shell: bash
+        run: 'python ./dream_textures/scripts/zip_dependencies.py'
       - name: Archive Release
         uses: thedoctor0/zip-release@main
         with:
@@ -73,6 +76,9 @@ jobs:
         shell: bash
         run: 'python -m pip install -r requirements/win-dml.txt --no-cache-dir --target .python_dependencies'
         working-directory: dream_textures
+      - name: Zip dependencies with long paths
+        shell: bash
+        run: 'python ./dream_textures/scripts/zip_dependencies.py'
       - name: Archive Release
         uses: thedoctor0/zip-release@main
         with:

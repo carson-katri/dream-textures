@@ -9,6 +9,7 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+.python_dependencies.zip
 .Python
 build/
 develop-eggs/

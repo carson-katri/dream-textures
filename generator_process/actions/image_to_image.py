@@ -83,10 +83,11 @@ def image_to_image(
 
     # Inference
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
-        def callback(step, timestep, latents):
+        def callback(pipe, step, timestep, callback_kwargs):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(step_latents(pipe, step_preview_mode, latents, generator, step, steps))
+            future.add_response(step_latents(pipe, step_preview_mode, callback_kwargs["latents"], generator, step, steps))
+            return callback_kwargs
         try:
             result = pipe(
                 prompt=prompt,
@@ -96,7 +97,8 @@ def image_to_image(
                 num_inference_steps=steps,
                 guidance_scale=cfg_scale,
                 generator=generator,
-                callback=callback,
+                callback_on_step_end=callback,
+                callback_steps=1,
                 output_type="np"
             )
             future.add_response(step_images(result.images, generator, steps, steps))

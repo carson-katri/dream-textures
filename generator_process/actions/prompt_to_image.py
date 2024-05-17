@@ -80,10 +80,11 @@ def prompt_to_image(
     with torch.inference_mode() if device not in ('mps', "dml") else nullcontext():
         is_sdxl = isinstance(pipe, diffusers.StableDiffusionXLPipeline)
         output_type = "latent" if is_sdxl and sdxl_refiner_model is not None else "np"
-        def callback(pipe, step, timestep, latents):
+        def callback(pipe, step, timestep, callback_kwargs):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(step_latents(pipe, step_preview_mode, latents, generator, step, steps))
+            future.add_response(step_latents(pipe, step_preview_mode, callback_kwargs["latents"], generator, step, steps))
+            return callback_kwargs
         try:
             result = pipe(
                 prompt=prompt,
@@ -98,7 +99,7 @@ def prompt_to_image(
                 latents=None,
                 output_type=output_type,
                 return_dict=True,
-                callback=functools.partial(callback, pipe),
+                callback_on_step_end=callback,
                 callback_steps=1,
                 #cfg_end=optimizations.cfg_end
             )
@@ -111,7 +112,7 @@ def prompt_to_image(
                 result = refiner(
                     prompt=prompt,
                     negative_prompt=[""],
-                    callback=functools.partial(callback, refiner),
+                    callback_on_step_end=callback,
                     callback_steps=1,
                     num_inference_steps=steps,
                     image=result.images,

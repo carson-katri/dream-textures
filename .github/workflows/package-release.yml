@@ -5,28 +5,6 @@ on:
       - "releases/**"
   workflow_dispatch:
 
-# This is complicated without native ARM runners. For now, macOS builds can be deployed manually.
-# jobs:
-#   darwin-arm64:
-#     runs-on: macos-12
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v3
-#         with:
-#           submodules: recursive
-#       - name: Setup Python
-#         uses: actions/setup-python@v4
-#         with:
-#           python-version: '3.10'
-#       - name: Install dependencies into target
-#         run: 'pip install -r requirements-mac-MPS-CPU.txt --no-cache-dir --target ../.python_dependencies'
-#         working-directory: stable_diffusion
-#       - name: Archive and upload artifact
-#         uses: actions/upload-artifact@v3
-#         with:
-#           name: dream_textures-darwin-arm64
-#           path: ${{ github.workspace }}
-
 jobs:
   windows-cuda:
     runs-on: windows-latest
@@ -90,3 +68,34 @@ jobs:
         with:
           name: dream_textures-windows-directml
           path: dream_textures-windows-directml.zip
+  macos-arm:
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          path: dream_textures
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: '**/mac-mps-cpu.txt'
+      - name: Install dependencies into target
+        shell: bash
+        run: 'python -m pip install -r requirements/mac-mps-cpu.txt --no-cache-dir --target .python_dependencies'
+        working-directory: dream_textures
+      - name: Zip dependencies with long paths
+        shell: bash
+        run: 'python ./dream_textures/scripts/zip_dependencies.py'
+      - name: Archive Release
+        uses: thedoctor0/zip-release@main
+        with:
+          type: zip
+          filename: dream_textures-macos-arm.zip
+          exclusions: '*.git*'
+      - name: Archive and upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: dream_textures-macos-arm
+          path: dream_textures-macos-arm.zip

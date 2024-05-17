@@ -32,15 +32,14 @@ PROCESSOR_IDS = [
     ("lineart_realistic", "Lineart (Realistic)", ""),
     None,
     ("normal_bae", "Normal (BAE)", ""),
-    ("normal_midas", "Normal (MiDaS)", ""),
     None,
     ("openpose", "OpenPose", ""),
     ("openpose_face", "OpenPose (Face)", ""),
     ("openpose_faceonly", "OpenPose (Face Only)", ""),
     ("openpose_full", "OpenPose (Full)", ""),
     ("openpose_hand", "OpenPose (Hand)", ""),
-    ("dwpose", "DWPose", ""),
-    ("mediapipe_face", "MediaPipe Face", ""),
+    # ("dwpose", "DWPose", ""), # requires additional dependencies
+    # ("mediapipe_face", "MediaPipe Face", ""), # requires additional dependencies
     None,
     ("scribble_hed", "Scribble (HED)", ""),
     ("scribble_pidinet", "Scribble (PidiNet)", ""),

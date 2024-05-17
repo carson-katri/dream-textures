@@ -53,7 +53,7 @@ def hf_list_models(
     ]
 
 def hf_list_installed_models(self) -> list[Model]:
-    from diffusers.utils import DIFFUSERS_CACHE
+    from huggingface_hub.constants import HF_HUB_CACHE
     from diffusers.utils.hub_utils import old_diffusers_cache
 
     def list_dir(cache_dir):
@@ -110,7 +110,7 @@ def hf_list_installed_models(self) -> list[Model]:
             )
             if model is not None
         ]
-    new_cache_list = list_dir(DIFFUSERS_CACHE)
+    new_cache_list = list_dir(HF_HUB_CACHE)
     model_ids = [os.path.basename(m.id) for m in new_cache_list]
     for model in list_dir(old_diffusers_cache):
         if os.path.basename(model.id) not in model_ids:

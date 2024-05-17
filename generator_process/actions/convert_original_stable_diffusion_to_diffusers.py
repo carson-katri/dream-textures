@@ -12,7 +12,7 @@ def convert_original_stable_diffusion_to_diffusers(
     half_precision: bool,
 ) -> str:
     import torch
-    from diffusers.utils import DIFFUSERS_CACHE
+    from huggingface_hub.constants import HF_HUB_CACHE
     from diffusers.pipelines.stable_diffusion.convert_from_ckpt import download_from_original_stable_diffusion_ckpt, download_controlnet_from_original_ckpt
 
     future = Future()
@@ -62,6 +62,6 @@ def convert_original_stable_diffusion_to_diffusers(
                 models.append(model)
         for i, model in enumerate(models):
             hook_save_pretrained(model, 2, len(models))
-    dump_path = os.path.join(DIFFUSERS_CACHE, os.path.splitext(os.path.basename(checkpoint_path))[0])
+    dump_path = os.path.join(HF_HUB_CACHE, os.path.splitext(os.path.basename(checkpoint_path))[0])
     pipe.save_pretrained(dump_path, variant="fp16" if half_precision else None)
     future.set_done()

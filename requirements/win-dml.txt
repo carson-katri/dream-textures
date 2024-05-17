@@ -1,4 +1,4 @@
-git+https://github.com/huggingface/diffusers.git@d1222064669a758c476014fb7a09e24a0c907222
+diffusers==0.27.2
 invisible-watermark
 transformers
 accelerate
@@ -18,3 +18,4 @@ scipy # LMSDiscreteScheduler
 stability-sdk # DreamStudio
 
 opencolorio==2.1.2 # color management
+matplotlib

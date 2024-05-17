@@ -7,20 +7,20 @@ logger = logging.getLogger(__name__)
 
 
 def revision_paths(model, config="model_index.json"):
-    from diffusers.utils import DIFFUSERS_CACHE
+    from huggingface_hub.constants import HF_HUB_CACHE
 
     is_repo = "/" in model
     if os.path.exists(os.path.join(model, config)):
         is_repo = False
-    elif not is_repo and os.path.exists(os.path.join(DIFFUSERS_CACHE, model, config)):
-        model = os.path.join(DIFFUSERS_CACHE, model)
+    elif not is_repo and os.path.exists(os.path.join(HF_HUB_CACHE, model, config)):
+        model = os.path.join(HF_HUB_CACHE, model)
     elif not is_repo:
         raise ValueError(f"{model} is not a valid repo, imported checkpoint, or path")
 
     if not is_repo:
         return {"main": model}
 
-    model_path = os.path.join(DIFFUSERS_CACHE, "--".join(["models", *model.split("/")]))
+    model_path = os.path.join(HF_HUB_CACHE, "--".join(["models", *model.split("/")]))
     refs_path = os.path.join(model_path, "refs")
     revisions = {}
     if not os.path.isdir(refs_path):

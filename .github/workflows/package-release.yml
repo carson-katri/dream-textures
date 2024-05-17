@@ -24,6 +24,8 @@ jobs:
             filename_suffix: ''
           - python: '3.11'
             filename_suffix: '-4-1'
+        exclude:
+          - { platform: { requirements: win-dml.txt }, version: { python: '3.11' } }
     runs-on: ${{ matrix.platform.os }}
     steps:
       - name: Checkout repository

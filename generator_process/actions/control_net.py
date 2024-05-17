@@ -124,10 +124,11 @@ def control_net(
     # Inference
     with (torch.inference_mode() if device not in ('mps', "dml") else nullcontext()), \
         (torch.autocast(device) if optimizations.can_use("amp", device) else nullcontext()):
-        def callback(step, timestep, latents):
+        def callback(pipe, step, timestep, callback_kwargs):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(step_latents(pipe, step_preview_mode, latents, generator, step, steps))
+            future.add_response(step_latents(pipe, step_preview_mode, callback_kwargs["latents"], generator, step, steps))
+            return callback_kwargs
         try:
             if image is not None:
                 if mask_image is not None:
@@ -144,7 +145,8 @@ def control_net(
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         generator=generator,
-                        callback=callback,
+                        callback_on_step_end=callback,
+                        callback_steps=1,
                         output_type="np"
                     )
                 else:
@@ -160,7 +162,8 @@ def control_net(
                         num_inference_steps=steps,
                         guidance_scale=cfg_scale,
                         generator=generator,
-                        callback=callback,
+                        callback_on_step_end=callback,
+                        callback_steps=1,
                         output_type="np"
                     )
             else:
@@ -174,7 +177,8 @@ def control_net(
                     num_inference_steps=steps,
                     guidance_scale=cfg_scale,
                     generator=generator,
-                    callback=callback,
+                    callback_on_step_end=callback,
+                    callback_steps=1,
                     output_type="np"
                 )
 

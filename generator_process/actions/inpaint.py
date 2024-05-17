@@ -103,10 +103,11 @@ def inpaint(
                 mask_image = (torch.sigmoid(outputs.logits) >= text_mask_confidence).detach().numpy().astype(np.float32)
                 mask_image = resize(mask_image, (width, height))
         
-        def callback(step, timestep, latents):
+        def callback(pipe, step, timestep, callback_kwargs):
             if future.check_cancelled():
                 raise InterruptedError()
-            future.add_response(step_latents(pipe, step_preview_mode, latents, generator, step, steps))
+            future.add_response(step_latents(pipe, step_preview_mode, callback_kwargs["latents"], generator, step, steps))
+            return callback_kwargs
         try:
             result = pipe(
                 prompt=prompt,
@@ -119,7 +120,8 @@ def inpaint(
                 num_inference_steps=steps,
                 guidance_scale=cfg_scale,
                 generator=generator,
-                callback=callback,
+                callback_on_step_end=callback,
+                callback_steps=1,
                 output_type="np"
             )
             

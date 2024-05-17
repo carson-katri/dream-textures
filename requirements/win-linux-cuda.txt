@@ -15,8 +15,6 @@ omegaconf
 
 scipy # LMSDiscreteScheduler
 
-stability-sdk # DreamStudio
-
-opencolorio==2.1.2 # color management
+opencolorio==2.3.2 # color management
 
 matplotlib # OpenPose

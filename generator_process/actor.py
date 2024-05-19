@@ -33,6 +33,12 @@ def _load_dependencies():
         python3_path = os.path.abspath(os.path.join(sys.executable, "..\\..\\..\\..\\python3.dll"))
         if os.path.exists(python3_path):
             os.add_dll_directory(os.path.dirname(python3_path))
+
+        # fix for OSError: [WinError 126] The specified module could not be found. Error loading "...\dream_textures\.python_dependencies\torch\lib\shm.dll" or one of its dependencies.
+        # Allows for shm.dll from torch==2.3.0 to access dependencies from mkl==2021.4.0
+        # These DLL dependencies are not in the usual places that torch would look at due to being pip installed to a target directory.
+        os.add_dll_directory(absolute_path(".python_dependencies\\Library\\bin"))
+    
     if os.path.exists(absolute_path(".python_dependencies.zip")):
         sys.path.insert(1, absolute_path(".python_dependencies.zip"))
         _patch_zip_direct_transformers_import()

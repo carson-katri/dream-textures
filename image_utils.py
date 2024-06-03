@@ -689,7 +689,7 @@ def np_to_render_pass(
         array = to_dtype(array, dtype)
     if top_to_bottom:
         array = np.flipud(array)
-    render_pass.rect.foreach_set(array.reshape(-1, render_pass.channels))
+    render_pass.rect.foreach_set(array.reshape(-1))
 
 
 def _mode(array, mode):

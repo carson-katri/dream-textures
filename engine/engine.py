@@ -87,7 +87,7 @@ class NewEngineNodeTree(bpy.types.Operator):
         node_out = node_tree.nodes.new(type="NodeGroupOutput")
         # Blender 4.0 uses a new API for in- and outputs
         if bpy.app.version[0] > 3:
-            node_tree.interface.new_socket('Image', description="Output of the final image.", in_out='OUTPUT', type='NodeSocketColor')
+            node_tree.interface.new_socket('Image', description="Output of the final image.", in_out='OUTPUT', socket_type='NodeSocketColor')
         else:
             node_tree.outputs.new('NodeSocketColor','Image')
         node_out.location = (400, 200)

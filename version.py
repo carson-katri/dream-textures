@@ -1,4 +1,4 @@
-VERSION = (0, 3, 1)
+VERSION = (0, 4, 0)
 def version_tag(version):
     return f"{version[0]}.{version[1]}.{version[2]}"
 

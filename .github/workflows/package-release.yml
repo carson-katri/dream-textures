@@ -6,8 +6,25 @@ on:
   workflow_dispatch:
 
 jobs:
-  windows-cuda:
-    runs-on: windows-latest
+  package-release:
+    strategy:
+      matrix:
+        platform:
+          - requirements: win-linux-cuda.txt
+            os: windows-latest
+            filename: windows-cuda
+          - requirements: win-dml.txt
+            os: windows-latest
+            filename:  windows-directml
+          - requirements: mac-mps-cpu.txt
+            os: macos-14
+            filename: macos-arm
+        version:
+          - python: '3.10'
+            filename_suffix: ''
+          - python: '3.11'
+            filename_suffix: '-4-1'
+    runs-on: ${{ matrix.platform.os }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -16,12 +33,12 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: ${{ matrix.version.python }}
           cache: 'pip'
-          cache-dependency-path: '**/win-linux-cuda.txt'
+          cache-dependency-path: '**/${{ matrix.platform.requirements }}'
       - name: Install dependencies into target
         shell: bash
-        run: 'python -m pip install -r requirements/win-linux-cuda.txt --no-cache-dir --target .python_dependencies'
+        run: 'python -m pip install -r requirements/${{ matrix.platform.requirements }} --no-cache-dir --target .python_dependencies'
         working-directory: dream_textures
       - name: Zip dependencies with long paths
         shell: bash
@@ -30,72 +47,10 @@ jobs:
         uses: thedoctor0/zip-release@main
         with:
           type: zip
-          filename: dream_textures-windows-cuda.zip
+          filename: dream_textures-${{ matrix.platform.filename }}${{ matrix.version.filename_suffix }}.zip
           exclusions: '*.git*'
       - name: Archive and upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: dream_textures-windows-cuda
-          path: dream_textures-windows-cuda.zip
-  windows-directml:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          path: dream_textures
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-          cache-dependency-path: '**/win-dml.txt'
-      - name: Install dependencies into target
-        shell: bash
-        run: 'python -m pip install -r requirements/win-dml.txt --no-cache-dir --target .python_dependencies'
-        working-directory: dream_textures
-      - name: Zip dependencies with long paths
-        shell: bash
-        run: 'python ./dream_textures/scripts/zip_dependencies.py'
-      - name: Archive Release
-        uses: thedoctor0/zip-release@main
-        with:
-          type: zip
-          filename: dream_textures-windows-directml.zip
-          exclusions: '*.git*'
-      - name: Archive and upload artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: dream_textures-windows-directml
-          path: dream_textures-windows-directml.zip
-  macos-arm:
-    runs-on: macos-14
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          path: dream_textures
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-          cache-dependency-path: '**/mac-mps-cpu.txt'
-      - name: Install dependencies into target
-        shell: bash
-        run: 'python -m pip install -r requirements/mac-mps-cpu.txt --no-cache-dir --target .python_dependencies'
-        working-directory: dream_textures
-      - name: Zip dependencies with long paths
-        shell: bash
-        run: 'python ./dream_textures/scripts/zip_dependencies.py'
-      - name: Archive Release
-        uses: thedoctor0/zip-release@main
-        with:
-          type: zip
-          filename: dream_textures-macos-arm.zip
-          exclusions: '*.git*'
-      - name: Archive and upload artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: dream_textures-macos-arm
-          path: dream_textures-macos-arm.zip
+          name: dream_textures-${{ matrix.platform.filename }}${{ matrix.version.filename_suffix }}
+          path: dream_textures-${{ matrix.platform.filename }}${{ matrix.version.filename_suffix }}.zip

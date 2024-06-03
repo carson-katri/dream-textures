@@ -174,7 +174,7 @@ def hf_snapshot_download(
 
     if "model_index.json" in files:
         # check if the variant files are available before trying to download them
-        _, variant_files = {set(files), set()} if variant is None else variant_compatible_siblings(files, variant=variant)
+        _, variant_files = variant_compatible_siblings(files, variant=variant)
         StableDiffusionPipeline.download(
             model,
             use_auth_token=token,

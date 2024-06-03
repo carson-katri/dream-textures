@@ -163,6 +163,7 @@ def hf_snapshot_download(
 ):
     from huggingface_hub import snapshot_download, repo_info
     from diffusers import StableDiffusionPipeline
+    from diffusers.pipelines.pipeline_utils import variant_compatible_siblings
 
     future = Future()
     yield future
@@ -172,10 +173,12 @@ def hf_snapshot_download(
     files = [file.rfilename for file in info.siblings]
 
     if "model_index.json" in files:
+        # check if the variant files are available before trying to download them
+        _, variant_files = {set(files), set()} if variant is None else variant_compatible_siblings(files, variant=variant)
         StableDiffusionPipeline.download(
             model,
             use_auth_token=token,
-            variant=variant,
+            variant=variant if len(variant_files) > 0 else None,
             resume_download=resume_download,
         )
     elif "config.json" in files:

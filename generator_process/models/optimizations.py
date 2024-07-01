@@ -42,10 +42,9 @@ class Optimizations:
         from ...absolute_path import absolute_path
         if sys.platform == "darwin":
             return "mps"
-        elif os.path.exists(absolute_path(".python_dependencies/torch_directml")):
+        if os.path.exists(absolute_path(".python_dependencies/torch_directml")):
             return "dml"
-        else:
-            return "cuda"
+        return "cuda"
 
     @classmethod
     def device_supports(cls, property, device) -> bool:

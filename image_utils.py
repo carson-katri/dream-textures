@@ -165,13 +165,13 @@ def grayscale(array: NDArray) -> NDArray:
     if array.ndim == 3:
         if c in [1, 2]:
             return array[..., 0]
-        elif c in [3, 4]:
+        if c in [3, 4]:
             return np.max(array[..., :3], axis=-1)
         raise ValueError(f"Can't make {c} channels grayscale")
-    elif array.ndim == 4:
+    if array.ndim == 4:
         if c in [1, 2]:
             return array[..., :1]
-        elif c in [3, 4]:
+        if c in [3, 4]:
             return np.max(array[..., :3], axis=-1, keepdims=True)
         raise ValueError(f"Can't make {c} channels grayscale")
     raise ValueError(f"Can't make {array.ndim} dimensions grayscale")
@@ -242,9 +242,9 @@ def color_transform(array: NDArray, from_color_space: str, to_color_space: str, 
 
     if from_color_space == to_color_space:
         return array
-    elif from_color_space == "Linear" and to_color_space == "sRGB":
+    if from_color_space == "Linear" and to_color_space == "sRGB":
         return linear_to_srgb(array, clamp_srgb)
-    elif from_color_space == "sRGB" and to_color_space == "Linear":
+    if from_color_space == "sRGB" and to_color_space == "Linear":
         return srgb_to_linear(array)
 
     if not has_ocio:
@@ -264,7 +264,7 @@ def color_transform(array: NDArray, from_color_space: str, to_color_space: str, 
         if clamp_srgb and to_color_space == "sRGB":
             array = np.clip(array, 0, 1)
         return array
-    elif c in [2, 4]:
+    if c in [2, 4]:
         array = rgba(array)
         proc.applyRGBA(array)
         if clamp_srgb and to_color_space == "sRGB":
@@ -695,13 +695,13 @@ def np_to_render_pass(
 def _mode(array, mode):
     if mode is None:
         return array
-    elif mode == "RGBA":
+    if mode == "RGBA":
         return rgba(array)
-    elif mode == "RGB":
+    if mode == "RGB":
         return rgb(array)
-    elif mode == "L":
+    if mode == "L":
         return grayscale(array)
-    elif mode == "LA":
+    if mode == "LA":
         return ensure_alpha(_passthrough_alpha(array, grayscale(array)))
     raise ValueError(f"mode expected one of {['RGB', 'RGBA', 'L', 'LA', None]}, got {repr(mode)}")
 

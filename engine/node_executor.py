@@ -13,15 +13,13 @@ class NodeExecutionContext:
         self.preferences = bpy.context.preferences
     
     def _evaluate_input(self, input):
-        if input.is_linked:
-            if len(input.links) > 1:
-                return [
-                    self.execute(link.from_socket.node)[link.from_socket.name]
-                    for link in input.links
-                ]
-            else:
+            if input.is_linked:
+                if len(input.links) > 1:
+                    return [
+                        self.execute(link.from_socket.node)[link.from_socket.name]
+                        for link in input.links
+                    ]
                 return self.execute(input.links[0].from_socket.node)[input.links[0].from_socket.name]
-        else:
             return getattr(input, 'default_value', None)
 
     def execute(self, node):

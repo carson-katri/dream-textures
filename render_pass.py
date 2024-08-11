@@ -56,9 +56,8 @@ def register_render_pass():
                                     for original_pass in original_layer.passes:
                                         if original_pass.name == render_pass.name:
                                             source_pass = original_pass
-                            pixels = np.empty((len(source_pass.rect), len(source_pass.rect[0])), dtype=np.float32)
-                            source_pass.rect.foreach_get(pixels)
-                            render_pass.rect[:] = pixels
+                            pixels = image_utils.render_pass_to_np(source_pass, size=(size_x, size_y))
+                            image_utils.np_to_render_pass(pixels, render_pass)
                 self.end_result(render_result)
             except Exception as e:
                 print(e)

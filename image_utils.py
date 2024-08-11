@@ -652,7 +652,10 @@ def render_pass_to_np(
     top_to_bottom: bool = True
 ):
     array = np.empty((*reversed(size), render_pass.channels), dtype=np.float32)
-    render_pass.rect.foreach_get(array.reshape((-1, render_pass.channels)))
+    if BLENDER_VERSION >= (4, 1, 0):
+        render_pass.rect.foreach_get(array.reshape(-1))
+    else:
+        render_pass.rect.foreach_get(array.reshape(-1, render_pass.channels))
     if color_management:
         array = scene_color_transform(array, color_space=color_space, clamp_srgb=clamp_srgb)
     elif color_space is not None:

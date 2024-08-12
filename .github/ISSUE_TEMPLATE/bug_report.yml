@@ -47,11 +47,19 @@ body:
       multiple: false
       options:
         - Windows (CUDA)
-        - Windows (DreamStudio-only)
-        - macOS (Intel)
+        - Windows (DirectML)
         - macOS (Apple Silicon)
-        - macOS (Apple Silicon, DreamStudio-only)
         - Other (Built from source)
+    validations:
+      required: true
+  - type: dropdown
+    id: blender-version
+    attributes:
+      label: Blender Version
+      multiple: false
+      options:
+        - Blender 4.1+
+        - Blender 3.6 - 4.0
     validations:
       required: true
   - type: dropdown
@@ -63,7 +71,7 @@ body:
       options:
         - NVIDIA
         - NVIDIA 16 Series
-        - AMD (unsupported for local generation)
+        - AMD
         - Apple Silicon
         - Other
     validations:

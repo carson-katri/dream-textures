@@ -32,7 +32,7 @@ def hf_list_models(
     query: str,
     token: str,
 ) -> list[Model]:
-    from huggingface_hub import HfApi, ModelFilter
+    from huggingface_hub import HfApi
     
     if hasattr(self, "huggingface_hub_api"):
         api: HfApi = self.huggingface_hub_api
@@ -40,10 +40,9 @@ def hf_list_models(
         api = HfApi()
         setattr(self, "huggingface_hub_api", api)
     
-    filter = ModelFilter(tags="diffusers")
     models = api.list_models(
-        filter=filter,
         search=query,
+        tags="diffusers",
         use_auth_token=token
     )
     return [

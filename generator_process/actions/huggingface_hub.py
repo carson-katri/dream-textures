@@ -32,24 +32,23 @@ def hf_list_models(
     query: str,
     token: str,
 ) -> list[Model]:
-    from huggingface_hub import HfApi, ModelFilter
+    from huggingface_hub import HfApi
     
     if hasattr(self, "huggingface_hub_api"):
         api: HfApi = self.huggingface_hub_api
     else:
         api = HfApi()
         setattr(self, "huggingface_hub_api", api)
-    
-    filter = ModelFilter(tags="diffusers")
+
     models = api.list_models(
-        filter=filter,
+        tags="diffusers",
         search=query,
-        use_auth_token=token
+        token=token,
     )
     return [
-        Model(m.modelId, m.author or "", m.tags, m.likes if hasattr(m, "likes") else 0, getattr(m, "downloads", -1), ModelType.UNKNOWN)
+        Model(m.id, m.author or "", m.tags, m.likes if hasattr(m, "likes") else 0, getattr(m, "downloads", -1), ModelType.UNKNOWN)
         for m in models
-        if m.modelId is not None and m.tags is not None and 'diffusers' in (m.tags or {})
+        if m.id is not None and m.tags is not None and 'diffusers' in (m.tags or {})
     ]
 
 def hf_list_installed_models(self) -> list[Model]:
@@ -177,7 +176,7 @@ def hf_snapshot_download(
         _, variant_files = variant_compatible_siblings(files, variant=variant)
         StableDiffusionPipeline.download(
             model,
-            use_auth_token=token,
+            token=token,
             variant=variant if len(variant_files) > 0 else None,
             resume_download=resume_download,
         )

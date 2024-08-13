@@ -47,9 +47,9 @@ def hf_list_models(
         use_auth_token=token
     )
     return [
-        Model(m.modelId, m.author or "", m.tags, m.likes if hasattr(m, "likes") else 0, getattr(m, "downloads", -1), ModelType.UNKNOWN)
+        Model(m.id, m.author or "", m.tags, m.likes if hasattr(m, "likes") else 0, getattr(m, "downloads", -1), ModelType.UNKNOWN)
         for m in models
-        if m.modelId is not None and m.tags is not None and 'diffusers' in (m.tags or {})
+        if m.id is not None and m.tags is not None and 'diffusers' in (m.tags or {})
     ]
 
 def hf_list_installed_models(self) -> list[Model]:

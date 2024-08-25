@@ -6,7 +6,7 @@ huggingface_hub
 controlnet-aux==0.0.7
 
 torch-directml
-torch>=2.0
+torch==2.3.1
 
 # Original SD checkpoint conversion
 pytorch-lightning

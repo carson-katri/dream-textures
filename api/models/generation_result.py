@@ -52,7 +52,7 @@ class GenerationResult:
         images = [result.image for result in results]
         if len(images) == 0:
             return None
-        elif len(images) == 1:
+        if len(images) == 1:
             return images[0]
         width = images[0].shape[1]
         height = images[0].shape[0]

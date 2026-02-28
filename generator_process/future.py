@@ -31,31 +31,29 @@ class Future:
         self.call_done_on_exception = True
 
     def result(self, last_only=False):
-        """
-        Get the result value (blocking).
-        """
-        def _response():
-            match len(self._responses):
-                case 0:
-                    return None
-                case 1:
-                    return self._responses[0]
-                case _:
-                    return self._responses[-1] if last_only else self._responses
-        if self._exception is not None:
-            raise self._exception
-        if self.done:
-            return _response()
-        else:
+            """
+            Get the result value (blocking).
+            """
+            def _response():
+                match len(self._responses):
+                    case 0:
+                        return None
+                    case 1:
+                        return self._responses[0]
+                    case _:
+                        return self._responses[-1] if last_only else self._responses
+            if self._exception is not None:
+                raise self._exception
+            if self.done:
+                return _response()
             self._done_event.wait()
             if self._exception is not None:
                 raise self._exception
             return _response()
     
     def exception(self):
-        if self.done:
-            return self._exception
-        else:
+            if self.done:
+                return self._exception
             self._done_event.wait()
             return self._exception
     

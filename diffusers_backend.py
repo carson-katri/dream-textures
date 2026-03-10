@@ -261,7 +261,7 @@ class DiffusersBackend(Backend):
                             if target_model_type is not None:
                                 install_model = layout.operator(InstallModel.bl_idname, text=f"Download {target_model_type.recommended_model()} (Recommended)", icon="IMPORT")
                                 install_model.model = target_model_type.recommended_model()
-                                install_model.prefer_fp16_revision = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.prefer_fp16_revision
+                                install_model.prefer_fp16_variant = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences.prefer_fp16_variant
                 model_task_description = f"""Incorrect model type selected for {type(arguments.task).name().replace('_', ' ').lower()} tasks.
 The selected model is for {model.model_type.name.replace('_', ' ').lower()}."""
                 if not any(m.model_type.matches_task(arguments.task) for m in model_lookup._models.values()):

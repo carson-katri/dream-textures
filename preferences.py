@@ -52,6 +52,7 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         global is_downloading
         is_downloading = True
+        bpy.context.preferences.addons[__package__].preferences.download_error = ""
         f = Generator.shared().convert_original_stable_diffusion_to_diffusers(self.filepath, ModelConfig[self.model_config], self.prefer_fp16_variant)
         def on_progress(_, response: DownloadStatus):
             bpy.context.preferences.addons[__package__].preferences.download_file = response.file
@@ -61,8 +62,16 @@ class ImportWeights(bpy.types.Operator, ImportHelper):
             is_downloading = False
             fetch_installed_models()
         def on_exception(_, exception):
-            self.report({"ERROR"}, str(exception))
-            raise exception
+            global is_downloading
+            is_downloading = False
+            error_msg = str(exception)
+            if "401" in error_msg or "Unauthorized" in error_msg:
+                error_msg = "Authentication failed. Check your Hugging Face token."
+            elif "403" in error_msg or "Forbidden" in error_msg:
+                error_msg = "Access denied. Enable 'gated repos' in your HF token settings and accept the model license."
+            elif "404" in error_msg:
+                error_msg = "Model not found. Check the model ID."
+            bpy.context.preferences.addons[__package__].preferences.download_error = error_msg
         f.add_response_callback(on_progress)
         f.add_done_callback(on_done)
         f.add_exception_callback(on_exception)
@@ -192,6 +201,7 @@ class InstallModel(bpy.types.Operator):
         else:
             global is_downloading
             is_downloading = True
+            bpy.context.preferences.addons[__package__].preferences.download_error = ""
             f = Generator.shared().hf_snapshot_download(
                 self.model,
                 bpy.context.preferences.addons[__package__].preferences.hf_token,
@@ -206,8 +216,16 @@ class InstallModel(bpy.types.Operator):
                 is_downloading = False
                 fetch_installed_models()
             def on_exception(_, exception):
-                self.report({"ERROR"}, str(exception))
-                raise exception
+                global is_downloading
+                is_downloading = False
+                error_msg = str(exception)
+                if "401" in error_msg or "Unauthorized" in error_msg:
+                    error_msg = "Authentication failed. Check your Hugging Face token."
+                elif "403" in error_msg or "Forbidden" in error_msg:
+                    error_msg = "Access denied. Enable 'gated repos' in your HF token settings and accept the model license."
+                elif "404" in error_msg:
+                    error_msg = "Model not found. Check the model ID."
+                bpy.context.preferences.addons[__package__].preferences.download_error = error_msg
             f.add_response_callback(on_progress)
             f.add_done_callback(on_done)
             f.add_exception_callback(on_exception)
@@ -228,6 +246,10 @@ def _update_ui(self, context):
 def _template_model_download_progress(context, layout):
     global is_downloading
     preferences = context.preferences.addons[StableDiffusionPreferences.bl_idname].preferences
+    if preferences.download_error:
+        error_box = layout.box()
+        error_box.label(text="Download Error", icon="ERROR")
+        error_box.label(text=preferences.download_error)
     if is_downloading:
         progress_col = layout.column()
         progress_col.label(text=preferences.download_file)
@@ -338,6 +360,7 @@ class StableDiffusionPreferences(bpy.types.AddonPreferences):
 
     download_file: bpy.props.StringProperty(name="")
     download_progress: bpy.props.IntProperty(name="", min=0, max=100, subtype="PERCENTAGE", update=_update_ui)
+    download_error: bpy.props.StringProperty(name="")
 
     model_cache = []
 

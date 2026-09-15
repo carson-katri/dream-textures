@@ -408,8 +408,9 @@ class ProjectDreamTexture(bpy.types.Operator):
                         for face in bm.faces:
                             for loop in face.loops:
                                 src_uvs[loop.vert.index] = loop[src_uv_layer].uv
+                                src_uvs[loop.vert.index][1] = 1.0 - src_uvs[loop.vert.index][1]
                                 dest_uvs[loop.vert.index] = loop[dest_uv_layer].uv
-                        bake(context, bm, result.image.ravel(), dest, src_uvs, dest_uvs)
+                        bake(context, bm, image_utils.rgba(result.image).ravel(), dest, src_uvs, dest_uvs)
                         dest.update()
                         dest.pack()
                         image_texture_node.image = dest

@@ -1,0 +1,4 @@
+# Route review requests for all files to the repository owner.
+# Enforcement requires a branch rule that requires code-owner review.
+* @Legatto2
+/.github/ @Legatto2
